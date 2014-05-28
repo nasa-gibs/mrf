@@ -2,7 +2,7 @@
 
 The Meta Raster Format (MRF) is an image and data storage format designed for fast access to imagery within a georeferenced tile pyramid at discrete resolutions. 
 
-![](spec/pyramids.png?raw=true)
+![](pyramids.png?raw=true)
 
 The format supports extremely large, tiled, multi-resolution and multi-spectral data. Sparse raster data is supported efficiently.  JPEG (lossy) and PNG (lossless) compression per tile are currently supported.  Grayscale, color, indexed (palette) color models are supported.
 
@@ -48,10 +48,10 @@ The Pile of PNGs (ppg) or Pile of JPEGS (pjg) data file contains blocks of conca
 
 RGB and indexed colors are supported.  Modifications to the file are done only via appends.  With mod_onearth, the file starts with an empty tile.
 
-![](spec/tiledata.png?raw=true)
+![](tiledata.png?raw=true)
 
 ### MRF index file (.idx)
 
 The index file contains spatially organized pointers to individual tiles in an MRF (ppg/pjg) data file.   Tiles are referenced by offset within the data file and size of the tile (both 64-bit integers).  Tiles have a top-left origin.  The index is fixed-sized and updated as tiles are modified.
 
-![](spec/tileidx.png?raw=true)
+![](tileidx.png?raw=true)
