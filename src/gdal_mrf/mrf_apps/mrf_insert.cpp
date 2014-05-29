@@ -196,7 +196,7 @@ bool state::patch() {
     // Call the patchOverview for the MRF, this recursively
     // patches the overlays
     if (overlays)
-        pTarg->PatchOverviews(blocks_bbox.lx,blocks_bbox.uy,
+        pTarg->PatchOverview(blocks_bbox.lx,blocks_bbox.uy,
             blocks_bbox.ux-blocks_bbox.lx,
             blocks_bbox.ly-blocks_bbox.uy,0,true);
 
