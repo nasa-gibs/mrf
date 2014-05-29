@@ -61,7 +61,7 @@ LIBOBJ = port\*.obj gcore\*.obj alg\*.obj frmts\o\*.obj $(OGR_OBJ) $(VB6_OBJ)
 DISTDIR	=	gdal_$(VERSION)
 
 default:	port_dir ogr_dir core_dir frmts_dir $(VB6_TARGET) $(GDAL_DLL) \
-		plugin_dir apps_dir my_apps_dir
+		plugin_dir apps_dir mrf_apps_dir
 
 staticlib:
 	if exist gdal.lib del gdal.lib
@@ -94,7 +94,7 @@ clean:
 	cd vb6
 	$(MAKE) /f makefile.vc clean
 	cd ..
-	cd my_apps
+	cd mrf_apps
 	$(MAKE) /f makefile.vc clean
 	cd ..
 	if exist gdal.lib del gdal.lib
@@ -136,8 +136,8 @@ apps_dir:
 	$(MAKE) /f makefile.vc
 	cd ..
 
-my_apps_dir:
-	cd my_apps
+mrf_apps_dir:
+	cd mrf_apps
 	$(MAKE) /f makefile.vc
 	cd ..
 
@@ -181,7 +181,7 @@ install: $(GDAL_DLL) plugin_dir apps_dir
 	$(MAKE) /f makefile.vc plugins-install
 	cd ..\apps
 	$(MAKE) /f makefile.vc install
-	cd ..\my_apps
+	cd ..\mrf_apps
 	$(MAKE) /f makefile.vc install
 	cd ..
 	$(INSTALL) data\*.* $(DATADIR)

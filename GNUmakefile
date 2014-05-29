@@ -105,7 +105,7 @@ install: gdal-install
 
 gdal-install:
 	$(MAKE) -C build/gdal install install-man PREFIX=$(PREFIX)
-	$(MAKE) -C build/gdal/my_apps install
+	$(MAKE) -C build/gdal/mrf_apps install
 
 #-----------------------------------------------------------------------------
 # Local install

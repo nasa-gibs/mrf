@@ -19,7 +19,7 @@ LIBGDAL-$(HAVE_LD_SHARED)	+=	$(GDAL_SLIB)
 # override if we are using libtool
 LIBGDAL-$(HAVE_LIBTOOL)	:= $(LIBGDAL)
 
-default:	lib-target apps-target my-apps-target swig-target
+default:	lib-target apps-target mrf-apps-target swig-target
 
 lib-target:	check-lib;
 
@@ -69,8 +69,8 @@ ogr-all:
 apps-target:	lib-target
 	(cd apps; $(MAKE))
 
-my-apps-target:	lib-target
-	(cd my_apps; $(MAKE))
+mrf-apps-target:	lib-target
+	(cd mrf_apps; $(MAKE))
 
 ifeq ($(BINDINGS),)
 swig-target: ;
@@ -88,7 +88,7 @@ clean:	lclean
 	(cd frmts; $(MAKE) clean)
 	(cd alg; $(MAKE) clean)
 	(cd apps; $(MAKE) clean)
-	(cd my_apps; $(MAKE) clean)
+	(cd mrf_apps; $(MAKE) clean)
 ifneq ($(BINDINGS),)
 	(cd swig; $(MAKE) clean)
 endif
