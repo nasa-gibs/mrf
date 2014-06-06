@@ -259,6 +259,7 @@ void GDALRegister_mrf(void)
         driver->SetDescription("MRF");
         driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Meta Raster Format");
         driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_marfa.html");
+        driver->SetMetadataItem( GDAL_DMD_EXTENSION, "mrf" );
 
         // These will need to be revisited, do we support complex data types too?
         driver->SetMetadataItem(GDAL_DMD_CREATIONDATATYPES,
@@ -270,7 +271,7 @@ void GDALRegister_mrf(void)
             "       <Value>JPEG</Value>"
             "       <Value>PNG</Value>"
             "       <Value>PPNG</Value>"
-	    "	    <Value>TIF</Value>"
+            "	    <Value>TIF</Value>"
             "       <Value>DEFLATE</Value>"
             "       <Value>NONE</Value>"
 #if defined(LERC)

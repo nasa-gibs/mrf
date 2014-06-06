@@ -55,6 +55,11 @@ build/gdal/swig/python/GNUmakefile: deploy/gibs-gdal/python-install.patch
 		patch -p0 < ../../deploy/gibs-gdal/python-install.patch )
 # 	Use external libtool
 	sed -i 's|@LIBTOOL@|/usr/bin/libtool|g' build/gdal/GDALmake.opt.in
+	
+#   Build MRF into GDAL
+	sed -i 's|GDAL_FORMATS = |GDAL_FORMATS = mrf |g' build/gdal/GDALmake.opt.in
+	sed -i -e'/^CPL_C_START/a void CPL_DLL GDALRegister_mrf(void);' build/gdal/gcore/gdal_frmts.h
+	sed -i -e'/AutoLoadDrivers/a #ifdef FRMT_mrf\n    GDALRegister_mrf();\n#endif' build/gdal/frmts/gdalallregister.cpp
 
 #	Patch gcore/overview.cpp	
 	( cd build/gdal/gcore ; \
@@ -83,7 +88,7 @@ gdal-compile:
 		--with-sqlite3 \
 		--with-mysql \
 		--with-curl \
-		--with-python \
+		--with-python=yes \
 		--with-pcraster \
 		--with-xerces \
 		--with-xerces-lib='-lxerces-c' \

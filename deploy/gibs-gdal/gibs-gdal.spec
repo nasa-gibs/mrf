@@ -1,5 +1,5 @@
 %global gdal_version 1.10.1
-%global gdal_release 6%{?dist}
+%global gdal_release 7%{?dist}
 %global mrf_version 0.3.5
 %global mrf_release 1%{?dist}
 
