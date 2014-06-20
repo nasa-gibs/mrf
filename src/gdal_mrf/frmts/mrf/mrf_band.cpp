@@ -211,7 +211,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 	} 
 
 	// Just the right mix of templates and macros make deinterleaving tidy
-#define CpySI(T) cpy_stride_in<T> (buffer, (T *)poDS->pbuffer + i,\
+#define CpySI(T) cpy_stride_in<T> (ob, (T *)poDS->pbuffer + i,\
     blockSizeBytes()/sizeof(T), img.pagesize.c)
 
 	// Page is already in poDS->pbuffer, not empty
@@ -223,6 +223,8 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 	case 8: CpySI(GIntBig); break;
 	}
     }
+
+#undef CpySI
 
     // Drop the locks we acquired
     for (int i=0; i<blocks.size(); i++)
