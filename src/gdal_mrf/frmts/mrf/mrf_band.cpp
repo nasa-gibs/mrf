@@ -93,6 +93,7 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
 					const ILImage &image, int band, int ov)
 {
     poDS=parent_dataset;
+    nBand=band;
     m_band=band-1;
     m_l=ov;
     img=image;
@@ -283,9 +284,10 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	readszy = poDS->full.size.y - Yoff;
     }
 
+    // This is where the whole page fits
     void *ob = buffer;
     if (cstride != 1) 
-	poDS->pbuffer;
+	ob = poDS->pbuffer;
 
     // Fill buffer with NoData if clipping
     if (clip) 
@@ -293,8 +295,8 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
     // Use the dataset RasterIO if reading all bands
     CPLErr ret = poSrcDS->RasterIO( GF_Read, Xoff, Yoff, readszx, readszy,
-	poDS->pbuffer, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
-	eDataType, cstride, NULL,
+	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
+	eDataType, cstride, (cstride==1)? &nBand:NULL,
 	// pixel, line, band stride
 	vsz * img.pagesize.c,
 	vsz * img.pagesize.c * img.pagesize.x, 
@@ -302,18 +304,18 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
     if (ret != CE_None)
 	return ret;
-    // Got the block in the pbuffer, mark it
+    // Might have the block in the pbuffer, mark it
     poDS->tile = req;
 
     // If it should not be stored, mark it as such
     if (eDataType == GDT_Byte && poDS->vNoData.size()) {
-	if (is_empty((char *)poDS->pbuffer, img.pageSizeBytes, (char)GetNoDataValue(0)))
+	if (is_empty((char *)ob, img.pageSizeBytes, (char)GetNoDataValue(0)))
 	    return WriteTile(req, (void *)1, 0);
-    } else if (is_zero((char *)poDS->pbuffer, img.pageSizeBytes))
+    } else if (is_zero((char *)ob, img.pageSizeBytes))
 	return WriteTile(req, (void *)1, 0);
 
     // Write the page in the local cache
-    buf_mgr fdest={(char *)ob, img.pageSizeBytes};
+    buf_mgr filesrc={(char *)ob, img.pageSizeBytes};
 
     // Have to use a separate buffer for compression output.
     void *outbuff = CPLMalloc(poDS->pbsize);
@@ -325,18 +327,19 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return CE_Failure;
     }
 
-    buf_mgr dst={(char *)outbuff, poDS->pbsize};
-    Compress(dst, fdest, img);
+    buf_mgr filedst={(char *)outbuff, poDS->pbsize};
+    Compress(filedst, filesrc, img);
 
     // Update the tile index here
-    ret = WriteTile(req, outbuff, dst.size);
+    ret = WriteTile(req, outbuff, filedst.size);
     CPLFree(outbuff);
 
+    // If we hit an error or if unpaking is not needed
     if (ret != CE_None || cstride == 1)
 	return ret;
 
-    // data is already in dst buffer, deinterlace it in pixel blocks
-    return RB(xblk, yblk, dst, buffer);
+    // data is already in filesrc buffer, deinterlace it in pixel blocks
+    return RB(xblk, yblk, filesrc, buffer);
 }
 
 
@@ -437,17 +440,21 @@ CPLErr GDALMRFRasterBand::WriteTile(const ILSize &pos, void *buff=0, size_t size
     VSILFILE *dfp=DataFP();
     VSILFILE *ifp=IdxFP();
 
+    if (ifp == NULL || dfp == NULL)
+	return CE_Failure;
+
     // Convert to native format
     tinfo.size = net64(size);
     // This is the critical section for concurrent writes.
     if (size) {
-	// Pointer to verfiy buffer, if it doesn't exist everythign worked fine
+	// Pointer to verfiy buffer, if it doesn't exist everything worked fine
 	void *tbuff = 0;
 	do {
 
 	    // The next lines plus the Flush below are the critical MP section
 	    VSIFSeekL(dfp, 0, SEEK_END);
-	    tinfo.offset = net64(VSIFTellL(dfp));
+	    GUIntBig offset = VSIFTellL(dfp);
+	    tinfo.offset = net64(offset);
 	    if (size != VSIFWriteL(buff, 1, size, dfp))
 		ret=CE_Failure;
 
@@ -461,8 +468,8 @@ CPLErr GDALMRFRasterBand::WriteTile(const ILSize &pos, void *buff=0, size_t size
 		// Allocate the temp buffer if we haven't done so already
 		// This marks the check as failed
 		if (!tbuff)
-		    tbuff == CPLMalloc(size);
-		VSIFSeekL(dfp, tinfo.offset, SEEK_SET);
+		    tbuff = CPLMalloc(size);
+		VSIFSeekL(dfp, offset, SEEK_SET);
 		VSIFReadL(tbuff, 1, size, dfp);
 		// If memcmp returns zero, verify passed
 		if (!memcmp(buff,tbuff,size)) {
@@ -647,6 +654,9 @@ CPLErr GDALMRFRasterBand::ReadTileIdx(const ILSize &pos,ILIdx &tinfo)
 	tinfo.offset = offset * tinfo.size;
 	return CE_None;
     }
+    if (ifp == NULL)
+	return CE_Failure;
+
     VSIFSeekL(ifp, offset, SEEK_SET);
     if (1 != VSIFReadL(&tinfo, sizeof(ILIdx), 1, ifp))
 	return CE_Failure;

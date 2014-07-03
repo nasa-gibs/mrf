@@ -457,13 +457,10 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     if ( ds->GetPBufferSize() == 0 )
 	ds->SetPBuffer(ds->current.pageSizeBytes);
 
-    // Tell PAM what our real file name is, and load it if there
+    // Tell PAM what our real file name is, to help it find the aux.xml
     ds->SetPhysicalFilename(pszFileName);
+    // Don't mess with metadata after this, otherwise PAM will re-write the aux.xml
     ds->TryLoadXML();
-
-    // This is after PAM, because it ignores what we set?
-    ds->SetMetadataItem("INTERLEAVE", OrderName(ds->full.order), "IMAGE_STRUCTURE");
-
     return ds;
 }
 
@@ -765,32 +762,46 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     ifp.FP = VSIFOpenL(current.idxfname, mode );
 
     // Got it open or it doesn't need one
-    if (ifp.FP || current.comp == IL_NONE)
+    //
+    // The NONE compression could have two modes, without an index (implicit order and size) or with index
+    // But we can't tell them apart as of now.  So the only mode working now is the indexed one
+    // 
+    // if (ifp.FP || current.comp == IL_NONE)
+    if (ifp.FP)
 	return ifp.FP;
 
-    // Could be a caching MRF
+    // Error if this is not a caching MRF
     if (source.empty()) {
 	CPLError(CE_Failure, CPLE_AppDefined,
 	"GDAL MRF: Can't open index file %s\n", current.idxfname.c_str());
 	return ifp.FP;
     }
 
-    // This is a caching MRF, could be read only
+    // Caching MRF, could be read only
     mode = "rb";
     ifp.acc = GF_Read;
-    ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
+    ifp.FP = VSIFOpenL(current.idxfname, mode);
     if (NULL != ifp.FP)
 	return ifp.FP;
 
-    // Caching and not index file exits, try to create it
-    // Nope, try to create it, and make it large enough
+    // Caching and index file absent, create it
+    ifp.FP = VSIFOpenL(current.idxfname,"wb");
+    if (NULL == ifp.FP) {
+	CPLError(CE_Failure,CPLE_AppDefined,"Can't create the MRF cache index file %s",
+	    current.idxfname.c_str());
+	return NULL;
+    }
+    VSIFCloseL(ifp.FP);
+
+    // Make it large enough
     int idx_sz = static_cast<int>(IdxSize(current, scale));
-    if (!CheckFileSize(current.idxfname.c_str(), idx_sz, GA_Update)) {
-	CPLError(CE_Failure,CPLE_AppDefined,"Can't create the cache index file");
+    if (!CheckFileSize(current.idxfname, idx_sz, GA_Update)) {
+	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the cache index file %s",
+	    current.idxfname.c_str());
 	return NULL;
     }
 
-    // Try opening it again in rw mode
+    // Open it again in rw mode
     mode = "r+b";
     ifp.acc = GF_Write;
     ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
@@ -821,7 +832,7 @@ VSILFILE *GDALMRFDataset::DataFP() {
 
     dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
     if (dfp.FP) {
-	fprintf(stderr, "Opened %s mode %s\n",current.datfname.c_str(),mode);
+	CPLDebug("MRF_IO", "Opened %s mode %s\n",current.datfname.c_str(),mode);
 	return dfp.FP;
     }
 
@@ -837,7 +848,7 @@ VSILFILE *GDALMRFDataset::DataFP() {
     dfp.acc = GF_Read;
     dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
     if (NULL != dfp.FP) {
-	fprintf(stderr, "Opened %s RO mode %s\n",current.datfname.c_str(),mode);
+	CPLDebug("MRF_IO", "Opened %s RO mode %s\n",current.datfname.c_str(),mode);
 	return dfp.FP;
     }
 
@@ -1157,7 +1168,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
 #if defined(LERC)
-    if (comp==IL_LERC && ord!=IL_Separate) {
+    if (comp==IL_LERC && ord!=IL_Separate && page.c != 3 && dt != GDT_Byte) {
 	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: LERC ony handles BAND Interleave");
 	ord=IL_Separate;
 	page.c = 1;
@@ -1272,7 +1283,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
     CPLXMLNode *gtags=CPLCreateXMLNode(config, CXT_Element, "GeoTags");
 
-    // Do we have a meaningfull affine transform?
+    // Do we have an affine transform?
     double gt[6];
 
     if (poSrcDS->GetGeoTransform(gt)==CE_None
@@ -1294,12 +1305,13 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     const char *pszProj=poSrcDS->GetProjectionRef();
     if (pszProj&&(!EQUAL(pszProj,"")))
 	CPLCreateXMLElementAndValue(gtags,"Projection",pszProj);
-
     CPLCreateXMLElementAndValue(config, "Options", options.c_str());
 
     // Dump the XML
     CPLSerializeXMLTreeToFile(config,pszFilename);
     CPLDestroyXMLNode(config);
+
+    // Now that these files are created on demand, do we still need to create them here?
 
     // Create the data and index files, but only if they don't exist, otherwise leave them untouched
     VSILFILE *f_data=VSIFOpenL(fname_data,"r+b");
@@ -1331,18 +1343,22 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     // Reopen in RW mode and use the standard CopyWholeRaster
     GDALDataset *poDS = (GDALDataset *) GDALOpen(pszFilename, GA_Update);
 
+    // Now that we have a dataset, try to load stuff into PAM
+    if (poSrcDS->GetGCPCount() > 0)
+	poDS->SetGCPs(poSrcDS->GetGCPCount(), poSrcDS->GetGCPs(), poSrcDS->GetGCPProjection());
+
     // If there is a source name and copy is disabled, we're done
     if (!source.empty() && on(CSLFetchNameValue(papszOptions, "NOCOPY")))
 	return poDS;
 
     // Need to flag the dataset as compressed (COMPRESSED=TRUE) to force block writes
-    // This might not be what we want, if the input and out order is separate
+    // This might not be what we want, if the input and out order is truly separate
     char **papszCWROptions = CSLDuplicate(0);
     papszCWROptions = CSLAddNameValue(papszCWROptions, "COMPRESSED", "TRUE");
-    CPLErr err=GDALDatasetCopyWholeRaster( (GDALDatasetH) poSrcDS,
-	(GDALDatasetH) poDS, papszCWROptions, pfnProgress,
-	pProgressData);
+    CPLErr err = GDALDatasetCopyWholeRaster( (GDALDatasetH) poSrcDS,
+	(GDALDatasetH) poDS, papszCWROptions, pfnProgress, pProgressData);
     CSLDestroy(papszCWROptions);
+
     if (CE_Failure==err) {
 	delete poDS;
 	// Maybe clean up the files that might have been created here?
