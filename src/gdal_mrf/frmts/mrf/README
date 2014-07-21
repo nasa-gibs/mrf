@@ -89,6 +89,6 @@ mrf_band.cpp
 PNG_band.cpp
 Raw_band.cpp
 Tif_band.cpp
-mrf_util.cpp
+util.cpp
 ZLIB_band.cpp
 
