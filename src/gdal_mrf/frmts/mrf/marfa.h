@@ -388,6 +388,7 @@ public:
 protected:
     // Pointer to my DS (of GDALMRFDataset type)
     GDALMRFDataset *poDS;
+    // 0 based
     GInt32 m_band;
     // Level of this band
     GInt32 m_l;
@@ -434,8 +435,8 @@ protected:
     }
 
     // Compresion and decompression functions.  To be overwritten by specific implementations
-    virtual CPLErr Compress(buf_mgr &, buf_mgr &, const ILImage &) =0;
-    virtual CPLErr Decompress(buf_mgr &, buf_mgr &) =0;
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src, const ILImage &) =0;
+    virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src) =0;
     
     // Read the index record itself, can be overwritten
     virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &);
