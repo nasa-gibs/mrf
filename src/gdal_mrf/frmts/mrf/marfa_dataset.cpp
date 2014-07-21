@@ -1169,7 +1169,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
 #if defined(LERC)
     if (comp==IL_LERC && ord!=IL_Separate && page.c != 3 && dt != GDT_Byte) {
-	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: LERC ony handles BAND Interleave");
+	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: LERC only handles BAND Interleave");
 	ord=IL_Separate;
 	page.c = 1;
     }
@@ -1341,11 +1341,13 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
     // Reopen in RW mode and use the standard CopyWholeRaster
-    GDALDataset *poDS = (GDALDataset *) GDALOpen(pszFilename, GA_Update);
+    GDALMRFDataset *poDS = (GDALMRFDataset *) GDALOpen(pszFilename, GA_Update);
 
     // Now that we have a dataset, try to load stuff into PAM
-    if (poSrcDS->GetGCPCount() > 0)
-	poDS->SetGCPs(poSrcDS->GetGCPCount(), poSrcDS->GetGCPs(), poSrcDS->GetGCPProjection());
+    poDS->CloneInfo(poSrcDS, GCIF_ONLY_IF_MISSING | GCIF_METADATA | GCIF_GCPS );
+
+//    if (poSrcDS->GetGCPCount() > 0)
+//	poDS->SetGCPs(poSrcDS->GetGCPCount(), poSrcDS->GetGCPs(), poSrcDS->GetGCPProjection());
 
     // If there is a source name and copy is disabled, we're done
     if (!source.empty() && on(CSLFetchNameValue(papszOptions, "NOCOPY")))
