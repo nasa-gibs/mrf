@@ -1465,11 +1465,11 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
     int line_size=tsz_x*pixel_size; // A line has this many bytes
     int buffer_size=line_size*tsz_y; // A block size in bytes
 
-    // Build a vector of output bands
+    // Build a vector of input and output bands
     vector<GDALRasterBand *>src_b;
     vector<GDALRasterBand *>dst_b;
 
-    for (int band=1;band<=bands;band++) {
+    for (int band=1; band<=bands; band++) {
 	if (srcLevel==0)
 	    src_b.push_back(GetRasterBand(band));
 	else
@@ -1478,11 +1478,20 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
     }
 
     // Allocate space for four blocks
-    void *buffer=CPLMalloc(buffer_size *4 );
+    void *buffer = CPLMalloc(buffer_size *4 );
 
     void *in_buff[4]; // Pointers to the four blocks
     for (int i=0;i<4;i++)
 	in_buff[i]=(char *)buffer+i*buffer_size;
+
+    //
+    //
+    // It does the processing for all bands of one output tile together, so it is efficient
+    // for interleaved data.  Works well for band separate too.
+    //
+    // Should change to stop using the shared pbuffer, it leads to problems since it is 
+    // not locked, and these procedure could be re-entrant
+    //
 
     for (int y=0; y<HeightOut; y++) {
 	int dst_offset_y = BlockYOut+y;
@@ -1493,25 +1502,26 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 
 	    // Do it band at a time so we can work in grayscale
 	    for (int band=0; band<bands; band++) { // Counting from zero in a vector
-		// This gets read from the right overview
+
 		int sz_x = 2*tsz_x ,sz_y = 2*tsz_y ;
+		GDALMRFRasterBand *bsrc = static_cast<GDALMRFRasterBand *>(src_b[band]);
+		GDALMRFRasterBand *bdst = static_cast<GDALMRFRasterBand *>(dst_b[band]);
 
 		//
 		// Clip to the size to the input image
-		// This is one of the worst features of GDAL, it doesn't tollerate any padding
+		// This is one of the worst features of GDAL, it doesn't tolerate any padding
 		//
+		if ( bsrc->GetXSize() < (src_offset_x + 2) * tsz_x )
+		    sz_x = bsrc->GetXSize() - src_offset_x * tsz_x;
+		if ( bsrc->GetYSize() < (src_offset_y + 2) * tsz_y )
+		    sz_y = bsrc->GetYSize() - src_offset_y * tsz_y;
 
-		if ( src_b[band]->GetXSize() < (src_offset_x + 2) * tsz_x )
-		    sz_x = src_b[band]->GetXSize() - src_offset_x * tsz_x;
-		if ( src_b[band]->GetYSize() < (src_offset_y + 2) * tsz_y )
-		    sz_y = src_b[band]->GetYSize() - src_offset_y * tsz_y;
-
-		src_b[band]->RasterIO( GF_Read,
-		    src_offset_x*tsz_x,src_offset_y*tsz_y, // offset in input image
+		bsrc->RasterIO( GF_Read,
+		    src_offset_x*tsz_x, src_offset_y*tsz_y, // offset in input image
 		    sz_x, sz_y, // Size in output image
 		    buffer, sz_x, sz_y, // Buffer and size in buffer
 		    eDataType, // Requested type
-		    pixel_size, 2*line_size ); // Pixel and line space
+		    pixel_size, 2 * line_size ); // Pixel and line space
 
 
 #define avg(T) average_by_four((T *)buffer,tsz_x,tsz_y); break
@@ -1535,25 +1545,29 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		sz_x = tsz_x;
 		sz_y = tsz_y ;
 
-		if ( dst_b[band]->GetXSize() < dst_offset_x * tsz_x + tsz_x )
-		    sz_x=dst_b[band]->GetXSize() - dst_offset_x * tsz_x;
-		if ( dst_b[band]->GetYSize() < dst_offset_y * tsz_y + tsz_y )
-		    sz_y=dst_b[band]->GetYSize() - dst_offset_y * tsz_y;
+		if ( bdst->GetXSize() < dst_offset_x * sz_x + sz_x )
+		    sz_x = bdst->GetXSize() - dst_offset_x * sz_x;
+		if ( bdst->GetYSize() < dst_offset_y * sz_y + sz_y )
+		    sz_y = bdst->GetYSize() - dst_offset_y * sz_y;
 
-		dst_b[band]->RasterIO( GF_Write,
-		    dst_offset_x*tsz_x,dst_offset_y*tsz_y, // offset in output image
+		bdst->RasterIO( GF_Write,
+		    dst_offset_x*tsz_x, dst_offset_y*tsz_y, // offset in output image
 		    sz_x, sz_y, // Size in output image
 		    buffer, sz_x, sz_y, // Buffer and size in buffer
 		    eDataType, // Requested type
 		    pixel_size, line_size ); // Pixel and line space
 	    }
+
+	    // Mark the input data as no longer needed, saves RAM
+	    for (int band=0; band<bands; band++)
+		src_b[band]->FlushCache(); 
 	}
     }
 
     CPLFree(buffer);
 
     for (int band=0; band<bands; band++) 
-	dst_b.at(band)->FlushCache(); // Commit the output to disk
+	dst_b[band]->FlushCache(); // Commit the output to disk
 
     if (!recursive)
 	return CE_None;

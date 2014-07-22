@@ -49,14 +49,14 @@ using std::vector;
 using std::string;
 
 // Is the buffer filled with zeros
-inline int is_zero(char *b,size_t count)
+inline int is_zero(const char *b,size_t count)
 {
     while (count--) if (*b++) return 0;
     return TRUE;
 }
 
 // Does every byte in the buffer have the same value
-inline int is_empty(char *b,size_t count, char val=0)
+inline int is_empty(const char *b,size_t count, char val=0)
 
 {
     while (count--) if (*(b++)!=val) return 0;
@@ -196,8 +196,7 @@ CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
 CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
     vector<GDALRasterBlock *> blocks;
 
-    // Get 
-    for (int i = 0; i<poDS->nBands; i++) {
+    for (int i = 0; i < poDS->nBands; i++) {
 	GDALRasterBand *b = poDS->GetRasterBand(i+1);
 	if (b->GetOverviewCount() && m_l)
 	    b = b->GetOverview(m_l-1);
@@ -371,9 +370,6 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 	return CE_Failure;
     }
 
-    CPLDebug("MRF_IB","Tinfo offset %lld, size %lld\n", tinfo.offset, tinfo.size);
-    // If we have a tile, read it
-
     if (0 == tinfo.size) { // Could be missing or it could be caching
 	// Offset != 0 means no data, Update mode is for local MRFs only
 	// if caching index mode is RO don't try to fetch
@@ -385,6 +381,9 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 	// We might have a tile, return the fetched one
 	return FetchBlock(xblk, yblk, buffer);
     }
+
+    CPLDebug("MRF_IB","Tinfo offset %lld, size %lld\n", tinfo.offset, tinfo.size);
+    // If we have a tile, read it
 
     // Should use a permanent buffer, like the pbuffer mechanism
     void *data = CPLMalloc(tinfo.size);
@@ -505,7 +504,8 @@ CPLErr GDALMRFRasterBand::WriteTile(const ILSize &pos, void *buff=0, size_t size
 /**
 *\brief Write a block from the provided buffer
 * 
-* Same trick as read, use a dataset buffer
+* Same trick as read, use a temporary tile buffer for pixel interleave
+* For band separate, use a 
 * Write the block once it has all the bands, report 
 * if a new block is started before the old one was completed
 *
@@ -519,8 +519,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     CPLDebug("MRF_IB", "IWriteBlock %d,%d,0,%d, level  %d, stride %d\n", xblk, yblk, 
 	m_band, m_l, cstride);
 
-    // Separate bands, we can write it as is
-    if (1 == cstride) {
+    if (1 == cstride) {     // Separate bands, we can write it as is
 	// Empty page skip. Byte data only, the NoData needs work
 	if ((eDataType==GDT_Byte) && (poDS->vNoData.size())) {
 	    if (is_empty((char *)buffer, img.pageSizeBytes, char(GetNoDataValue(0))))
@@ -544,12 +543,20 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	return WriteTile(req, poDS->pbuffer, dst.size);
     }
 
-    // Multiple bands per page, we use the pbuffer to assemble the page
+    // Multiple bands per page, use a temporary to assemble the page
+    // Temporary is large because we use it to hold both the uncompressed and the compressed
     poDS->tile=req; poDS->bdirty=0;
 
     // Keep track of what bands are empty
     GUIntBig empties=0;
 
+    void *tbuffer = CPLMalloc(img.pageSizeBytes + poDS->pbsize);
+
+    if (!tbuffer) {
+    	CPLError(CE_Failure,CPLE_AppDefined, "MRF: Can't allocate write buffer");
+	return CE_Failure;
+    }
+	
     // Get the other bands from the block cache
     for (int iBand=0; iBand < poDS->nBands; iBand++ )
     {
@@ -570,22 +577,22 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	    // This is where the image data is for this band
 
 	    pabyThisImage = (char*) poBlock->GetDataRef();
-	    poDS->bdirty|=bandbit(iBand);
+	    poDS->bdirty |= bandbit(iBand);
 	}
 
-	// Keep track of empty bands, but encode them, in case some are not empty
+	// Keep track of empty bands, but encode them anyhow, in case some are not empty
 	if ((eDataType == GDT_Byte) && poDS->vNoData.size()) {
-	    if (is_empty((char *)poDS->pbuffer, img.pageSizeBytes, (char)GetNoDataValue(0)))
-		empties |= bandbit();
-        } else if (is_zero((char *)poDS->pbuffer, img.pageSizeBytes))
-	    empties |= bandbit();
+	    if (is_empty(pabyThisImage, blockSizeBytes(), (char)GetNoDataValue(0)))
+		empties |= bandbit(iBand);
+        } else if (is_zero(pabyThisImage, blockSizeBytes()))
+	    empties |= bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
 	// Just the right mix of templates and macros make this real tidy
-#define CpySO(T) cpy_stride_out<T> (((T *)poDS->pbuffer)+iBand, pabyThisImage,\
+#define CpySO(T) cpy_stride_out<T> (((T *)tbuffer)+iBand, pabyThisImage,\
 		blockSizeBytes()/sizeof(T), cstride)
 
-	// Build the page in pbuffer
+	// Build the page in tbuffer
 	switch (GDALGetDataTypeSize(eDataType)/8)
 	{
 	    case 1: CpySO(GByte); break;
@@ -605,8 +612,10 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	}
     }
 
-    if (empties == AllBandMask())
+    if (empties == AllBandMask()) {
+	CPLFree(tbuffer);
 	return WriteTile(req, 0, 0);
+    }
 
     // Gets written on flush
     if (poDS->bdirty != AllBandMask())
@@ -614,24 +623,18 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	"MRF: IWrite, band dirty mask is %0llx instead of %lld",
 	poDS->bdirty, AllBandMask());
 
-    //    ppmWrite("test.ppm",(char *)poDS->pbuffer,ILSize(nBlockXSize,nBlockYSize,0,poDS->nBands));
+//    ppmWrite("test.ppm",(char *)tbuffer, ILSize(nBlockXSize,nBlockYSize,0,poDS->nBands));
 
-    buf_mgr src={(char *)poDS->pbuffer, img.pageSizeBytes};
+    buf_mgr src={(char *)tbuffer, img.pageSizeBytes};
 
-    // Have to use a separate buffer.  We should make this one permanent too.
-    void *outbuff = CPLMalloc(poDS->pbsize);
+    // Use the space after pagesizebytes for compressed output
+    char *outbuff = (char *)tbuffer + img.pageSizeBytes;
 
-    if (!outbuff) {
-	CPLError(CE_Failure, CPLE_AppDefined, 
-	    "Can't get buffer for writing page");
-	return CE_Failure;
-    }
-
-    buf_mgr dst={(char *)outbuff, poDS->pbsize};
+    buf_mgr dst={outbuff, poDS->pbsize};
     Compress(dst, src, img);
 
     CPLErr ret = WriteTile(req, outbuff, dst.size);
-    CPLFree(outbuff);
+    CPLFree(tbuffer);
 
     poDS->bdirty = 0;
     return ret;
