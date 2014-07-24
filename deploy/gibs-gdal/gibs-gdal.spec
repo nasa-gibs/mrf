@@ -1,6 +1,6 @@
-%global gdal_version 1.10.1
-%global gdal_release 7%{?dist}
-%global mrf_version 0.3.5
+%global gdal_version 1.11.0
+%global gdal_release 1%{?dist}
+%global mrf_version 0.4.0
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
