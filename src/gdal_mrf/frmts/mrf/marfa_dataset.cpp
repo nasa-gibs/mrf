@@ -437,6 +437,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     ds->level=level;
 
     if (level != -1) {
+	// Open the whole dataset, then pick one level
 	ds->cds = new GDALMRFDataset();
 	ds->cds->fname = pszFileName;
 	ds->cds->eAccess = ds->eAccess;
@@ -466,11 +467,13 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 
 CPLErr GDALMRFDataset::LevelInit(const int l) {
 
-    if (l<0 || l>cds->GetRasterBand(1)->GetOverviewCount()) {
-	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: No such level found!");
+    // Test that this level does exist
+    if (l<0 || l >= cds->GetRasterBand(1)->GetOverviewCount()) {
+	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Overview not present!");
 	return CE_Failure;
     }
-    GDALMRFRasterBand *srcband=(GDALMRFRasterBand *)cds->GetRasterBand(1)->GetOverview(l);
+
+    GDALMRFRasterBand *srcband = (GDALMRFRasterBand *)cds->GetRasterBand(1)->GetOverview(l);
     // Copy the sizes from this level
     current=full=srcband->img;
     current.size.c=cds->current.size.c;
@@ -981,7 +984,8 @@ GDALDataset *GDALMRFDataset::GetSrcDS() {
 GIntBig GDALMRFDataset::AddOverviews(int scale) {
     // Fit the overlays
     ILImage img=full;
-    do {
+    while (1!=img.pcount.x*img.pcount.y)
+    {
 	// Adjust the offsets for indices
 	img.idxoffset+=sizeof(ILIdx)*img.pcount.l;
 	img.size.x=pcount(img.size.x,scale);
@@ -994,11 +998,10 @@ GIntBig GDALMRFDataset::AddOverviews(int scale) {
 	    if (!(b->GetOverview(img.size.l-1)))
 		b->AddOverview(newMRFRasterBand(this,img,i,img.size.l));
 	}
-    } while (1!=img.pcount.x*img.pcount.y);
+    }
 
     // Last adjustment, should be a single set of c and z tiles
-    img.idxoffset+=sizeof(ILIdx)*img.pcount.l;
-    return img.idxoffset;
+    return img.idxoffset + sizeof(ILIdx)*img.pcount.l;
 }
 
 //
@@ -1349,8 +1352,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 //    if (poSrcDS->GetGCPCount() > 0)
 //	poDS->SetGCPs(poSrcDS->GetGCPCount(), poSrcDS->GetGCPs(), poSrcDS->GetGCPProjection());
 
-    // If there is a source name and copy is disabled, we're done
-    if (!source.empty() && on(CSLFetchNameValue(papszOptions, "NOCOPY")))
+    // If copy is disabled, we're done, we just created an empty MRF
+    if (on(CSLFetchNameValue(papszOptions, "NOCOPY")))
 	return poDS;
 
     // Need to flag the dataset as compressed (COMPRESSED=TRUE) to force block writes
@@ -1359,6 +1362,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     papszCWROptions = CSLAddNameValue(papszCWROptions, "COMPRESSED", "TRUE");
     CPLErr err = GDALDatasetCopyWholeRaster( (GDALDatasetH) poSrcDS,
 	(GDALDatasetH) poDS, papszCWROptions, pfnProgress, pProgressData);
+
     CSLDestroy(papszCWROptions);
 
     if (CE_Failure==err) {
@@ -1411,19 +1415,18 @@ CPLErr GDALMRFDataset::GetGeoTransform( double *gt)
     return CE_None;
 }
 
-
 // Averaging round up, 0.5 for integers, 0 for floats
-template<typename T> T AvgRoundUpVal(T mul) {
+template<typename T> T avgRoundUpVal(T mul) {
     return T(0.5*mul);
 }
-double AvgRoundUpVal(double) { return 0; }
-float AvgRoundUpVal(float) { return 0; }
+double avgRoundUpVal(double) { return 0; }
+float avgRoundUpVal(float) { return 0; }
 
-template<typename T> void average_by_four(T *buff,int xsz, int ysz) {
+template<typename T> void AverageByFour(T *buff, int xsz, int ysz) {
     T *obuff=buff;
     T *evenline=buff;
     // Type dependent premultiplied bias
-    T bias = AvgRoundUpVal(T(4));
+    T bias = avgRoundUpVal(T(4));
 
     for (int line=0;line<ysz;line++) {
 	T *oddline=evenline+xsz*2;
@@ -1524,7 +1527,7 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		    pixel_size, 2 * line_size ); // Pixel and line space
 
 
-#define avg(T) average_by_four((T *)buffer,tsz_x,tsz_y); break
+#define avg(T) AverageByFour((T *)buffer,tsz_x,tsz_y); break
 		switch(eDataType) {
 		case GDT_Byte:      avg(unsigned char);
 		case GDT_UInt16:    avg(unsigned short int);
