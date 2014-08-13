@@ -48,6 +48,34 @@
 using std::vector;
 using std::string;
 
+// packs a block of a given type, with a stride
+// Count is the number of items that need to be copied
+// These are separate to allow for optimization
+
+template <typename T> void cpy_stride_in(void *dst, 
+        const void *src, int c, int stride)
+{
+    T *s=(T *)src;
+    T *d=(T *)dst;
+
+    while (c--) {
+        *d++=*s;
+        s+=stride;
+    }
+}
+
+template <typename T> void cpy_stride_out(void *dst, 
+        const void *src, int c, int stride)
+{
+    T *s=(T *)src;
+    T *d=(T *)dst;
+
+    while (c--) {
+        *d=*s++;
+        d+=stride;
+    }
+}
+
 // Is the buffer filled with zeros
 inline int is_zero(const char *b,size_t count)
 {
@@ -233,7 +261,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
     return CE_None;
 }
 
-/**
+    /**
 *\brief Fetch a block from the backing store dataset and keep a copy in the cache
 *
 * @xblk The X block number, zero based
@@ -246,15 +274,19 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 {
     CPLDebug("MRF_IB","FetchBlock %d,%d,0,%d, level  %d\n", xblk, yblk, m_band, m_l);
 
-    GDALDataset *poSrcDS;
-    GInt32 cstride = img.pagesize.c;
-    ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
-
     // Paranoid checks, should never happen
     if (poDS->source.empty()) {
 	CPLError( CE_Failure, CPLE_AppDefined, "MRF: No cached source image to fetch from");
 	return CE_Failure;
     }
+
+    if (poDS->clonedSource)  // This is a clone
+	return FetchClonedBlock(xblk, yblk, buffer);
+
+    GDALDataset *poSrcDS;
+    GInt32 cstride = img.pagesize.c;
+    ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
+
     if ( 0 == (poSrcDS = poDS->GetSrcDS())) {
 	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't open source file %s", poDS->source.c_str());
 	return CE_Failure;
@@ -343,6 +375,81 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
 
 /**
+*\brief Fetch for a cloned MRF
+*
+* @xblk The X block number, zero based
+* @yblk The Y block number, zero based
+* @param tinfo The return, updated tinfo for this specific tile
+*
+*/
+
+CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
+{
+    // Paranoid check
+    if (!poDS->clonedSource) {
+	CPLError(CE_Failure, CPLE_AppDefined, 
+	    "MRF: FetchClonedBlock called for a non-clone MRF");
+	// This is not an error for a cache, the data is fine
+	return CE_Failure;
+    }
+
+    GDALMRFDataset *poSrc;
+
+    if ( 0 == (poSrc = static_cast<GDALMRFDataset *>(poDS->GetSrcDS()))) {
+	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't open source file %s", poDS->source.c_str());
+	return CE_Failure;
+    }
+
+    if (DataMode() == GF_Read) {
+	// Can't store, so just fetch from source, which is an MRF with the same structure
+	GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(poSrc->GetRasterBand(nBand));
+	if (b->GetOverviewCount() && m_l)
+	    b = static_cast<GDALMRFRasterBand *>(b->GetOverview(m_l-1));
+	return b->IReadBlock(xblk,yblk,buffer);
+    }
+
+    ILSize req(xblk, yblk, 0, m_band/img.pagesize.c , m_l);
+    ILIdx tinfo;
+
+    // Get the cloned source tile info
+    // The cloned source index is after the current one
+    if (CE_None != ReadTileIdx(req, tinfo, IdxSize(poDS->full))) {
+	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Unable to read cloned index");
+	return CE_Failure;
+    }
+
+    CPLErr err;
+
+    // Does the source have this tile?
+    if (tinfo.size == 0) { // Nope, mark it empty and reissue the read
+	err = WriteTile(req, (void *)1,0);
+	if (CE_None == err)
+	    return IReadBlock(xblk, yblk, buffer);
+	return err;
+    }
+
+    // Need to read the tile from the source
+    char *buf = static_cast<char *>(CPLMalloc(tinfo.size));
+
+    VSIFSeekL(poSrc->DataFP(), tinfo.offset, SEEK_SET);
+    if (tinfo.size != VSIFReadL( buf, 1, tinfo.size, poSrc->DataFP()) ) {
+	CPLFree(buf);
+	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't read data from source %s",
+	    poSrc->current.datfname.c_str() );
+	return CE_Failure;
+    }
+
+    // Write it then reissue the read
+    err = WriteTile( req, buf, tinfo.size);
+    CPLFree(buf);
+    if ( CE_None != err )
+	return err;
+
+    return IReadBlock(xblk, yblk, buffer);
+}
+
+
+/**
 *\brief read a block in the provided buffer
 * 
 *  For separate band model, the DS buffer is not used, the read is direct in the buffer
@@ -378,7 +485,7 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 	    || poDS->source.empty() || IdxMode() == GF_Read )
 	    return FillBlock(buffer);
 
-	// We might have a tile, return the fetched one
+	// caching MRF, need to fetch a block
 	return FetchBlock(xblk, yblk, buffer);
     }
 
@@ -442,7 +549,7 @@ CPLErr GDALMRFRasterBand::WriteTile(const ILSize &pos, void *buff=0, size_t size
     if (ifp == NULL || dfp == NULL)
 	return CE_Failure;
 
-    // Convert to native format
+    // Convert to net format
     tinfo.size = net64(size);
     // This is the critical section for concurrent writes.
     if (size) {
@@ -641,17 +748,17 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 }
 
 /**
-*\brief Read a tile index, convert it to the host endianess
+*\brief Read a tile index
 *
 * It handles the non-existent index case, for no compression
 * 
 */
 
-CPLErr GDALMRFRasterBand::ReadTileIdx(const ILSize &pos,ILIdx &tinfo) 
+CPLErr GDALMRFRasterBand::ReadTileIdx(const ILSize &pos, ILIdx &tinfo, GIntBig bias ) 
 
 {
     VSILFILE *ifp = IdxFP();
-    GIntBig offset = IdxOffset(pos, img);
+    GIntBig offset = bias + IdxOffset(pos, img);
     if (ifp == NULL && img.comp == IL_NONE) {
 	tinfo.size = pageSizeBytes();
 	tinfo.offset = offset * tinfo.size;
@@ -667,4 +774,3 @@ CPLErr GDALMRFRasterBand::ReadTileIdx(const ILSize &pos,ILIdx &tinfo)
     tinfo.size   = net64(tinfo.size);
     return CE_None;
 }
-

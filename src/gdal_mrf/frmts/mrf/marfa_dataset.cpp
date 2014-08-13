@@ -44,23 +44,6 @@
 using std::vector;
 using std::string;
 
-// Returns the size of the index for image and overlays
-// If scale is zero, only base image
-GIntBig IdxSize(const ILImage &full, const int scale=0) {
-    ILImage img=full;
-    pcount(img.pcount,img.size,img.pagesize);
-    GIntBig sz = img.pcount.l;
-    while ( scale != 0 && 1 != img.pcount.x * img.pcount.y )
-    {
-	img.size.x = pcount(img.size.x, scale);
-	img.size.y = pcount(img.size.y, scale);
-	img.size.l++;
-	pcount(img.pcount, img.size, img.pagesize);
-	sz += img.pcount.l;
-    }
-    return sz*sizeof(ILIdx);
-}
-
 GDALMRFDataset::GDALMRFDataset()
 
 {
@@ -102,18 +85,16 @@ GDALMRFDataset::~GDALMRFDataset()
 	VSIFCloseL(ifp.FP);
     if (dfp.FP)
 	VSIFCloseL(dfp.FP);
-    if (cds)
-	delete cds;
-    if (poSrcDS)
-	delete poSrcDS;
+    delete cds;
+    delete poSrcDS;
+    delete poColorTable;
+
     // OK to pass null
     CSLDestroy(optlist);
     // CPLFree ignores being called with NULL, so these are safe
     CPLFree(pbuffer);
     CPLFree(pszProjection);
     pbsize=0;
-    if (poColorTable)
-	delete poColorTable;
 }
 
 
@@ -401,7 +382,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 {
     CPLXMLNode *config = NULL;
     CPLErr ret = CE_None;
-    const char* pszFileName=poOpenInfo->pszFilename;
+    const char* pszFileName = poOpenInfo->pszFilename;
     int level=-1;
 
     // Test that this is a MRF file
@@ -418,7 +399,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 	    CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Use MRF:<num>:filename");
 	    return NULL;
 	} else level=atoi(pszFileName);
-	pszFileName=strstr(pszFileName,":")+1;
+	pszFileName=strstr(pszFileName, ":")+1;
 	if (!pszFileName) {
 	    CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Use MRF:<num>:filename");
 	    return NULL;
@@ -747,6 +728,8 @@ char      **GDALMRFDataset::GetFileList()
     // These two should be real
     papszFileList = CSLAddString( papszFileList, full.datfname);
     papszFileList = CSLAddString( papszFileList, full.idxfname);
+    if (!source.empty())
+	papszFileList = CSLAddString( papszFileList, source);
 
     return papszFileList;
 }
@@ -780,7 +763,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	return ifp.FP;
     }
 
-    // Caching MRF, could be read only
+    // Caching MRF and index could be read only
     mode = "rb";
     ifp.acc = GF_Read;
     ifp.FP = VSIFOpenL(current.idxfname, mode);
@@ -797,7 +780,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     VSIFCloseL(ifp.FP);
 
     // Make it large enough
-    int idx_sz = static_cast<int>(IdxSize(current, scale));
+    int idx_sz = static_cast<int>(IdxSize(full, scale));
     if (!CheckFileSize(current.idxfname, idx_sz, GA_Update)) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the cache index file %s",
 	    current.idxfname.c_str());
@@ -809,13 +792,43 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     ifp.acc = GF_Write;
     ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
 
-    // Nothing more we can do
-    if (NULL == ifp.FP)
+    if (NULL == ifp.FP) {
 	CPLError(CE_Failure, CPLE_AppDefined,
-	"GDAL MRF: Can't open cache index file %s\n", current.idxfname.c_str());
+	    "GDAL MRF: Can't open cache index file %s\n", full.idxfname.c_str());
+	return NULL;
+    }
 
+    if (!clonedSource) 
+	return ifp.FP;
+
+    // For cloned files, fetch the source index and append it when creating the index
+    GDALMRFDataset *pSrc = static_cast<GDALMRFDataset *>(GetSrcDS());
+    // Don't close this, the source takes care of it
+    VSILFILE *srcidx = pSrc->IdxFP();
+    if (!srcidx) return NULL; // Source reported the error
+    VSIFSeekL(ifp.FP, 0, SEEK_END); // Go to the end
+    const int CPYSZ = 1024;
+    char buffer[CPYSZ];
+    size_t read_bytes, written_bytes, copied_bytes = 0;
+    do {
+	read_bytes = VSIFReadL(buffer, 1, CPYSZ, srcidx);
+	if (read_bytes != 0) {
+	    written_bytes = VSIFWriteL(buffer, 1, read_bytes, ifp.FP);
+	    if (written_bytes != read_bytes)
+		break;
+	}
+	copied_bytes += read_bytes;
+    } while ( read_bytes == CPYSZ && idx_sz < copied_bytes );
+    if (copied_bytes != idx_sz) {
+	CPLError(CE_Failure,CPLE_AppDefined,"Can't read the cloned source index",
+	    pSrc->current.idxfname.c_str());
+	return NULL;
+    }
+    // Make sure it hit the disk
+    VSIFFlushL(ifp.FP);
+    // Done, the cloned index is now appended
     return ifp.FP;
-};
+}
 
 //
 // Returns the dataset data file or null 
@@ -925,6 +938,10 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     // Pick up the source data image, if there is one
     source = CPLStrdup(CPLGetXMLValue(config,"CachedSource.Source",0));
+    if (!source.empty()) {
+	clonedSource = on(CPLGetXMLValue(config, "CachedSource.Source.clone", "no"));
+    }
+
     options = CPLStrdup(CPLGetXMLValue(config,"Options",0));
     optlist = CSLTokenizeString2(options.c_str()," \t\n\r",
 	CSLT_STRIPLEADSPACES|CSLT_STRIPENDSPACES);
@@ -1065,6 +1082,9 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
     // This could be a cached source file
     CPLString source(CPLStrdup(CSLFetchNameValue(papszOptions, "CACHEDSOURCE")));
+
+    int clonedSource = CSLFetchBoolean(papszOptions, "CLONE", 0);
+
     // Get freeform params
     CPLString options(CPLStrdup(CSLFetchNameValue(papszOptions, "OPTIONS")));
 
@@ -1208,10 +1228,6 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     if ( pszValue != NULL )
 	factor = atoi( pszValue );
 
-    if (!source.empty()) { // Extra stuff to worry about when caching
-
-    }
-
     img.pagesize = page;
 
     // Build the XML file
@@ -1220,6 +1236,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	CPLXMLNode *CS = CPLCreateXMLNode(config, CXT_Element, "CachedSource");
 	// Should wrap the string in CDATA, in case it is XML
 	CPLXMLNode *S = CPLCreateXMLElementAndValue(CS, "Source",source.c_str());
+	if (clonedSource)
+	    CPLSetXMLValue(S, "#clone", "true");
     }
 
     CPLXMLNode *raster=CPLCreateXMLNode(config,CXT_Element,"Raster");
@@ -1273,10 +1291,10 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	CPLCreateXMLElementAndValue(raster,"NetByteOrder",
 	(nbo||NET_ORDER)? "TRUE": "FALSE");
 
-    if (quality>0)
+    if (quality > 0 && quality != 85)
 	CPLCreateXMLElementAndValue(raster,"Quality", CPLString().Printf("%d",quality).c_str());
 
-    XMLSetAttributeVal(raster,"PageSize",img.pagesize,"%.0f");
+    XMLSetAttributeVal(raster, "PageSize", img.pagesize, "%.0f");
     // Done with raster
 
     CPLCreateXMLNode(config, CXT_Element,"Rsets");
@@ -1308,7 +1326,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     const char *pszProj=poSrcDS->GetProjectionRef();
     if (pszProj&&(!EQUAL(pszProj,"")))
 	CPLCreateXMLElementAndValue(gtags,"Projection",pszProj);
-    CPLCreateXMLElementAndValue(config, "Options", options.c_str());
+    if (options.size()!=0)
+	CPLCreateXMLElementAndValue(config, "Options", options.c_str());
 
     // Dump the XML
     CPLSerializeXMLTreeToFile(config,pszFilename);

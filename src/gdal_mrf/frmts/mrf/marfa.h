@@ -78,34 +78,6 @@ typedef struct {
 std::ostream& operator<<(std::ostream &out, const ILSize& sz);
 std::ostream& operator<<(std::ostream &out, const ILIdx& t);
 
-// packs a block of a given type, with a stride
-// Count is the number of items that need to be copied
-// These are separate to allow for optimization
-
-template <typename T> void cpy_stride_in(void *dst, 
-        const void *src, int c, int stride)
-{
-    T *s=(T *)src;
-    T *d=(T *)dst;
-
-    while (c--) {
-        *d++=*s;
-        s+=stride;
-    }
-}
-
-template <typename T> void cpy_stride_out(void *dst, 
-        const void *src, int c, int stride)
-{
-    T *s=(T *)src;
-    T *d=(T *)dst;
-
-    while (c--) {
-        *d=*s++;
-        d+=stride;
-    }
-}
-
 /**
  * Collects information pertaining to a single raster
  * This structure is being shallow copied, no pointers allowed
@@ -202,6 +174,7 @@ CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
         const char*pszName,const ILSize &sz,const char *frmt=NULL);
 GDALColorEntry GetXMLColorEntry(CPLXMLNode *p);
 GDALColorEntry HSVSwap(const GDALColorEntry& cein);
+GIntBig IdxSize(const ILImage &full, const int scale=0);
 
 // checks that the file exists and is at least sz, if access is update it extends it
 int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess);
@@ -316,6 +289,7 @@ protected:
 
     // The source to be cached in this MRF
     CPLString source;
+    int clonedSource; // Is it a cloned source
 
     // Freeform sticky dataset options
     CPLString options;
@@ -331,12 +305,11 @@ protected:
     GDALMRFDataset *cds;
     double scale;
 
-    // A place to keep an uncompressed block, to keep from allocating it
+    // A place to keep an uncompressed block, to keep from allocating it all the time
     unsigned int pbsize;
     void *pbuffer;
 
     ILSize tile; // ID of tile present in buffer
-
     // Holds bits, to be used in pixel interleaved (up to 64 bands)
     GIntBig bdirty;
 
@@ -371,8 +344,11 @@ public:
     virtual double  GetMinimum(int *);
     virtual double  GetMaximum(int *);
 
-    // These two are MRF specific, fetch is from a remote source
+    // MRF specific, fetch is from a remote source
     CPLErr FetchBlock(int xblk, int yblk, void *buffer = NULL);
+    // Fetch a block from a cloned MRF
+    CPLErr FetchClonedBlock(int xblk, int yblk, void *buffer = NULL);
+
     // Block not stored on disk
     CPLErr FillBlock(void *buffer);
 
@@ -439,7 +415,7 @@ protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src) =0;
     
     // Read the index record itself, can be overwritten
-    virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &);
+    virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &, GIntBig bias = 0);
 
     GIntBig bandbit() {
         return ((GIntBig)1) << m_band; 

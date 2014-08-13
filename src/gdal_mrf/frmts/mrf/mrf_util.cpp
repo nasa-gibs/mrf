@@ -182,22 +182,39 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
 }
 #endif
 
+// Returns the size of the index for image and overlays
+// If scale is zero, only base image
+GIntBig IdxSize(const ILImage &full, const int scale) {
+    ILImage img=full;
+    pcount(img.pcount,img.size,img.pagesize);
+    GIntBig sz = img.pcount.l;
+    while ( scale != 0 && 1 != img.pcount.x * img.pcount.y )
+    {
+	img.size.x = pcount(img.size.x, scale);
+	img.size.y = pcount(img.size.y, scale);
+	img.size.l++;
+	pcount(img.pcount, img.size, img.pagesize);
+	sz += img.pcount.l;
+    }
+    return sz*sizeof(ILIdx);
+}
+
 /**
  *\brief Get a file name by replacing the extension.
  * pass the data file name and the default extension starting with .
- * If name length is not sufficient, it returns the def argument
+ * If name length is not sufficient, it returns the extension
  */
 
-CPLString getFname(const CPLString &in, const char *def) 
+CPLString getFname(const CPLString &in, const char *ext) 
 {
     CPLString ret(in);
 
-    if ((strlen(def)==4) && (strlen(in)>4)) {
-        ret.replace(ret.size()-4,4,def);
+    if ((strlen(ext)==4) && (strlen(in)>4)) {
+        ret.replace(ret.size()-4,4,ext);
         return ret;
     }
 
-    return CPLString(def);
+    return CPLString(ext);
 }
 
 /**
@@ -207,9 +224,9 @@ CPLString getFname(const CPLString &in, const char *def)
  * Otherwise it retuns the token itself
  */
 
-CPLString getFname(CPLXMLNode *node,const char *token, const CPLString &in, const char *def) 
+CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, const char *def) 
 {
-    return CPLGetXMLValue(node,token,getFname(in,def).c_str());
+    return CPLGetXMLValue(node, token, getFname(in,def).c_str() );
 }
 
 
@@ -230,17 +247,19 @@ double getXMLNum(CPLXMLNode *node, const char *pszPath, double def)
 // Calculate offset of index, pos is in pages
 //
 
-GIntBig IdxOffset(const ILSize &pos,const ILImage &img) 
+GIntBig IdxOffset(const ILSize &pos, const ILImage &img) 
 {
     return img.idxoffset+sizeof(ILIdx)*
         ((GIntBig)pos.c+img.pcount.c*(pos.x+img.pcount.x*
         (pos.y+img.pcount.y*pos.z)));
 }
 
-// Is compress type endianess dependent?
+// Is compression type endianess dependent?
 bool is_Endianess_Dependent(GDALDataType dt, ILCompression comp) {
+    // Add here all endianess dependent compressions
     if (IL_ZLIB == comp || IL_NONE == comp)
-        if (GDALGetDataTypeSize( dt )>8) return true;
+	if (GDALGetDataTypeSize( dt ) > 8)
+	    return true;
     return false;
 }
 
@@ -274,7 +293,7 @@ void GDALRegister_mrf(void)
             "       <Value>DEFLATE</Value>"
             "       <Value>NONE</Value>"
 #if defined(LERC)
-			"		<Value>LERC</Value>"
+	    "	    <Value>LERC</Value>"
 #endif
             "   </Option>\n"
             "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
@@ -288,8 +307,9 @@ void GDALRegister_mrf(void)
             "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
             "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
+//	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
 	    "	<Option name='UNIFORM_OVERLAY_SCALE' type='int' description='Uniform overlays in MRF, only 2 is valid, mostly when caching'/>\n"
-	    "	<Option name='NOCOPY' type='boolean' description='When caching, leave output empty, default=no'/>\n"
+	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
             "</CreationOptionList>\n");
 
         driver->pfnOpen = GDALMRFDataset::Open;
@@ -335,8 +355,8 @@ double logb(double val, double base) {
  *
  */
 
-int IsPower(double value,double base) {
-    double v=logb(value,base);
+int IsPower(double value, double base) {
+    double v=logb(value, base);
     return CPLIsEqual(v,int(v+0.5));
 }
 
@@ -418,7 +438,7 @@ GDALColorEntry GetXMLColorEntry(CPLXMLNode *p) {
 }
 
 // Swap c2 and c3, converting from HSV to the GDAL supported HLS
-// Useless since GDAL only handles RGBA
+// Useless since GDAL only supports RGBA
 GDALColorEntry HSVSwap(const GDALColorEntry& cein) {
     GDALColorEntry ce(cein);
     ce.c2=ce.c3;
