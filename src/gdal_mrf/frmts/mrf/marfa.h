@@ -243,6 +243,7 @@ public:
     void SetMaxValue(const char*);
     void SetPBuffer(unsigned int sz);
     unsigned int GetPBufferSize() {return pbsize;};
+    CPLErr SetVersion(int version);
 
     const CPLString GetFname() {return fname;};
     // Patches a region of all the next overview, argument counts are in blocks
@@ -264,6 +265,12 @@ protected:
 
     virtual CPLErr IBuildOverviews( const char*, int, int*, int, int*, 
 	GDALProgressFunc, void* );
+
+    // Write a tile, the infooffset is the relative position in the index file
+    virtual CPLErr WriteTile(void *buff, GUIntBig infooffset, GUIntBig size=0);
+
+    // For versioned MRFs, add a version
+    CPLErr GDALMRFDataset::AddVersion();
 
     VSILFILE *IdxFP();
     VSILFILE *DataFP();
@@ -290,6 +297,10 @@ protected:
     // The source to be cached in this MRF
     CPLString source;
     int clonedSource; // Is it a cloned source
+
+    int hasVersions; // Does it support versions
+    int verCount;    // The last version
+    GIntBig verIdxSize;// The size of each version index
 
     // Freeform sticky dataset options
     CPLString options;
@@ -396,8 +407,6 @@ protected:
 
     GDALRWFlag IdxMode() { return ifp.acc; };
     GDALRWFlag DataMode() { return dfp.acc; };
-
-    CPLErr WriteTile(const ILSize &pos,void *buff, size_t size);
 
     // How many bytes are in a page
     GUInt32 pageSizeBytes() { 

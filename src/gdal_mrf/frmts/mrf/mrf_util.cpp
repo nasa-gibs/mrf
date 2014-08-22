@@ -308,7 +308,7 @@ void GDALRegister_mrf(void)
             "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
 //	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
-	    "	<Option name='UNIFORM_OVERLAY_SCALE' type='int' description='Uniform overlays in MRF, only 2 is valid, mostly when caching'/>\n"
+	    "	<Option name='UNIFORM_SCALE' type='int' description='Uniform overlays in MRF, only 2 is tested'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
             "</CreationOptionList>\n");
 

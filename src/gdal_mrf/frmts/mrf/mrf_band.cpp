@@ -286,6 +286,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     GDALDataset *poSrcDS;
     GInt32 cstride = img.pagesize.c;
     ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
+    GUIntBig infooffset = IdxOffset(req, img);
 
     if ( 0 == (poSrcDS = poDS->GetSrcDS())) {
 	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't open source file %s", poDS->source.c_str());
@@ -341,9 +342,9 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // If it should not be stored, mark it as such
     if (eDataType == GDT_Byte && poDS->vNoData.size()) {
 	if (is_empty((char *)ob, img.pageSizeBytes, (char)GetNoDataValue(0)))
-	    return WriteTile(req, (void *)1, 0);
+	    return poDS->WriteTile((void *)1, infooffset, 0);
     } else if (is_zero((char *)ob, img.pageSizeBytes))
-	return WriteTile(req, (void *)1, 0);
+	return poDS->WriteTile((void *)1, infooffset, 0);
 
     // Write the page in the local cache
     buf_mgr filesrc={(char *)ob, img.pageSizeBytes};
@@ -362,7 +363,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     Compress(filedst, filesrc, img);
 
     // Update the tile index here
-    ret = WriteTile(req, outbuff, filedst.size);
+    ret = poDS->WriteTile(outbuff, infooffset, filedst.size);
     CPLFree(outbuff);
 
     // If we hit an error or if unpaking is not needed
@@ -385,6 +386,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
 CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 {
+
     // Paranoid check
     if (!poDS->clonedSource) {
 	CPLError(CE_Failure, CPLE_AppDefined, 
@@ -409,6 +411,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     }
 
     ILSize req(xblk, yblk, 0, m_band/img.pagesize.c , m_l);
+    GUIntBig infooffset = IdxOffset(req, img);
     ILIdx tinfo;
 
     // Get the cloned source tile info
@@ -422,7 +425,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 
     // Does the source have this tile?
     if (tinfo.size == 0) { // Nope, mark it empty and reissue the read
-	err = WriteTile(req, (void *)1,0);
+	err = poDS->WriteTile((void *)1, infooffset, 0);
 	if (CE_None == err)
 	    return IReadBlock(xblk, yblk, buffer);
 	return err;
@@ -440,7 +443,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     }
 
     // Write it then reissue the read
-    err = WriteTile( req, buf, tinfo.size);
+    err = poDS->WriteTile( buf, infooffset, tinfo.size);
     CPLFree(buf);
     if ( CE_None != err )
 	return err;
@@ -530,82 +533,6 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     return RB(xblk, yblk, dst, buffer);
 }
 
-// Write a tile at the end of the data file.
-// If buff and size are zero, it is equivalent to erasing the info
-// If only size is zero, it is a special empty tile, offset should be 1
-
-// To make it processor safe, we can either use write lock
-// Alternatively, verify the output should be pretty consistent
-// would be better if we can open the file in append mode
-//
-CPLErr GDALMRFRasterBand::WriteTile(const ILSize &pos, void *buff=0, size_t size=0) 
-
-{
-    CPLErr ret=CE_None;
-    ILIdx tinfo={0,0};
-    VSILFILE *dfp=DataFP();
-    VSILFILE *ifp=IdxFP();
-
-    if (ifp == NULL || dfp == NULL)
-	return CE_Failure;
-
-    // Convert to net format
-    tinfo.size = net64(size);
-    // This is the critical section for concurrent writes.
-    if (size) {
-	// Pointer to verfiy buffer, if it doesn't exist everything worked fine
-	void *tbuff = 0;
-	do {
-
-	    // The next lines plus the Flush below are the critical MP section
-	    VSIFSeekL(dfp, 0, SEEK_END);
-	    GUIntBig offset = VSIFTellL(dfp);
-	    tinfo.offset = net64(offset);
-	    if (size != VSIFWriteL(buff, 1, size, dfp))
-		ret=CE_Failure;
-
-	    //
-	    // If caching, flush and check that we can read it back, otherwise we're done
-	    // This makes the caching MRF MP safe, without using locks
-	    //
-	    if ( poDS->GetSrcDS() ) {
-		// Assume we failed
-		VSIFFlushL(dfp);
-		// Allocate the temp buffer if we haven't done so already
-		// This marks the check as failed
-		if (!tbuff)
-		    tbuff = CPLMalloc(size);
-		VSIFSeekL(dfp, offset, SEEK_SET);
-		VSIFReadL(tbuff, 1, size, dfp);
-		// If memcmp returns zero, verify passed
-		if (!memcmp(buff,tbuff,size)) {
-		    CPLFree(tbuff);
-		    tbuff=NULL;
-		}
-		// Otherwise the tbuf stays allocated and try to write again
-		// This works best if the file is opened in append mode
-	    }
-
-	} while (tbuff);
-
-	// At this point, the data is in the datafile
-    }
-
-    // Special case
-    // Any non-zero will do, use 1 to only consume one bit
-    if ( 0 != buff && 0 == size)
-	tinfo.offset = net64(GUIntBig(buff));
-
-    VSIFSeekL(ifp, IdxOffset(pos, img), SEEK_SET);
-    if (sizeof(tinfo) != VSIFWriteL(&tinfo, 1, sizeof(tinfo), ifp))
-	ret=CE_Failure;
-
-    // Flush if this is a caching MRF
-    if (poDS->GetSrcDS())
-	VSIFFlushL(ifp);
-
-    return ret;
-};
 
 
 /**
@@ -623,16 +550,18 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 {
     GInt32 cstride = img.pagesize.c;
     ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
+    GUIntBig infooffset = IdxOffset(req, img);
+
     CPLDebug("MRF_IB", "IWriteBlock %d,%d,0,%d, level  %d, stride %d\n", xblk, yblk, 
 	m_band, m_l, cstride);
 
     if (1 == cstride) {     // Separate bands, we can write it as is
-	// Empty page skip. Byte data only, the NoData needs work
+	// Empty page skip. Byte data only, the NoData needs more work
 	if ((eDataType==GDT_Byte) && (poDS->vNoData.size())) {
 	    if (is_empty((char *)buffer, img.pageSizeBytes, char(GetNoDataValue(0))))
-		return WriteTile(req,0,0);
+		return poDS->WriteTile(0, infooffset, 0);
 	} else if (is_zero((char *)buffer, img.pageSizeBytes)) // Don't write buffers with zero
-	    return WriteTile(req,0,0);
+	    return poDS->WriteTile(0, infooffset, 0);
 
 	// Use the pbuffer to hold the compressed page before writing it
 	poDS->tile = ILSize(); // Mark it corrupt
@@ -647,7 +576,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	// Compress functions need to return the compresed size in
 	// the bytes in buffer field
 	Compress(dst, src, img);
-	return WriteTile(req, poDS->pbuffer, dst.size);
+	return poDS->WriteTile(poDS->pbuffer, infooffset , dst.size);
     }
 
     // Multiple bands per page, use a temporary to assemble the page
@@ -721,7 +650,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 
     if (empties == AllBandMask()) {
 	CPLFree(tbuffer);
-	return WriteTile(req, 0, 0);
+	return poDS->WriteTile(0, infooffset, 0);
     }
 
     // Gets written on flush
@@ -740,7 +669,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     buf_mgr dst={outbuff, poDS->pbsize};
     Compress(dst, src, img);
 
-    CPLErr ret = WriteTile(req, outbuff, dst.size);
+    CPLErr ret = poDS->WriteTile(outbuff, infooffset, dst.size);
     CPLFree(tbuffer);
 
     poDS->bdirty = 0;
