@@ -814,8 +814,8 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     VSIFCloseL(ifp.FP);
 
     // Make it large enough
-    int idx_sz = static_cast<int>(IdxSize(full, scale));
-    if (!CheckFileSize(current.idxfname, idx_sz, GA_Update)) {
+    idxSize = IdxSize(full, scale);
+    if (!CheckFileSize(current.idxfname, idxSize, GA_Update)) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the cache index file %s",
 	    current.idxfname.c_str());
 	return NULL;
@@ -841,8 +841,9 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     VSILFILE *srcidx = pSrc->IdxFP();
     if (!srcidx) return NULL; // Source reported the error
     VSIFSeekL(ifp.FP, 0, SEEK_END); // Go to the end
-    const int CPYSZ = 1024;
-    char buffer[CPYSZ];
+
+    const int CPYSZ = 16384;
+    char *buffer = static_cast<char *>(CPLMalloc(CPYSZ)); // Buffer to copy the source to the clone index
     size_t read_bytes, written_bytes, copied_bytes = 0;
     do {
 	read_bytes = VSIFReadL(buffer, 1, CPYSZ, srcidx);
@@ -852,8 +853,10 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 		break;
 	}
 	copied_bytes += read_bytes;
-    } while ( read_bytes == CPYSZ && idx_sz > copied_bytes );
-    if (copied_bytes != idx_sz) {
+    } while ( read_bytes == CPYSZ && idxSize > copied_bytes );
+    CPLFree(buffer);
+
+    if (copied_bytes != idxSize) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't read the cloned source index",
 	    pSrc->current.idxfname.c_str());
 	return NULL;
@@ -1013,11 +1016,11 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     if (hasVersions) { // It has versions, but how many?
 	verCount = 0; // Assume it only has one
-	verIdxSize = IdxSize(full, scale);
+	idxSize = IdxSize(full, scale);
 	VSIStatBufL statb;
 	//  If the file exists, comput the last version number
 	if ( 0 == VSIStatL( full.idxfname, &statb) )
-	    verCount = statb.st_size/ verIdxSize -1;
+	    verCount = statb.st_size/ idxSize -1;
     }
 
     return CE_None;
@@ -1447,12 +1450,12 @@ CPLErr GDALMRFDataset::AddVersion()
     // Hides the dataset variables with the same name
     VSILFILE *ifp = IdxFP();
 
-    void *tbuff = CPLMalloc(verIdxSize);
+    void *tbuff = CPLMalloc(idxSize);
     VSIFSeekL(ifp, 0, SEEK_SET);
-    VSIFReadL(tbuff, 1, verIdxSize, ifp);
+    VSIFReadL(tbuff, 1, idxSize, ifp);
     verCount++; // The one we write
-    VSIFSeekL(ifp, verIdxSize * verCount, SEEK_SET); // At the end, this can mess things up royally
-    VSIFWriteL(tbuff,1,verIdxSize,ifp);
+    VSIFSeekL(ifp, idxSize * verCount, SEEK_SET); // At the end, this can mess things up royally
+    VSIFWriteL(tbuff,1, idxSize,ifp);
     CPLFree(tbuff);
     return CE_None;
 }
@@ -1494,7 +1497,7 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
 	    ILIdx prevtinfo={0,0};
 
 	    // Read the previous one
-	    VSIFSeekL(ifp, infooffset + verCount * verIdxSize, SEEK_SET);
+	    VSIFSeekL(ifp, infooffset + verCount * idxSize, SEEK_SET);
 	    VSIFReadL(&prevtinfo,1,sizeof(ILIdx),ifp);
 
 	    // current and previous tiles are different, might create version

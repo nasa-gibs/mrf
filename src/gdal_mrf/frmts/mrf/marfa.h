@@ -300,7 +300,7 @@ protected:
 
     int hasVersions; // Does it support versions
     int verCount;    // The last version
-    GIntBig verIdxSize;// The size of each version index
+    GIntBig idxSize;// The size of each version index, or the size of the cloned index
 
     // Freeform sticky dataset options
     CPLString options;

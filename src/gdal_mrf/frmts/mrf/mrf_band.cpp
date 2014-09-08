@@ -411,24 +411,24 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     }
 
     ILSize req(xblk, yblk, 0, m_band/img.pagesize.c , m_l);
-    GUIntBig infooffset = IdxOffset(req, img);
     ILIdx tinfo;
 
     // Get the cloned source tile info
     // The cloned source index is after the current one
-    if (CE_None != ReadTileIdx(req, tinfo, IdxSize(poDS->full))) {
-	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Unable to read cloned index");
+    if (CE_None != ReadTileIdx(req, tinfo, poDS->idxSize)) {
+	CPLError(CE_Failure, CPLE_AppDefined, "MRF: Unable to read cloned index entry");
 	return CE_Failure;
     }
 
+    GUIntBig infooffset = IdxOffset(req, img);
     CPLErr err;
 
     // Does the source have this tile?
-    if (tinfo.size == 0) { // Nope, mark it empty and reissue the read
+    if (tinfo.size == 0) { // Nope, mark it empty and return fill
 	err = poDS->WriteTile((void *)1, infooffset, 0);
-	if (CE_None == err)
-	    return IReadBlock(xblk, yblk, buffer);
-	return err;
+	if (CE_None != err)
+	    return err;
+	return FillBlock(buffer);
     }
 
     // Need to read the tile from the source
@@ -443,11 +443,11 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     }
 
     // Write it then reissue the read
-    err = poDS->WriteTile( buf, infooffset, tinfo.size);
+    err = poDS->WriteTile(buf, infooffset, tinfo.size);
     CPLFree(buf);
     if ( CE_None != err )
 	return err;
-
+    // Reissue read, it will work now
     return IReadBlock(xblk, yblk, buffer);
 }
 
@@ -492,7 +492,7 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 	return FetchBlock(xblk, yblk, buffer);
     }
 
-    CPLDebug("MRF_IB","Tinfo offset %lld, size %lld\n", tinfo.offset, tinfo.size);
+    CPLDebug("MRF_IB","Tinfo offset %llx, size %llx\n", tinfo.offset, tinfo.size);
     // If we have a tile, read it
 
     // Should use a permanent buffer, like the pbuffer mechanism
@@ -686,6 +686,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 CPLErr GDALMRFRasterBand::ReadTileIdx(const ILSize &pos, ILIdx &tinfo, GIntBig bias ) 
 
 {
+
     VSILFILE *ifp = IdxFP();
     GIntBig offset = bias + IdxOffset(pos, img);
     if (ifp == NULL && img.comp == IL_NONE) {
