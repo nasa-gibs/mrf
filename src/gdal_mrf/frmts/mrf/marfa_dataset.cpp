@@ -852,7 +852,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 		break;
 	}
 	copied_bytes += read_bytes;
-    } while ( read_bytes == CPYSZ && idx_sz < copied_bytes );
+    } while ( read_bytes == CPYSZ && idx_sz > copied_bytes );
     if (copied_bytes != idx_sz) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't read the cloned source index",
 	    pSrc->current.idxfname.c_str());
