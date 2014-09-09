@@ -467,13 +467,12 @@ CPLErr GDALMRFDataset::SetVersion(int version) {
     if ( !hasVersions || version > verCount)
 	return CE_Failure;
     // Size of one version index
-    GUInt32 idxfsz = IdxSize(full, scale);
     for (int bcount = 1; bcount <= nBands; bcount++) {
 	GDALMRFRasterBand *srcband = (GDALMRFRasterBand *)GetRasterBand(bcount);
-	srcband->img.idxoffset += idxfsz*verCount ;
+	srcband->img.idxoffset += idxSize*verCount ;
 	for (int l = 0 ; l < srcband->GetOverviewCount(); l++) {
 	    GDALMRFRasterBand *band = (GDALMRFRasterBand *) srcband->GetOverview(l);
-	    band->img.idxoffset += idxfsz*verCount ;
+	    band->img.idxoffset += idxSize*verCount ;
 	}
     }
     hasVersions = 0;
@@ -814,7 +813,6 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     VSIFCloseL(ifp.FP);
 
     // Make it large enough
-    idxSize = IdxSize(full, scale);
     if (!CheckFileSize(current.idxfname, idxSize, GA_Update)) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the cache index file %s",
 	    current.idxfname.c_str());
@@ -1014,11 +1012,13 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     }
 
+    // Just in case we need it
+    idxSize = IdxSize(full, scale);
+
     if (hasVersions) { // It has versions, but how many?
 	verCount = 0; // Assume it only has one
-	idxSize = IdxSize(full, scale);
 	VSIStatBufL statb;
-	//  If the file exists, comput the last version number
+	//  If the file exists, compute the last version number
 	if ( 0 == VSIStatL( full.idxfname, &statb) )
 	    verCount = statb.st_size/ idxSize -1;
     }
@@ -1402,11 +1402,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     VSIFCloseL(f_idx);
     VSIFCloseL(f_data);
 
-    // Leave the data empty but build the index file
-    int idx_sz = static_cast<int>(IdxSize(img, factor));
-
-    // Create or check the index file
-    int ret = CheckFileSize(fname_idx, idx_sz, GA_Update);
+    // Check or extend the index file size
+    int ret = CheckFileSize(fname_idx, IdxSize(img, factor), GA_Update);
 
     if (!ret) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the index file");

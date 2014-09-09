@@ -466,12 +466,6 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     ILIdx tinfo;
     GInt32 cstride=img.pagesize.c;
     ILSize req(xblk,yblk,0,m_band/cstride,m_l);
-    VSILFILE *dfp = DataFP();
-
-    // No data file to read from
-    if (dfp == NULL)
-	return CE_Failure;
-
     CPLDebug("MRF_IB","IReadBlock %d,%d,0,%d, level  %d\n",xblk,yblk,m_band,m_l);
 
     if (CE_None != ReadTileIdx(req, tinfo)) {
@@ -498,7 +492,13 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     // Should use a permanent buffer, like the pbuffer mechanism
     void *data = CPLMalloc(tinfo.size);
 
-    // This part is not thread safe, but it is OK for GDAL
+    VSILFILE *dfp = DataFP();
+
+    // No data file to read from
+    if (dfp == NULL)
+	return CE_Failure;
+
+    // This part is not thread safe, but it is what GDAL expects
     VSIFSeekL(dfp, tinfo.offset, SEEK_SET);
     if (1 != VSIFReadL(data, tinfo.size, 1, dfp)) {
 	CPLFree(data);
