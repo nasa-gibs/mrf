@@ -31,9 +31,9 @@
 ******************************************************************************
 *
 *
-* 
 *
-* 
+*
+*
 ****************************************************************************/
 
 #include "marfa.h"
@@ -43,23 +43,6 @@
 
 using std::vector;
 using std::string;
-
-// Returns the size of the index for image and overlays
-// If scale is zero, only base image
-GIntBig IdxSize(const ILImage &full, const int scale=0) {
-    ILImage img=full;
-    pcount(img.pcount,img.size,img.pagesize);
-    GIntBig sz = img.pcount.l;
-    while ( scale != 0 && 1 != img.pcount.x * img.pcount.y )
-    {
-	img.size.x = pcount(img.size.x, scale);
-	img.size.y = pcount(img.size.y, scale);
-	img.size.l++;
-	pcount(img.pcount, img.size, img.pagesize);
-	sz += img.pcount.l;
-    }
-    return sz*sizeof(ILIdx);
-}
 
 GDALMRFDataset::GDALMRFDataset()
 
@@ -102,18 +85,16 @@ GDALMRFDataset::~GDALMRFDataset()
 	VSIFCloseL(ifp.FP);
     if (dfp.FP)
 	VSIFCloseL(dfp.FP);
-    if (cds)
-	delete cds;
-    if (poSrcDS)
-	delete poSrcDS;
+    delete cds;
+    delete poSrcDS;
+    delete poColorTable;
+
     // OK to pass null
     CSLDestroy(optlist);
     // CPLFree ignores being called with NULL, so these are safe
     CPLFree(pbuffer);
     CPLFree(pszProjection);
     pbsize=0;
-    if (poColorTable)
-	delete poColorTable;
 }
 
 
@@ -401,8 +382,9 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 {
     CPLXMLNode *config = NULL;
     CPLErr ret = CE_None;
-    const char* pszFileName=poOpenInfo->pszFilename;
-    int level=-1;
+    const char* pszFileName = poOpenInfo->pszFilename;
+    int level = -1;
+    int version = 0;
 
     // Test that this is a MRF file
     // Allow for the whole metadata to be passed as the filename
@@ -415,12 +397,17 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     else if ((poOpenInfo->nHeaderBytes == 0) && EQUALN(pszFileName,"MRF:",4)) {
 	pszFileName+=4;
 	if (!isdigit(*pszFileName)) {
-	    CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Use MRF:<num>:filename");
-	    return NULL;
+	    if (*pszFileName == 'v' || *pszFileName == 'V' ) {
+		pszFileName++; // Version open
+		version=atoi(pszFileName);
+	    } else {
+		CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Use MRF:<num>:filename");
+		return NULL;
+	    }
 	} else level=atoi(pszFileName);
-	pszFileName=strstr(pszFileName,":")+1;
+	pszFileName=strstr(pszFileName, ":")+1;
 	if (!pszFileName) {
-	    CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Use MRF:<num>:filename");
+	    CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Incorect file name");
 	    return NULL;
 	}
 	config = CPLParseXMLFile(pszFileName);
@@ -447,7 +434,17 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     }
     else
 	ret = ds->Initialize(config);
+
     CPLDestroyXMLNode(config);
+
+    if (ret!=CE_None) {
+	delete ds;
+	return NULL;
+    }
+
+    // Open a single version
+    if (version != 0)
+	ret = ds->SetVersion(version);
 
     if (ret!=CE_None) {
 	delete ds;
@@ -463,6 +460,24 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     // Don't mess with metadata after this, otherwise PAM will re-write the aux.xml
     ds->TryLoadXML();
     return ds;
+}
+
+// Adjust the band images with the right offset, then adjust the sizes
+CPLErr GDALMRFDataset::SetVersion(int version) {
+    if ( !hasVersions || version > verCount)
+	return CE_Failure;
+    // Size of one version index
+    GUInt32 idxfsz = IdxSize(full, scale);
+    for (int bcount = 1; bcount <= nBands; bcount++) {
+	GDALMRFRasterBand *srcband = (GDALMRFRasterBand *)GetRasterBand(bcount);
+	srcband->img.idxoffset += idxfsz*verCount ;
+	for (int l = 0 ; l < srcband->GetOverviewCount(); l++) {
+	    GDALMRFRasterBand *band = (GDALMRFRasterBand *) srcband->GetOverview(l);
+	    band->img.idxoffset += idxfsz*verCount ;
+	}
+    }
+    hasVersions = 0;
+    return CE_None;
 }
 
 CPLErr GDALMRFDataset::LevelInit(const int l) {
@@ -529,7 +544,7 @@ inline bool on(const char *pszValue) {
 static CPLErr Init_ILImage(ILImage &image, CPLXMLNode *config, GDALMRFDataset *ds)
 {
     CPLXMLNode *node; // temporary
-    CPLXMLNode *defimage=CPLGetXMLNode(config,"Raster");
+    CPLXMLNode *defimage=CPLGetXMLNode(config, "Raster");
     if (!defimage) {
 	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Can't find raster info");
 	return CE_Failure;
@@ -571,7 +586,7 @@ static CPLErr Init_ILImage(ILImage &image, CPLXMLNode *config, GDALMRFDataset *d
 	1);
 
     // Orientation
-    if (!EQUAL(CPLGetXMLValue(defimage,"Orientation","TL"),"TL")) {
+    if (!EQUAL(CPLGetXMLValue(defimage,"Orientation","TL"), "TL")) {
 	// GDAL only handles Top Left Images
 	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Only Top-Left orientation is supported");
 	return CE_Failure;
@@ -747,11 +762,13 @@ char      **GDALMRFDataset::GetFileList()
     // These two should be real
     papszFileList = CSLAddString( papszFileList, full.datfname);
     papszFileList = CSLAddString( papszFileList, full.idxfname);
+    if (!source.empty())
+	papszFileList = CSLAddString( papszFileList, source);
 
     return papszFileList;
 }
 
-// Returns the dataset index file or null 
+// Returns the dataset index file or null
 VSILFILE *GDALMRFDataset::IdxFP() {
     if (ifp.FP != NULL)
 	return ifp.FP;
@@ -780,7 +797,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	return ifp.FP;
     }
 
-    // Caching MRF, could be read only
+    // Caching MRF and index could be read only
     mode = "rb";
     ifp.acc = GF_Read;
     ifp.FP = VSIFOpenL(current.idxfname, mode);
@@ -797,8 +814,8 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     VSIFCloseL(ifp.FP);
 
     // Make it large enough
-    int idx_sz = static_cast<int>(IdxSize(current, scale));
-    if (!CheckFileSize(current.idxfname, idx_sz, GA_Update)) {
+    idxSize = IdxSize(full, scale);
+    if (!CheckFileSize(current.idxfname, idxSize, GA_Update)) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the cache index file %s",
 	    current.idxfname.c_str());
 	return NULL;
@@ -809,13 +826,46 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     ifp.acc = GF_Write;
     ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
 
-    // Nothing more we can do
-    if (NULL == ifp.FP)
+    if (NULL == ifp.FP) {
 	CPLError(CE_Failure, CPLE_AppDefined,
-	"GDAL MRF: Can't open cache index file %s\n", current.idxfname.c_str());
+	    "GDAL MRF: Can't open cache index file %s\n", full.idxfname.c_str());
+	return NULL;
+    }
 
+    if (!clonedSource) 
+	return ifp.FP;
+
+    // For cloned files, fetch the source index and append it when creating the index
+    GDALMRFDataset *pSrc = static_cast<GDALMRFDataset *>(GetSrcDS());
+    // Don't close this, the source takes care of it
+    VSILFILE *srcidx = pSrc->IdxFP();
+    if (!srcidx) return NULL; // Source reported the error
+    VSIFSeekL(ifp.FP, 0, SEEK_END); // Go to the end
+
+    const int CPYSZ = 16384;
+    char *buffer = static_cast<char *>(CPLMalloc(CPYSZ)); // Buffer to copy the source to the clone index
+    size_t read_bytes, written_bytes, copied_bytes = 0;
+    do {
+	read_bytes = VSIFReadL(buffer, 1, CPYSZ, srcidx);
+	if (read_bytes != 0) {
+	    written_bytes = VSIFWriteL(buffer, 1, read_bytes, ifp.FP);
+	    if (written_bytes != read_bytes)
+		break;
+	}
+	copied_bytes += read_bytes;
+    } while ( read_bytes == CPYSZ && idxSize > copied_bytes );
+    CPLFree(buffer);
+
+    if (copied_bytes != idxSize) {
+	CPLError(CE_Failure,CPLE_AppDefined,"Can't read the cloned source index",
+	    pSrc->current.idxfname.c_str());
+	return NULL;
+    }
+    // Make sure it hit the disk
+    VSIFFlushL(ifp.FP);
+    // Done, the cloned index is now appended
     return ifp.FP;
-};
+}
 
 //
 // Returns the dataset data file or null 
@@ -875,7 +925,10 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     full.NoDataValue = 0;
     Quality=85;
 
-    CPLErr ret=Init_ILImage(full, config, this);
+    CPLErr ret = Init_ILImage(full, config, this);
+
+    hasVersions = on(CPLGetXMLValue(config, "Raster.versioned", "no"));
+
     Quality=full.quality;
     if (CE_None!=ret)
 	return ret;
@@ -903,15 +956,15 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	ProjToWKT("EPSG:4326")));
 
     // Copy the full size to current, data and index are not yet open
-    current=full;
+    current = full;
     // Bands can be used to overwrite from the whole c size
     current.size.c = static_cast<int>(getXMLNum(config,"Bands",current.size.c));
 
     // Dataset metadata setup
     SetMetadataItem("INTERLEAVE",OrderName(current.order), "IMAGE_STRUCTURE");
     SetMetadataItem("COMPRESS",CompName(current.comp), "IMAGE_STRUCTURE");
-    if (is_Endianess_Dependent(full.dt, full.comp))
-	SetMetadataItem("NETBYTEORDER", full.nbo?"TRUE":"FALSE", "IMAGE_STRUCTURE");
+    if (is_Endianess_Dependent(current.dt, current.comp))
+	SetMetadataItem("NETBYTEORDER", current.nbo?"TRUE":"FALSE", "IMAGE_STRUCTURE");
 
     // Open the files for the current image, either RW or RO
     nRasterXSize = current.size.x;
@@ -925,6 +978,10 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     // Pick up the source data image, if there is one
     source = CPLStrdup(CPLGetXMLValue(config,"CachedSource.Source",0));
+    // Is it a clone?
+    if (!source.empty())
+	clonedSource = on(CPLGetXMLValue(config, "CachedSource.Source.clone", "no"));
+
     options = CPLStrdup(CPLGetXMLValue(config,"Options",0));
     optlist = CSLTokenizeString2(options.c_str()," \t\n\r",
 	CSLT_STRIPLEADSPACES|CSLT_STRIPENDSPACES);
@@ -938,24 +995,35 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	band->SetColorInterpretation(BandInterp(nBands, i));
     }
 
-    // If no overviews are defined, done
-    if ((NULL==rsets) || (NULL==rsets->psChild))
-	return CE_None;
+    if ( NULL != rsets && NULL != rsets->psChild) {
+	// We have rsets 
 
-    // Regular spaced overlays, until everything fits in a single tile
-    if (EQUAL("uniform",CPLGetXMLValue(rsets,"model","uniform"))) {
-	scale = getXMLNum(rsets,"scale",2.0);
-	if (scale<=1) {
-	    CPLError(CE_Failure, CPLE_AppDefined, "MRF: zoom factor less than unit not allowed");
+	// Regular spaced overlays, until everything fits in a single tile
+	if (EQUAL("uniform",CPLGetXMLValue(rsets,"model","uniform"))) {
+	    scale = getXMLNum(rsets,"scale",2.0);
+	    if (scale<=1) {
+		CPLError(CE_Failure, CPLE_AppDefined, "MRF: zoom factor less than unit not allowed");
+		return CE_Failure;
+	    }
+	    // Looks like there are overlays
+	    AddOverviews(int(scale));
+	} else {
+	    CPLError(CE_Failure, CPLE_AppDefined, "Unknown Rset definition");
 	    return CE_Failure;
 	}
-	// Looks like there are overlays
-	AddOverviews(int(scale));
-	return CE_None;
-    } else {
-	CPLError(CE_Failure, CPLE_AppDefined, "Unknown Rset definition");
-	return CE_Failure;
+
     }
+
+    if (hasVersions) { // It has versions, but how many?
+	verCount = 0; // Assume it only has one
+	idxSize = IdxSize(full, scale);
+	VSIStatBufL statb;
+	//  If the file exists, comput the last version number
+	if ( 0 == VSIStatL( full.idxfname, &statb) )
+	    verCount = statb.st_size/ idxSize -1;
+    }
+
+    return CE_None;
 }
 
 /**
@@ -1065,6 +1133,9 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
     // This could be a cached source file
     CPLString source(CPLStrdup(CSLFetchNameValue(papszOptions, "CACHEDSOURCE")));
+
+    int clonedSource = CSLFetchBoolean(papszOptions, "CLONE", 0);
+
     // Get freeform params
     CPLString options(CPLStrdup(CSLFetchNameValue(papszOptions, "OPTIONS")));
 
@@ -1204,13 +1275,9 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
     int factor=0;
-    pszValue = CSLFetchNameValue(papszOptions,"UNIFORM_OVERLAY_SCALE");
+    pszValue = CSLFetchNameValue(papszOptions,"UNIFORM_SCALE");
     if ( pszValue != NULL )
 	factor = atoi( pszValue );
-
-    if (!source.empty()) { // Extra stuff to worry about when caching
-
-    }
 
     img.pagesize = page;
 
@@ -1220,6 +1287,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	CPLXMLNode *CS = CPLCreateXMLNode(config, CXT_Element, "CachedSource");
 	// Should wrap the string in CDATA, in case it is XML
 	CPLXMLNode *S = CPLCreateXMLElementAndValue(CS, "Source",source.c_str());
+	if (clonedSource)
+	    CPLSetXMLValue(S, "#clone", "true");
     }
 
     CPLXMLNode *raster=CPLCreateXMLNode(config,CXT_Element,"Raster");
@@ -1273,10 +1342,10 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	CPLCreateXMLElementAndValue(raster,"NetByteOrder",
 	(nbo||NET_ORDER)? "TRUE": "FALSE");
 
-    if (quality>0)
+    if (quality > 0 && quality != 85)
 	CPLCreateXMLElementAndValue(raster,"Quality", CPLString().Printf("%d",quality).c_str());
 
-    XMLSetAttributeVal(raster,"PageSize",img.pagesize,"%.0f");
+    XMLSetAttributeVal(raster, "PageSize", img.pagesize, "%.0f");
     // Done with raster
 
     CPLCreateXMLNode(config, CXT_Element,"Rsets");
@@ -1308,7 +1377,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     const char *pszProj=poSrcDS->GetProjectionRef();
     if (pszProj&&(!EQUAL(pszProj,"")))
 	CPLCreateXMLElementAndValue(gtags,"Projection",pszProj);
-    CPLCreateXMLElementAndValue(config, "Options", options.c_str());
+    if (options.size()!=0)
+	CPLCreateXMLElementAndValue(config, "Options", options.c_str());
 
     // Dump the XML
     CPLSerializeXMLTreeToFile(config,pszFilename);
@@ -1372,6 +1442,152 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
     return poDS;
+}
+
+// Copy the first index at the end of the file and bump the version count
+CPLErr GDALMRFDataset::AddVersion()
+{
+    // Hides the dataset variables with the same name
+    VSILFILE *ifp = IdxFP();
+
+    void *tbuff = CPLMalloc(idxSize);
+    VSIFSeekL(ifp, 0, SEEK_SET);
+    VSIFReadL(tbuff, 1, idxSize, ifp);
+    verCount++; // The one we write
+    VSIFSeekL(ifp, idxSize * verCount, SEEK_SET); // At the end, this can mess things up royally
+    VSIFWriteL(tbuff,1, idxSize,ifp);
+    CPLFree(tbuff);
+    return CE_None;
+}
+
+//
+// Write a tile at the end of the data file
+// If buff and size are zero, it is equivalent to erasing the tile
+// If only size is zero, it is a special empty tile, 
+// when used for caching, offset should be 1
+//
+// To make it multi-processor safe, we can either use write lock
+// Alternatively, verify the output should be pretty consistent
+// would be better if we can open the file in append mode
+//
+CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
+{
+    CPLErr ret=CE_None;
+    ILIdx tinfo={0,0};
+
+    // These hide the dataset variables with the same name
+    VSILFILE *dfp = DataFP();
+    VSILFILE *ifp = IdxFP();
+
+    // Pointer to verfiy buffer, if it doesn't exist everything worked fine
+    void *tbuff = 0;
+
+    if (ifp == NULL || dfp == NULL)
+	return CE_Failure;
+
+    if (hasVersions) {
+	int new_version = false; // Assume no need to build new version
+	int new_tile = false;
+
+	// Read the current tile info
+	VSIFSeekL(ifp, infooffset, SEEK_SET);
+	VSIFReadL(&tinfo,1,sizeof(ILIdx),ifp);
+
+	if (verCount != 0) { // We have at least two versions before we test buffers
+	    ILIdx prevtinfo={0,0};
+
+	    // Read the previous one
+	    VSIFSeekL(ifp, infooffset + verCount * idxSize, SEEK_SET);
+	    VSIFReadL(&prevtinfo,1,sizeof(ILIdx),ifp);
+
+	    // current and previous tiles are different, might create version
+	    if ( tinfo.size != prevtinfo.size || tinfo.offset != prevtinfo.offset )
+		new_version = true;
+	} else
+	    new_version = true; // No previous, might create version
+
+	// tinfo contains the current info or 0,0
+	if ( tinfo.size == net64(size)) { // Might be the same, read and compare
+	    if (size != 0) {
+		tbuff = CPLMalloc(size);
+		// Use the temporary buffer, we can't have a versioned cache !!
+		VSIFSeekL(dfp, infooffset, SEEK_SET);
+		VSIFReadL(tbuff, 1, size, dfp);
+		// Need to write it if not the same
+		new_tile = (0 != memcmp(buff, tbuff, size));
+		CPLFree(tbuff);
+	    } else {
+		// Writing a null tile on top of a null tile, does it count?
+		if (tinfo.offset != net64(GUIntBig(buff)))
+		    new_tile = true;
+	    }
+	} else {
+	    new_tile = true; // Need to write it because it is different
+	    if (verCount == 0 && tinfo.size == 0)
+		new_version = false; // Don't create a version if current is empty and there is no previous
+	}
+
+	if (!new_tile)
+	    return CE_None; // No reason to write
+
+	// Do we need to start a new version before writing the tile?
+	if (new_version)
+	    AddVersion();
+    }
+
+    // Convert to net format
+    tinfo.size = net64(size);
+
+    // This is the critical section for concurrent writes.
+    if (size)
+    do {
+
+	// The next lines plus the Flush below are the critical MP section
+	VSIFSeekL(dfp, 0, SEEK_END);
+	GUIntBig offset = VSIFTellL(dfp);
+	tinfo.offset = net64(offset);
+	if (size != VSIFWriteL(buff, 1, size, dfp))
+	    ret=CE_Failure;
+
+	//
+	// If caching, flush and check that we can read it back, otherwise we're done
+	// This makes the caching MRF MP safe, without using locks
+	//
+	if ( GetSrcDS() != NULL ) {
+	    // Assume we failed
+	    VSIFFlushL(dfp);
+	    // Allocate the temp buffer if we haven't done so already
+	    // This marks the check as failed
+	    if (!tbuff)
+		tbuff = CPLMalloc(size);
+	    VSIFSeekL(dfp, offset, SEEK_SET);
+	    VSIFReadL(tbuff, 1, size, dfp);
+	    // If memcmp returns zero, verify passed
+	    if (!memcmp(buff,tbuff,size)) {
+		CPLFree(tbuff);
+		tbuff=NULL; // Triggers the loop termination
+	    }
+	    // Otherwise the tbuf stays allocated and try to write again
+	    // This works best if the file is opened in append mode
+	}
+    } while (tbuff);
+
+    // At this point, the data is in the datafile
+
+    // Special case
+    // Any non-zero will do, use 1 to only consume one bit
+    if ( 0 != buff && 0 == size)
+	tinfo.offset = net64(GUIntBig(buff));
+
+    VSIFSeekL(ifp, infooffset, SEEK_SET);
+    if (sizeof(tinfo) != VSIFWriteL(&tinfo, 1, sizeof(tinfo), ifp))
+	ret=CE_Failure;
+
+    // Flush index if this is a caching MRF
+    if (GetSrcDS() != NULL)
+	VSIFFlushL(ifp);
+
+    return ret;
 }
 
 CPLErr GDALMRFDataset::SetProjection( const char *pszNewProjection)
