@@ -47,19 +47,16 @@ using std::string;
 GDALMRFDataset::GDALMRFDataset()
 
 {
+    //		     X0   Xx   Xy  Y0    Yx   Yy   
+    double gt[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+    memcpy( GeoTransform, gt, 6*sizeof(double));
+    bGeoTransformValid=FALSE;
     ifp.FP = dfp.FP = 0;
     pbuffer=0;
     pbsize=0;
     bdirty=0;
+    scale = 0; // Unset
     level=-1;
-    GeoTransform[0]=0.0; // X Origin, left of top-left pixel
-    GeoTransform[1]=1.0; // X Pixel size
-    GeoTransform[2]=0.0; // X-Y skew
-    GeoTransform[3]=0.0; // Y Origin, top of top-left pixel
-    GeoTransform[4]=0.0; // Y-X skew
-    GeoTransform[5]=1.0; // Y Pixel size
-
-    bGeoTransformValid=FALSE;
     optlist=0;
     cds=0;
     poSrcDS=NULL;
@@ -126,7 +123,6 @@ CPLErr GDALMRFDataset::CleanOverviews()
 {
     return CE_None;
 }
-
 
 /*
  *\brief Called before the IRaster IO gets called
@@ -221,43 +217,42 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 	    return CleanOverviews();
     }
 
-    CPLXMLNode *config = ReadConfig();
-    GDALRasterBand ***papapoOverviewBands=NULL;
-    GDALRasterBand  **papoOverviewBandList=NULL;
-    GDALRasterBand  **papoBandList=NULL;
-
     try {  // Throw an error code, to make sure memory gets freed properly
-	const char* model = CPLGetXMLValue(config, "Rsets.model", "uniform");
-	double scale;
-	int uniform = EQUAL(model,"uniform");
 
-	if (uniform) { // Indexes go at predefined offsets and only "factor" scales are allowed
-	    scale=strtod(CPLGetXMLValue(config, "Rsets.scale", "2"), 0);
+	if (0.0 == scale) { // Modify the metadata file if we don't already have the Rset model set
+	    CPLXMLNode *config = ReadConfig();
+	    try {
+		const char* model = CPLGetXMLValue(config, "Rsets.model", "uniform");
+		if (!EQUAL(model,"uniform")) {
+		    CPLError(CE_Failure,CPLE_AppDefined,
+			"MRF:IBuildOverviews, Overviews not implemented for model %s", model);
+		    throw CE_Failure;
+		}
+		scale = strtod(CPLGetXMLValue(config, "Rsets.scale", "2"), 0);
 
-	    // Initialize the empty overlays, all of them for a given scale
-	    // They could already exist, in which case they are not erased
-	    GIntBig idxsize = AddOverviews(int(scale));
-	    if (!CheckFileSize(current.idxfname, idxsize, GA_Update)) {
-		CPLError(CE_Failure,CPLE_AppDefined,"MRF: Can't extend index file");
-		return CE_Failure;
+		// Initialize the empty overlays, all of them for a given scale
+		// They could already exist, in which case they are not erased
+		GIntBig idxsize = AddOverviews(int(scale));
+		if (!CheckFileSize(current.idxfname, idxsize, GA_Update)) {
+		    CPLError(CE_Failure,CPLE_AppDefined,"MRF: Can't extend index file");
+		    return CE_Failure;
+		}
+
+		//  Set the uniform node, in case it was not set before, and save the new configuration
+		CPLSetXMLValue(config, "Rsets.#model", "uniform");
+		CPLSetXMLValue(config, "Rsets.#scale", CPLString().Printf("%g",scale).c_str());
+		if (!CPLSerializeXMLTreeToFile(config,fname)) {
+		    CPLError(CE_Failure,CPLE_AppDefined,"MRF: Can't rewrite the metadata file");
+		    return CE_Failure;
+		}
+		CPLDestroyXMLNode(config);
+		config = 0;
 	    }
-
-	    //  Set the uniform node, in case it was not set before, and save the new configuration
-	    CPLSetXMLValue(config, "Rsets.#model", "uniform");
-	    CPLSetXMLValue(config, "Rsets.#scale", CPLString().Printf("%g",scale).c_str());
-	    if (!CPLSerializeXMLTreeToFile(config,fname)) {
-		CPLError(CE_Failure,CPLE_AppDefined,"MRF: Can't rewrite the metadata file");
-		return CE_Failure;
+	    catch (CPLErr e) {
+		if (config)
+		    CPLDestroyXMLNode(config);
+		throw e; // Rethrow
 	    }
-
-	    CPLDestroyXMLNode(config);
-	    config = 0;
-
-	} else { // This is a per-dataset Rset, just append it to the existing file
-	    // For now, just throw an error
-	    CPLError(CE_Failure,CPLE_AppDefined,
-		"MRF:IBuildOverviews, Overviews not implemented for model %s", model);
-	    throw CE_Failure;
 	}
 
 	// Generate the overview, using PatchOverview.  One overlay at the time, 
@@ -293,8 +288,6 @@ CPLErr GDALMRFDataset::IBuildOverviews(
     } catch (CPLErr e) {
 	eErr=e;
     }
-    if (config)
-	CPLDestroyXMLNode(config);
     return eErr;
 }
 
@@ -1020,7 +1013,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	VSIStatBufL statb;
 	//  If the file exists, compute the last version number
 	if ( 0 == VSIStatL( full.idxfname, &statb) )
-	    verCount = statb.st_size/ idxSize -1;
+	    verCount = int(statb.st_size/ idxSize -1);
     }
 
     return CE_None;
@@ -1626,166 +1619,4 @@ CPLErr GDALMRFDataset::GetGeoTransform( double *gt)
     memcpy(gt,GeoTransform, 6*sizeof(double));
     if (!bGeoTransformValid) return CE_Failure;
     return CE_None;
-}
-
-// Averaging round up, 0.5 for integers, 0 for floats
-template<typename T> T avgRoundUpVal(T mul) {
-    return T(0.5*mul);
-}
-double avgRoundUpVal(double) { return 0; }
-float avgRoundUpVal(float) { return 0; }
-
-template<typename T> void AverageByFour(T *buff, int xsz, int ysz) {
-    T *obuff=buff;
-    T *evenline=buff;
-    // Type dependent premultiplied bias
-    T bias = avgRoundUpVal(T(4));
-
-    for (int line=0;line<ysz;line++) {
-	T *oddline=evenline+xsz*2;
-	for (int col=0; col<xsz; col++)
-	    *obuff++ = (bias + *evenline++ + *evenline++ + *oddline++ + *oddline++) / 4;
-	evenline += xsz*2;  // Skips the other line
-    }
-}
-
-/*
- *\brief Patches an overview for the selected area
- * arguments are in blocks in the source level, if toTheTop is false it only does the next level
- * It will read adjacent blocks if they are needed, so actual area read might be padded by one block in 
- * either side
- */
-
-CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
-				      int Width,int Height, 
-				      int srcLevel, int recursive) 
-{
-    GDALRasterBand *b0=GetRasterBand(1);
-    if ( b0->GetOverviewCount() <= srcLevel) 
-	return CE_None;
-
-    int BlockXOut = BlockX/2 ; // Round down
-    Width += BlockX & 1; // Increment width if rounding down
-    int BlockYOut = BlockY/2 ; // Round down
-    Height += BlockY & 1; // Increment height if rounding down
-
-    int WidthOut = Width/2 + (Width & 1); // Round up
-    int HeightOut = Height/2 + (Height & 1); // Round up
-
-    int bands=GetRasterCount();
-    int tsz_x,tsz_y;
-    b0->GetBlockSize(&tsz_x,&tsz_y);
-    GDALDataType eDataType=b0->GetRasterDataType();
-
-    int pixel_size=GDALGetDataTypeSize(eDataType)/8; // Bytes per pixel per band
-    int line_size=tsz_x*pixel_size; // A line has this many bytes
-    int buffer_size=line_size*tsz_y; // A block size in bytes
-
-    // Build a vector of input and output bands
-    vector<GDALRasterBand *>src_b;
-    vector<GDALRasterBand *>dst_b;
-
-    for (int band=1; band<=bands; band++) {
-	if (srcLevel==0)
-	    src_b.push_back(GetRasterBand(band));
-	else
-	    src_b.push_back(GetRasterBand(band)->GetOverview(srcLevel-1));
-	dst_b.push_back(GetRasterBand(band)->GetOverview(srcLevel));
-    }
-
-    // Allocate space for four blocks
-    void *buffer = CPLMalloc(buffer_size *4 );
-
-    void *in_buff[4]; // Pointers to the four blocks
-    for (int i=0;i<4;i++)
-	in_buff[i]=(char *)buffer+i*buffer_size;
-
-    //
-    //
-    // It does the processing for all bands of one output tile together, so it is efficient
-    // for interleaved data.  Works well for band separate too.
-    //
-    // Should change to stop using the shared pbuffer, it leads to problems since it is 
-    // not locked, and these procedure could be re-entrant
-    //
-
-    for (int y=0; y<HeightOut; y++) {
-	int dst_offset_y = BlockYOut+y;
-	int src_offset_y = dst_offset_y *2;
-	for (int x=0; x<WidthOut; x++) {
-	    int dst_offset_x = BlockXOut + x;
-	    int src_offset_x = dst_offset_x * 2;
-
-	    // Do it band at a time so we can work in grayscale
-	    for (int band=0; band<bands; band++) { // Counting from zero in a vector
-
-		int sz_x = 2*tsz_x ,sz_y = 2*tsz_y ;
-		GDALMRFRasterBand *bsrc = static_cast<GDALMRFRasterBand *>(src_b[band]);
-		GDALMRFRasterBand *bdst = static_cast<GDALMRFRasterBand *>(dst_b[band]);
-
-		//
-		// Clip to the size to the input image
-		// This is one of the worst features of GDAL, it doesn't tolerate any padding
-		//
-		if ( bsrc->GetXSize() < (src_offset_x + 2) * tsz_x )
-		    sz_x = bsrc->GetXSize() - src_offset_x * tsz_x;
-		if ( bsrc->GetYSize() < (src_offset_y + 2) * tsz_y )
-		    sz_y = bsrc->GetYSize() - src_offset_y * tsz_y;
-
-		bsrc->RasterIO( GF_Read,
-		    src_offset_x*tsz_x, src_offset_y*tsz_y, // offset in input image
-		    sz_x, sz_y, // Size in output image
-		    buffer, sz_x, sz_y, // Buffer and size in buffer
-		    eDataType, // Requested type
-		    pixel_size, 2 * line_size ); // Pixel and line space
-
-
-#define avg(T) AverageByFour((T *)buffer,tsz_x,tsz_y); break
-		switch(eDataType) {
-		case GDT_Byte:      avg(unsigned char);
-		case GDT_UInt16:    avg(unsigned short int);
-		case GDT_Int16:     avg(short int);
-		case GDT_UInt32:    avg(unsigned int);
-		case GDT_Int32:     avg(int);
-		case GDT_Float32:   avg(float);
-		case GDT_Float64:   avg(double);
-		default: // This is an error, undefined behaviour
-		    fprintf(stderr,"Unknown data type for MRF overlays");
-		}
-#undef avg
-
-		// Always grayscale here
-		// Argh, still need to clip the output to the band size on the right and bottom
-		// The offset should be fine, just the size might need adjustments
-
-		sz_x = tsz_x;
-		sz_y = tsz_y ;
-
-		if ( bdst->GetXSize() < dst_offset_x * sz_x + sz_x )
-		    sz_x = bdst->GetXSize() - dst_offset_x * sz_x;
-		if ( bdst->GetYSize() < dst_offset_y * sz_y + sz_y )
-		    sz_y = bdst->GetYSize() - dst_offset_y * sz_y;
-
-		bdst->RasterIO( GF_Write,
-		    dst_offset_x*tsz_x, dst_offset_y*tsz_y, // offset in output image
-		    sz_x, sz_y, // Size in output image
-		    buffer, sz_x, sz_y, // Buffer and size in buffer
-		    eDataType, // Requested type
-		    pixel_size, line_size ); // Pixel and line space
-	    }
-
-	    // Mark the input data as no longer needed, saves RAM
-	    for (int band=0; band<bands; band++)
-		src_b[band]->FlushCache(); 
-	}
-    }
-
-    CPLFree(buffer);
-
-    for (int band=0; band<bands; band++) 
-	dst_b[band]->FlushCache(); // Commit the output to disk
-
-    if (!recursive)
-	return CE_None;
-    return PatchOverview( BlockXOut, BlockYOut, WidthOut, HeightOut, srcLevel+1, true);
 }

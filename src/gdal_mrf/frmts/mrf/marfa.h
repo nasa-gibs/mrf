@@ -270,7 +270,7 @@ protected:
     virtual CPLErr WriteTile(void *buff, GUIntBig infooffset, GUIntBig size=0);
 
     // For versioned MRFs, add a version
-    CPLErr GDALMRFDataset::AddVersion();
+    CPLErr AddVersion();
 
     VSILFILE *IdxFP();
     VSILFILE *DataFP();
