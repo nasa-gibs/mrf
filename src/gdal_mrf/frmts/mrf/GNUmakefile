@@ -2,7 +2,7 @@
 
 include ../../GDALmake.opt
 
-OBJ	=	marfa_dataset.o mrf_band.o JPEG_band.o PNG_band.o ZLIB_band.o Raw_band.o Tif_band.o mrf_util.o
+OBJ	=	marfa_dataset.o mrf_band.o JPEG_band.o PNG_band.o ZLIB_band.o Raw_band.o Tif_band.o mrf_util.o mrf_overview.o
 
 CPPFLAGS	:= -fPIC	$(GDAL_INCLUDE) $(CPPFLAGS)
 
