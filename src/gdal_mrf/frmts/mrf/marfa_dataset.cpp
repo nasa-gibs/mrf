@@ -217,9 +217,19 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 	    return CleanOverviews();
     }
 
-    try {  // Throw an error code, to make sure memory gets freed properly
+    // Array of source bands
+    GDALRasterBand **papoBandList=
+	(GDALRasterBand **)CPLCalloc(sizeof(void*),nBands);
+    // Array of destination bands
+    GDALRasterBand **papoOverviewBandList =
+	(GDALRasterBand **)CPLCalloc(sizeof(void*),nBands);
+    // Triple level pointer, that's what GDAL ROMB wants
+    GDALRasterBand ***papapoOverviewBands =
+	(GDALRasterBand ***) CPLCalloc(sizeof(void*),nBands);
 
-	if (0.0 == scale) { // Modify the metadata file if we don't already have the Rset model set
+    try {  // Throw an error code, to make sure memory gets freed properly
+	// Modify the metadata file if it doesn't already have the Rset model set
+	if (0.0 == scale) { 
 	    CPLXMLNode *config = ReadConfig();
 	    try {
 		const char* model = CPLGetXMLValue(config, "Rsets.model", "uniform");
@@ -228,7 +238,10 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 			"MRF:IBuildOverviews, Overviews not implemented for model %s", model);
 		    throw CE_Failure;
 		}
-		scale = strtod(CPLGetXMLValue(config, "Rsets.scale", "2"), 0);
+
+		// The scale value is the same as first overview
+		scale = strtod(CPLGetXMLValue(config, "Rsets.scale", 
+		    CPLString().Printf("%d",panOverviewList[0]).c_str()), 0);
 
 		// Initialize the empty overlays, all of them for a given scale
 		// They could already exist, in which case they are not erased
@@ -255,9 +268,8 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 	    }
 	}
 
-	// Generate the overview, using PatchOverview.  One overlay at the time, 
-	// using the previous level as the source.
 	for (int i=0; i < nOverviews ; i++) {
+
 	    // Verify that scales are reasonable, val/scale has to be an integer
 	    if (!IsPower(panOverviewList[i], scale)) {
 		CPLError(CE_Warning,CPLE_AppDefined,
@@ -269,7 +281,7 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 	    int srclevel = -0.5 + logb(panOverviewList[i], scale);
 	    GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(GetRasterBand(1));
 
-	    // Warn and ignore requests for invalid levels
+	    // Warn for requests for invalid levels
 	    if (srclevel >= b->GetOverviewCount()) {
 		CPLError(CE_Warning,CPLE_AppDefined,
 		    "MRF:IBuildOverviews, overview factor %d is not valid for this dataset",
@@ -277,17 +289,60 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 		continue;
 	    }
 
-	    if (srclevel >0)
-		b = static_cast<GDALMRFRasterBand *>(b->GetOverview(srclevel-1));
+	    // Generate the overview using the previous level as the source
 
-	    eErr = PatchOverview(0, 0, b->nBlocksPerRow, b->nBlocksPerColumn, srclevel, 0);
-	    if (eErr == CE_Failure)
-		throw eErr;
+	    // Use "avg" flag to trigger the internal average sampling
+	    if (EQUAL("avg",pszResampling)) {
+
+		// Internal, using PatchOverview
+		if (srclevel >0)
+		    b = static_cast<GDALMRFRasterBand *>(b->GetOverview(srclevel-1));
+
+		eErr = PatchOverview(0, 0, b->nBlocksPerRow, b->nBlocksPerColumn, srclevel, 0);
+		if (eErr == CE_Failure)
+		    throw eErr;
+
+	    } else {
+		//
+		// Use the GDAL method, which is slightly different for bilinear interpolation
+		// and also handles nearest mode
+		//
+		//
+		for (int iBand=0; iBand<nBands; iBand++) {
+		    // This is the base level
+		    papoBandList[iBand] = GetRasterBand(panBandList[iBand]);
+		    // Set up the destination
+		    papoOverviewBandList[iBand] =
+			papoBandList[iBand]->GetOverview(srclevel);
+
+		    // Use the previous level as the source, the overviews are 0 based
+		    // thus an extra -1
+		    if (srclevel > 0)
+			papoBandList[iBand] = papoBandList[iBand]->GetOverview(srclevel-1);
+
+		    // Hook it up, via triple pointer level
+		    papapoOverviewBands[iBand] = &(papoOverviewBandList[iBand]);
+		}
+
+		//
+		// Ready, generate this overview
+		// Note that this function has a bug in GDAL, the block stepping is incorect
+		// It can generate multiple overview in one call, 
+		// Could rewrite this loop so this function only gets called once
+		//
+		GDALRegenerateOverviewsMultiBand(nBands, papoBandList,
+		    1, papapoOverviewBands,
+		    pszResampling, pfnProgress, pProgressData );
+	    }
 	}
-
     } catch (CPLErr e) {
 	eErr=e;
     }
+
+    CPLFree(papapoOverviewBands);
+    CPLFree(papoOverviewBandList);
+    CPLFree(papoBandList);
+
     return eErr;
 }
 
@@ -1045,19 +1100,19 @@ GDALDataset *GDALMRFDataset::GetSrcDS() {
 GIntBig GDALMRFDataset::AddOverviews(int scale) {
     // Fit the overlays
     ILImage img=full;
-    while (1!=img.pcount.x*img.pcount.y)
+    while (1 != img.pcount.x*img.pcount.y)
     {
 	// Adjust the offsets for indices
-	img.idxoffset+=sizeof(ILIdx)*img.pcount.l;
-	img.size.x=pcount(img.size.x,scale);
-	img.size.y=pcount(img.size.y,scale);
+	img.idxoffset += sizeof(ILIdx)*img.pcount.l;
+	img.size.x = pcount(img.size.x, scale);
+	img.size.y = pcount(img.size.y, scale);
 	img.size.l++; // Increment the level
-	pcount(img.pcount,img.size,img.pagesize);
+	pcount(img.pcount, img.size, img.pagesize);
 	// Create and register the the overviews for each band
 	for (int i=1;i<=nBands;i++) {
 	    GDALMRFRasterBand *b=(GDALMRFRasterBand *)GetRasterBand(i);
 	    if (!(b->GetOverview(img.size.l-1)))
-		b->AddOverview(newMRFRasterBand(this,img,i,img.size.l));
+		b->AddOverview(newMRFRasterBand(this, img, i, img.size.l));
 	}
     }
 

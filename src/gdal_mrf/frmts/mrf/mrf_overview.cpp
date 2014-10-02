@@ -31,28 +31,32 @@ template<typename T> int MatchCount(T *buff, int sz, T val) {
 // There are two classes, depending on NoData handling
 //
 
-// Integer type specialization, with roundup and integer math done in native int
+// Data types shorter than 32 bit can safely use an int 
 template<typename T> void AverageByFour(T *buff, int xsz, int ysz) {
     T *obuff=buff;
     T *evenline=buff;
 
     for (int line=0; line<ysz; line++) {
 	T *oddline=evenline+xsz*2;
-	for (int col=0; col<xsz; col++)
-	    *obuff++ = (2 + *evenline++ + *evenline++ + *oddline++ + *oddline++) / 4;
+	for (int col=0; col<xsz; col++) {
+	    *obuff++ = (2 + evenline[0] + evenline[1] + oddline[0] + oddline[1]) / 4;
+	    evenline +=2; oddline +=2;
+	}
 	evenline += xsz*2;  // Skips the other line
     }
 }
 
-// 32bit int specialization, avoiding overflow by using 64bit int
+// 32bit int specialization, avoiding overflow by using 64bit int math
 template<> void AverageByFour<GInt32>(GInt32 *buff, int xsz, int ysz) {
     GInt32 *obuff=buff;
     GInt32 *evenline=buff;
 
     for (int line=0; line<ysz; line++) {
 	GInt32 *oddline=evenline+xsz*2;
-	for (int col=0; col<xsz; col++)
-	    *obuff++ = (GIntBig(2) + *evenline++ + *evenline++ + *oddline++ + *oddline++) / 4;
+	for (int col=0; col<xsz; col++) {
+	    *obuff++ = (GIntBig(2) + evenline[0] + evenline[1] + oddline[0] + oddline[1]) / 4;
+	    evenline +=2; oddline +=2;
+	}
 	evenline += xsz*2;  // Skips the other line
     }
 }
@@ -64,8 +68,10 @@ template<> void AverageByFour<GUInt32>(GUInt32 *buff, int xsz, int ysz) {
 
     for (int line=0; line<ysz; line++) {
 	GUInt32 *oddline=evenline+xsz*2;
-	for (int col=0; col<xsz; col++)
-	    *obuff++ = (GIntBig(2) + *evenline++ + *evenline++ + *oddline++ + *oddline++) / 4;
+	for (int col=0; col<xsz; col++) {
+	    *obuff++ = (GIntBig(2) + evenline[0] + evenline[1] + oddline[0] + oddline[1]) / 4;
+	    evenline +=2; oddline +=2;
+	}
 	evenline += xsz*2;  // Skips the other line
     }
 }
@@ -77,8 +83,10 @@ template<> void AverageByFour<float>(float *buff, int xsz, int ysz) {
 
     for (int line=0; line<ysz; line++) {
 	float *oddline = evenline + xsz*2;
-	for (int col=0; col<xsz; col++)
-	    *obuff++ = (*evenline++ + *evenline++ + *oddline++ + *oddline++) * 0.25f;
+	for (int col=0; col<xsz; col++) {
+	    *obuff++ = (evenline[0] + evenline[1] + oddline[0] + oddline[1]) * 0.25f;
+	    evenline +=2; oddline +=2;
+	}
 	evenline += xsz*2;  // Skips the other line
     }
 }
@@ -90,8 +98,10 @@ template<> void AverageByFour<double>(double *buff, int xsz, int ysz) {
 
     for (int line=0; line<ysz; line++) {
 	double *oddline = evenline + xsz*2;
-	for (int col=0; col<xsz; col++)
-	    *obuff++ = (*evenline++ + *evenline++ + *oddline++ + *oddline++) * 0.25;
+	for (int col=0; col<xsz; col++) {
+	    *obuff++ = (evenline[0] + evenline[1] + oddline[0] + oddline[1]) * 0.25;
+	    evenline +=2; oddline +=2;
+	}
 	evenline += xsz*2;  // Skips the other line
     }
 }
@@ -114,10 +124,9 @@ template<typename T> void AverageByFour(T *buff, int xsz, int ysz, T ndv) {
 // Temporary macro to accumulate the sum, uses the value, increments the pointer
 // Careful with this one, it has side effects
 #define use(valp) if (*valp != ndv) { acc += *valp; count++; }; valp++;
-	    use(evenline); use(evenline);
-	    use(oddline);  use(oddline);
+	    use(evenline); use(evenline); use(oddline); use(oddline);
 #undef use
-	    // The count/2 is the .5 bias to obtain rounding
+	    // The count/2 is the bias to obtain correct rounding
 	    *obuff++ = T((count != 0) ? ((acc + count/2) / count) : ndv);
 
 	}
@@ -138,7 +147,7 @@ template<> void AverageByFour<float>(float *buff, int xsz, int ysz, float ndv) {
 
 // Temporary macro to accumulate the sum, uses the value, increments the pointer
 // Careful with this one, it has side effects
-#define use(valp) if (*valp != ndv) { acc += *valp; count += 1.0; }; valp++;
+#define use(valp) if (*valp != ndv) { acc += *valp; count += 1.0f; }; valp++;
 	    use(evenline); use(evenline); use(oddline); use(oddline);
 #undef use
 	    // Output value is eiher accumulator divided by count or the NoDataValue
@@ -183,7 +192,7 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 				      int srcLevel, int recursive) 
 {
     GDALRasterBand *b0=GetRasterBand(1);
-    if ( b0->GetOverviewCount() <= srcLevel) 
+    if ( b0->GetOverviewCount() <= srcLevel)
 	return CE_None;
 
     int BlockXOut = BlockX/2 ; // Round down
@@ -218,17 +227,9 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
     // Allocate space for four blocks
     void *buffer = CPLMalloc(buffer_size *4 );
 
-    void *in_buff[4]; // Pointers to the four blocks
-    for (int i=0;i<4;i++)
-	in_buff[i]=(char *)buffer+i*buffer_size;
-
     //
-    //
-    // It does the processing for all bands of one output tile together, so it is efficient
-    // for interleaved data.  Works well for band separate too.
-    //
-    // Should change to stop using the shared pbuffer, it leads to problems since it is 
-    // not locked, and these procedure could be re-entrant
+    // The inner loop is the band, so it is efficient for interleaved data.
+    // There is no penalty for separate bands either.
     //
 
     for (int y=0; y<HeightOut; y++) {
