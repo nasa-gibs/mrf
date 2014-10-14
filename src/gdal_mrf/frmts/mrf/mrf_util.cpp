@@ -232,7 +232,7 @@ CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, con
 
     int slash = fn.find_first_of("\\/");
     // Absolute path
-    if (slash != fn.npos && in.find_first_of("\\/") == in.npos && fn.find_first_not_of('.') != slash )
+    if (slash != fn.npos && in.find_first_of("\\/") != in.npos && fn.find_first_not_of('.') != slash )
 	return fn;
     // Relative path, prepand the path from the in file name
     return in.substr(0, in.find_last_of("\\/")+1) + fn;
