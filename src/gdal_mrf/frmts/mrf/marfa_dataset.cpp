@@ -254,7 +254,7 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 		//  Set the uniform node, in case it was not set before, and save the new configuration
 		CPLSetXMLValue(config, "Rsets.#model", "uniform");
 		CPLSetXMLValue(config, "Rsets.#scale", CPLString().Printf("%g",scale).c_str());
-		if (!CPLSerializeXMLTreeToFile(config,fname)) {
+		if (!CPLSerializeXMLTreeToFile(config, fname)) {
 		    CPLError(CE_Failure,CPLE_AppDefined,"MRF: Can't rewrite the metadata file");
 		    return CE_Failure;
 		}
@@ -467,9 +467,9 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 	return NULL;
 
     GDALMRFDataset *ds = new GDALMRFDataset();
-    ds->fname=pszFileName;
-    ds->eAccess=poOpenInfo->eAccess;
-    ds->level=level;
+    ds->fname = pszFileName;
+    ds->eAccess = poOpenInfo->eAccess;
+    ds->level = level;
 
     if (level != -1) {
 	// Open the whole dataset, then pick one level
@@ -785,7 +785,7 @@ static CPLErr Init_ILImage(ILImage &image, CPLXMLNode *config, GDALMRFDataset *d
     pcount(image.pcount,image.size,image.pagesize);
 
     // Data File Name and offset
-    image.datfname=getFname(defimage,"DataFile",ds->GetFname(),ILComp_Ext[image.comp]);
+    image.datfname = getFname(defimage, "DataFile", ds->GetFname(), ILComp_Ext[image.comp]);
     image.dataoffset=static_cast<int>(
 	getXMLNum(CPLGetXMLNode(defimage,"DataFile"), "offset",0));
 
