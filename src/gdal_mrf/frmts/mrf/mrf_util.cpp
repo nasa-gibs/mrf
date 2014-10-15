@@ -226,7 +226,16 @@ CPLString getFname(const CPLString &in, const char *ext)
 
 CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, const char *def) 
 {
-    return CPLGetXMLValue(node, token, getFname(in,def).c_str() );
+    CPLString fn = CPLGetXMLValue(node, token, "");
+    if (fn.size() == 0) // Not provided
+	return getFname(in, def);
+
+    int slash = fn.find_first_of("\\/");
+    // Absolute path
+    if (slash != fn.npos && in.find_first_of("\\/") != in.npos && fn.find_first_not_of('.') != slash )
+	return fn;
+    // Relative path, prepand the path from the in file name
+    return in.substr(0, in.find_last_of("\\/")+1) + fn;
 }
 
 

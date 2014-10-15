@@ -92,7 +92,6 @@ inline int is_empty(const char *b,size_t count, char val=0)
 }
 
 // Swap bytes in place, unconditional
-
 static void swab_buff(buf_mgr &src, const ILImage &img)
 {
 	switch (GDALGetDataTypeSize(img.dt)) {
@@ -201,6 +200,15 @@ double GDALMRFRasterBand::GetMaximum(int *pbSuccess)
     return getBandValue(v, m_band);
 }
 
+// Fill, with ndv
+template<typename T> CPLErr buff_fill(void *b, size_t count, const T ndv)
+{
+    T *buffer = static_cast<T*>(b);
+    count /= sizeof(T);
+    while (count--)
+	*buffer++ = ndv;
+    return CE_None;
+}
 
 /**
 *\brief Fills a buffer with no data
@@ -208,11 +216,29 @@ double GDALMRFRasterBand::GetMaximum(int *pbSuccess)
 */
 CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
 {
-    if ((eDataType == GDT_Byte) && poDS->vNoData.size())
-	memset(buffer, (char) GetNoDataValue(NULL), blockSizeBytes());
-    else
-	memset(buffer, 0, blockSizeBytes());
-    return CE_None;
+    double ndv = img.NoDataValue;
+    size_t bsb = blockSizeBytes();
+
+    // use 0 if NoData is not defined
+    if (!img.hasNoData) ndv = 0.0L;
+    // use memset for speed for bytes, or if nodata is not defined
+    if (!img.hasNoData || eDataType == GDT_Byte) {
+	memset(buffer, ndv, bsb);
+	return CE_None;
+    }
+
+#define bf(T) buff_fill<T>(buffer, bsb, T(ndv));
+    switch(eDataType) {
+	case GDT_UInt16:    return bf(GUInt16);
+	case GDT_Int16:     return bf(GInt16);
+	case GDT_UInt32:    return bf(GUInt32);
+	case GDT_Int32:     return bf(GInt32);
+	case GDT_Float32:   return bf(float);
+	case GDT_Float64:   return bf(double);
+    }
+#undef bf
+
+    return CE_Failure;
 }
 
 /*\brief Interleave block read
@@ -300,10 +326,10 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
     // Prepare parameters for RasterIO, they might be different from a full page
     int vsz = GDALGetDataTypeSize(eDataType)/8;
-    int Xoff = xblk * img.pagesize.x * scl;
-    int Yoff = yblk * img.pagesize.y * scl;
-    int readszx = img.pagesize.x * scl;
-    int readszy = img.pagesize.y * scl;
+    int Xoff = int(xblk * img.pagesize.x * scl + 0.5);
+    int Yoff = int(yblk * img.pagesize.y * scl + 0.5);
+    int readszx = int(img.pagesize.x * scl + 0.5);
+    int readszy = int(img.pagesize.y * scl + 0.5);
 
     // Compare with the full size and clip to the right and bottom if needed
     int clip=0;
@@ -466,12 +492,6 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     ILIdx tinfo;
     GInt32 cstride=img.pagesize.c;
     ILSize req(xblk,yblk,0,m_band/cstride,m_l);
-    VSILFILE *dfp = DataFP();
-
-    // No data file to read from
-    if (dfp == NULL)
-	return CE_Failure;
-
     CPLDebug("MRF_IB","IReadBlock %d,%d,0,%d, level  %d\n",xblk,yblk,m_band,m_l);
 
     if (CE_None != ReadTileIdx(req, tinfo)) {
@@ -498,7 +518,13 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     // Should use a permanent buffer, like the pbuffer mechanism
     void *data = CPLMalloc(tinfo.size);
 
-    // This part is not thread safe, but it is OK for GDAL
+    VSILFILE *dfp = DataFP();
+
+    // No data file to read from
+    if (dfp == NULL)
+	return CE_Failure;
+
+    // This part is not thread safe, but it is what GDAL expects
     VSIFSeekL(dfp, tinfo.offset, SEEK_SET);
     if (1 != VSIFReadL(data, tinfo.size, 1, dfp)) {
 	CPLFree(data);
