@@ -1,7 +1,13 @@
+<<<<<<< HEAD
 %global gdal_version 1.11.0
 <<<<<<< HEAD
 %global gdal_release 1%{?dist}
 %global mrf_version 0.4.0
+=======
+%global gdal_version 1.11.1
+%global gdal_release 1%{?dist}
+%global mrf_version 0.5.0
+>>>>>>> 7e461fd... Build upgraded to gdal-1.11.1
 %global mrf_release 1%{?dist}
 =======
 %global gdal_release 2%{?dist}
@@ -39,6 +45,7 @@ BuildRequires:	chrpath
 BuildRequires:	swig 
 BuildRequires:	doxygen
 BuildRequires:	expat-devel
+BuildRequires:  python-setuptools
 Requires:	proj-devel
 
 Provides:	gdal = %{gdal_version}-%{gdal_release}
@@ -147,9 +154,15 @@ rm -rf %{buildroot}
 
 %changelog
 <<<<<<< HEAD
+<<<<<<< HEAD
 * Wed May 28 2014 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.10.1-6
 - Changed MRF version to 0.3.5
 =======
+=======
+* Tue Oct 14 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.1-1
+- New upstream GDAL version
+
+>>>>>>> 7e461fd... Build upgraded to gdal-1.11.1
 * Fri Aug 8 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.0-2
 - Updates for building on EL7
 
