@@ -1,19 +1,7 @@
-<<<<<<< HEAD
-%global gdal_version 1.11.0
-<<<<<<< HEAD
-%global gdal_release 1%{?dist}
-%global mrf_version 0.4.0
-=======
 %global gdal_version 1.11.1
 %global gdal_release 1%{?dist}
 %global mrf_version 0.5.0
->>>>>>> 7e461fd... Build upgraded to gdal-1.11.1
 %global mrf_release 1%{?dist}
-=======
-%global gdal_release 2%{?dist}
-%global mrf_version 0.4.1
-%global mrf_release 2%{?dist}
->>>>>>> 9c41265... Updated changelog, release bump
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -35,7 +23,11 @@ BuildRequires:	jpackage-utils
 BuildRequires:	jasper-devel cfitsio-devel libdap-devel librx-devel 
 BuildRequires:	hdf-static hdf-devel
 BuildRequires:	unixODBC-devel mysql-devel sqlite-devel 
+%if 0%{?el6}
 BuildRequires:	postgresql92-devel postgis2_92-devel
+%else
+BuildRequires:	postgresql93-devel postgis2_93-devel
+%endif
 BuildRequires:	zlib-devel
 BuildRequires:	proj-devel geos-devel netcdf-devel hdf5-devel ogdi-devel 
 BuildRequires:	libgeotiff-devel
@@ -86,7 +78,11 @@ cp %{SOURCE1} upstream
 
 
 %build
-make gdal PREFIX=/usr
+%if 0%{?el6}
+make gdal PREFIX=/usr POSTGRES_VERSION=9.2
+%else
+make gdal PREFIX=/usr POSTGRES_VERSION=9.3
+%endif
 
 
 %install
@@ -153,22 +149,14 @@ rm -rf %{buildroot}
 
 
 %changelog
-<<<<<<< HEAD
-<<<<<<< HEAD
-* Wed May 28 2014 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.10.1-6
-- Changed MRF version to 0.3.5
-=======
-=======
 * Tue Oct 14 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.1-1
 - New upstream GDAL version
 
->>>>>>> 7e461fd... Build upgraded to gdal-1.11.1
 * Fri Aug 8 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.0-2
 - Updates for building on EL7
 
 * Fri Jul 18 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.0-1
 - New upstream GDAL version
->>>>>>> 9c41265... Updated changelog, release bump
 
 * Wed Apr 30 2014 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.10.1-5
 - Changed MRF version to 0.3.1
