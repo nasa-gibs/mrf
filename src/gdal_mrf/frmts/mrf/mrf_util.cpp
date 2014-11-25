@@ -182,6 +182,24 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
 }
 #endif
 
+// CSLFetchBoolean is currently broken, so we overwrite it
+int FetchBoolean( char **papszStrList, const char *pszKey, int bDefault )
+
+{
+    const char *pszValue;
+
+    if (CSLFindString( papszStrList, pszKey ) == -1)
+        return bDefault;
+
+//    pszValue = papszStrList[CSLFindString( papszStrList, pszKey)];
+    pszValue = CSLFetchNameValue(papszStrList, pszKey );
+    if( pszValue )
+        return CSLTestBoolean( pszValue );
+
+    return TRUE;
+}
+
+
 // Returns the size of the index for image and overlays
 // If scale is zero, only base image
 GIntBig IdxSize(const ILImage &full, const int scale) {

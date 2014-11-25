@@ -167,7 +167,7 @@ double getXMLNum(CPLXMLNode *, const char *, double);
 GIntBig IdxOffset(const ILSize &, const ILImage &);
 double logb(double val, double base);
 int IsPower(double value,double base);
-CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement );
+CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement);
 void XMLSetAttributeVal(CPLXMLNode *parent,const char* pszName,
     const double val, const char *frmt=NULL);
 CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
@@ -175,6 +175,7 @@ CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
 GDALColorEntry GetXMLColorEntry(CPLXMLNode *p);
 GDALColorEntry HSVSwap(const GDALColorEntry& cein);
 GIntBig IdxSize(const ILImage &full, const int scale=0);
+int FetchBoolean( char **papszStrList, const char *pszKey, int bDefault);
 
 // checks that the file exists and is at least sz, if access is update it extends it
 int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess);
@@ -316,9 +317,10 @@ protected:
     GDALMRFDataset *cds;
     double scale;
 
+
     // A place to keep an uncompressed block, to keep from allocating it all the time
-    unsigned int pbsize;
     void *pbuffer;
+    unsigned int pbsize;
 
     ILSize tile; // ID of tile present in buffer
     // Holds bits, to be used in pixel interleaved (up to 64 bands)
@@ -377,6 +379,7 @@ protected:
     GDALMRFDataset *poDS;
     // 0 based
     GInt32 m_band;
+    int deflate;
     // Level of this band
     GInt32 m_l;
     // The info about the current image, to enable R-sets
@@ -420,9 +423,9 @@ protected:
     }
 
     // Compresion and decompression functions.  To be overwritten by specific implementations
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src, const ILImage &) =0;
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src) =0;
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src) =0;
-    
+
     // Read the index record itself, can be overwritten
     virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &, GIntBig bias = 0);
 
@@ -464,7 +467,7 @@ public:
     virtual ~PNG_Band();
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
 
     CPLErr CompressPNG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressPNG(buf_mgr &dst, buf_mgr &src);
@@ -481,31 +484,29 @@ public:
     virtual ~JPEG_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
 };
 
 
 class Raw_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
-    Raw_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) : 
-        GDALMRFRasterBand(pDS,image,b,int(level)) {};
+    Raw_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
     virtual ~Raw_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
 };
 
 
 class ZLIB_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
-    ZLIB_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) : 
-        GDALMRFRasterBand(pDS,image,b,int(level)) {};
+    ZLIB_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
     virtual ~ZLIB_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
 };
 
 
@@ -516,7 +517,7 @@ public:
     virtual ~TIF_Band();
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img) ;
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src) ;
 
     // Create options for TIF pages
     char **papszOptions;
@@ -530,7 +531,7 @@ public:
     virtual ~LERC_Band();
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
     double precision;
 };
 #endif

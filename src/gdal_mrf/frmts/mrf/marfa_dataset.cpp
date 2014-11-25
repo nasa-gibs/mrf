@@ -1511,9 +1511,8 @@ CPLErr GDALMRFDataset::AddVersion()
 // If only size is zero, it is a special empty tile, 
 // when used for caching, offset should be 1
 //
-// To make it multi-processor safe, we can either use write lock
-// Alternatively, verify the output should be pretty consistent
-// would be better if we can open the file in append mode
+// To make it multi-processor safe, open the file in append mode
+// and verify after write
 //
 CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
 {
@@ -1583,24 +1582,20 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
     // Convert to net format
     tinfo.size = net64(size);
 
-    // This is the critical section for concurrent writes.
-    if (size)
-    do {
-
-	// The next lines plus the Flush below are the critical MP section
+    if (size) do {
+	// Theese statements are the critical MP section
 	VSIFSeekL(dfp, 0, SEEK_END);
 	GUIntBig offset = VSIFTellL(dfp);
-	tinfo.offset = net64(offset);
 	if (size != VSIFWriteL(buff, 1, size, dfp))
 	    ret=CE_Failure;
 
+	tinfo.offset = net64(offset);
 	//
-	// If caching, flush and check that we can read it back, otherwise we're done
+	// If caching, check that we can read it back, otherwise we're done
 	// This makes the caching MRF MP safe, without using locks
 	//
-	if ( GetSrcDS() != NULL ) {
+	if (GetSrcDS() != NULL) {
 	    // Assume we failed
-	    VSIFFlushL(dfp);
 	    // Allocate the temp buffer if we haven't done so already
 	    // This marks the check as failed
 	    if (!tbuff)
@@ -1628,9 +1623,11 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
     if (sizeof(tinfo) != VSIFWriteL(&tinfo, 1, sizeof(tinfo), ifp))
 	ret=CE_Failure;
 
+    // Removed because the data might not be in the file yet, can't flush that one
+    //
     // Flush index if this is a caching MRF
-    if (GetSrcDS() != NULL)
-	VSIFFlushL(ifp);
+    //    if (GetSrcDS() != NULL)
+    // VSIFFlushL(ifp);
 
     return ret;
 }

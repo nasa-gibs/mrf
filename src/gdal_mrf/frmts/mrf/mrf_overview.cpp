@@ -123,9 +123,9 @@ template<typename T> void AverageByFour(T *buff, int xsz, int ysz, T ndv) {
 
 // Temporary macro to accumulate the sum, uses the value, increments the pointer
 // Careful with this one, it has side effects
-#define use(valp) if (*valp != ndv) { acc += *valp; count++; }; valp++;
-	    use(evenline); use(evenline); use(oddline); use(oddline);
-#undef use
+#define USE(valp) if (*valp != ndv) { acc += *valp; count++; }; valp++;
+	    USE(evenline); USE(evenline); USE(oddline); USE(oddline);
+#undef USE
 	    // The count/2 is the bias to obtain correct rounding
 	    *obuff++ = T((count != 0) ? ((acc + count/2) / count) : ndv);
 
@@ -147,7 +147,7 @@ template<> void AverageByFour<float>(float *buff, int xsz, int ysz, float ndv) {
 
 // Temporary macro to accumulate the sum, uses the value, increments the pointer
 // Careful with this one, it has side effects
-#define use(valp) if (*valp != ndv) { acc += *valp; count += 1.0f; }; valp++;
+#define use(valp) if (*valp != ndv) { acc += *valp; count += 1.0; }; valp++;
 	    use(evenline); use(evenline); use(oddline); use(oddline);
 #undef use
 	    // Output value is eiher accumulator divided by count or the NoDataValue
@@ -203,18 +203,18 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
     int WidthOut = Width/2 + (Width & 1); // Round up
     int HeightOut = Height/2 + (Height & 1); // Round up
 
-    int bands=GetRasterCount();
+    int bands = GetRasterCount();
     int tsz_x,tsz_y;
-    b0->GetBlockSize(&tsz_x,&tsz_y);
-    GDALDataType eDataType=b0->GetRasterDataType();
+    b0->GetBlockSize(&tsz_x, &tsz_y);
+    GDALDataType eDataType = b0->GetRasterDataType();
 
-    int pixel_size=GDALGetDataTypeSize(eDataType)/8; // Bytes per pixel per band
-    int line_size=tsz_x*pixel_size; // A line has this many bytes
-    int buffer_size=line_size*tsz_y; // A block size in bytes
+    int pixel_size = GDALGetDataTypeSize(eDataType)/8; // Bytes per pixel per band
+    int line_size = tsz_x * pixel_size; // A line has this many bytes
+    int buffer_size = line_size * tsz_y; // A block size in bytes
 
     // Build a vector of input and output bands
-    vector<GDALRasterBand *>src_b;
-    vector<GDALRasterBand *>dst_b;
+    vector<GDALRasterBand *> src_b;
+    vector<GDALRasterBand *> dst_b;
 
     for (int band=1; band<=bands; band++) {
 	if (srcLevel==0)
@@ -231,7 +231,6 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
     // The inner loop is the band, so it is efficient for interleaved data.
     // There is no penalty for separate bands either.
     //
-
     for (int y=0; y<HeightOut; y++) {
 	int dst_offset_y = BlockYOut+y;
 	int src_offset_y = dst_offset_y *2;
@@ -284,10 +283,11 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 
 // Dispatch based on data type
 // Use an ugly temporary macro to make it look easy
+// Runs the optimized version if the page is full with data
 #define average(T)\
 		if (hasNoData) {\
-		    count = MatchCount((T *)buffer, tsz_x*tsz_y, T(ndv));\
-		    if (tsz_x * tsz_y == count)\
+		    count = MatchCount((T *)buffer, 4*tsz_x*tsz_y, T(ndv));\
+		    if ( 4*tsz_x*tsz_y == count)\
 			bdst->FillBlock(buffer);\
 		    else if (0 != count)\
 			AverageByFour((T *)buffer, tsz_x, tsz_y, T(ndv));\
