@@ -182,24 +182,6 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
 }
 #endif
 
-// CSLFetchBoolean is currently broken, so we overwrite it
-int FetchBoolean( char **papszStrList, const char *pszKey, int bDefault )
-
-{
-    const char *pszValue;
-
-    if (CSLFindString( papszStrList, pszKey ) == -1)
-        return bDefault;
-
-//    pszValue = papszStrList[CSLFindString( papszStrList, pszKey)];
-    pszValue = CSLFetchNameValue(papszStrList, pszKey );
-    if( pszValue )
-        return CSLTestBoolean( pszValue );
-
-    return TRUE;
-}
-
-
 // Returns the size of the index for image and overlays
 // If scale is zero, only base image
 GIntBig IdxSize(const ILImage &full, const int scale) {
@@ -354,11 +336,12 @@ GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *pDS, const ILImage &image, i
     switch(pDS->current.comp)
     {
     case IL_PPNG: // Uses the PNG code, just has a palette in each PNG
-    case IL_PNG:  bnd = new PNG_Band(pDS,image,b,level); break;
+    case IL_PNG:  bnd = new PNG_Band(pDS,image,b,level);  break;
     case IL_JPEG: bnd = new JPEG_Band(pDS,image,b,level); break;
-    case IL_NONE: bnd = new Raw_Band(pDS,image,b,level); break;
-    case IL_ZLIB: bnd = new ZLIB_Band(pDS,image,b,level); break;
-    case IL_TIF:  bnd = new TIF_Band(pDS,image,b,level); break;
+    case IL_NONE: bnd = new Raw_Band(pDS,image,b,level);  break;
+    // ZLIB is a just raw, deflated band
+    case IL_ZLIB: bnd = new Raw_Band(pDS,image,b,level);  bnd->SetDeflate(1); break;
+    case IL_TIF:  bnd = new TIF_Band(pDS,image,b,level);  break;
 #if defined(LERC)
     case IL_LERC: bnd = new LERC_Band(pDS,image,b,level); break;
 #endif

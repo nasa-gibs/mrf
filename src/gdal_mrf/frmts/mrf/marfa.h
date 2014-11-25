@@ -18,7 +18,7 @@
 #include <ogr_srs_api.h>
 #include <ogr_spatialref.h>
 
-// Utility, for printing values
+// For printing values
 #include <ostream>
 #include <iostream>
 #include <sstream>
@@ -27,7 +27,7 @@
 // #define LERC
 
 // These are a pain to maintain in sync.  They should be replaced with 
-// some hash of objects solution, or C++11 initialized structures.  The externs reside in util.cpp
+// C++11 uniform initializers.  The externs reside in util.cpp
 enum ILCompression { IL_PNG=0, IL_PPNG, IL_JPEG, IL_NONE , IL_ZLIB, IL_TIF, 
 #if defined(LERC)
 	IL_LERC, 
@@ -51,7 +51,6 @@ struct ILSize {
     GInt32 x,y,z,c,l;
     ILSize(const int x_=-1, const int y_=-1, const int z_=-1, 
         const int c_=-1, const int l_=-1) 
-
     { x=x_;y=y_;z=z_;c=c_;l=l_; }
 
     bool operator==(const ILSize& other)
@@ -107,13 +106,9 @@ typedef struct {
 /**
  *
  *\brief  Converters beween endianess, if needed.
- *  Call netXX() once before using the value and once again before sending it.
+ *  Call netXX() to guarantee big endian
  * 
- * These might not be needed, use CPL_MSBWORD16(x), CPL_MSBWORD32(x) 
- * and CPL_MSBPTR64(*x) defined in cpl_port.h
- *
  */
-
 static inline unsigned short int swab16(const unsigned short int val)
 {
     return (val << 8) | (val >> 8);
@@ -370,8 +365,11 @@ public:
 
     const char *GetOptionValue(const char *opt, const char *def);
     const ILImage *GetImage();
-    void SetAccess( GDALAccess eA) { 
+    void SetAccess( GDALAccess eA) {
         eAccess=eA; 
+    }
+    void SetDeflate(int v) {
+	deflate = (v != 0);
     }
 
 protected:
@@ -436,7 +434,7 @@ protected:
         return ((GIntBig)1) << b; 
     }
     GIntBig AllBandMask() { 
-        return (((GIntBig)1) << poDS->nBands)-1; 
+        return bandbit(poDS->nBands)-1;
     }
 
     // Overview Support
@@ -487,28 +485,16 @@ protected:
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
 };
 
-
 class Raw_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
-    Raw_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
+    Raw_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
+	GDALMRFRasterBand(pDS,image,b,int(level)) {};
     virtual ~Raw_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
 };
-
-
-class ZLIB_Band : public GDALMRFRasterBand {
-    friend class GDALMRFDataset;
-public:
-    ZLIB_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
-    virtual ~ZLIB_Band() {};
-protected:
-    virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
-};
-
 
 class TIF_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;

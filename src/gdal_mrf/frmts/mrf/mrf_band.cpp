@@ -122,7 +122,7 @@ static void swab_buff(buf_mgr &src, const ILImage &img)
 *  If the output fits past the data, it uses that area
 * otherwise it uses a temporary buffer and copies the data over the input, returning a pointer to it
 */
-static void *DeflateBlock(buf_mgr &dst, size_t extrasize) {
+static void *DeflateBlock(buf_mgr &dst, size_t extrasize, int quality) {
     // The one we might need to allocate
     void *dbuff = NULL;
     // The one we use, after the packed data
@@ -140,7 +140,7 @@ static void *DeflateBlock(buf_mgr &dst, size_t extrasize) {
     }
 
     int status = compress2((Bytef *)usebuff, &size,
-	(Bytef *)dst.buffer, dst.size, 6); // Default compression
+	(Bytef *)dst.buffer, dst.size, quality); // Default compression
     if (status != Z_OK) {
 	CPLFree(dbuff); // Safe to call with NULL
 	return NULL;
@@ -435,7 +435,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
     if (deflate) {
-	usebuff = DeflateBlock( filedst, poDS->pbsize - filedst.size);
+	usebuff = DeflateBlock( filedst, poDS->pbsize - filedst.size, img.quality/10);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 	    return CE_Failure;
@@ -672,7 +672,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	Compress(dst, src);
 	void *usebuff = dst.buffer;
 	if (deflate) {
-	    usebuff = DeflateBlock(dst, poDS->pbsize - dst.size);
+	    usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, img.quality/10);
 	    if (!usebuff) {
 		CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 		return CE_Failure;
@@ -773,7 +773,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
     if (deflate) {
-	usebuff = DeflateBlock(dst, poDS->pbsize - dst.size);
+	usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, img.quality/10);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 	    return CE_Failure;

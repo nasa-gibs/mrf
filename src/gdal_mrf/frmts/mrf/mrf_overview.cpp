@@ -123,9 +123,9 @@ template<typename T> void AverageByFour(T *buff, int xsz, int ysz, T ndv) {
 
 // Temporary macro to accumulate the sum, uses the value, increments the pointer
 // Careful with this one, it has side effects
-#define USE(valp) if (*valp != ndv) { acc += *valp; count++; }; valp++;
-	    USE(evenline); USE(evenline); USE(oddline); USE(oddline);
-#undef USE
+#define use(valp) if (*valp != ndv) { acc += *valp; count++; }; valp++;
+	    use(evenline); use(evenline); use(oddline); use(oddline);
+#undef use
 	    // The count/2 is the bias to obtain correct rounding
 	    *obuff++ = T((count != 0) ? ((acc + count/2) / count) : ndv);
 
