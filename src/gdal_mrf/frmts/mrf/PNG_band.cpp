@@ -278,7 +278,7 @@ CPLErr PNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     return DecompressPNG(dst,src);
 }
 
-CPLErr PNG_Band::Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img)
+CPLErr PNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 {
     return CompressPNG(dst,src);
 }

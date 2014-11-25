@@ -55,8 +55,13 @@ CPLErr ZLIB_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     return DecompressZLIB(dst,src);
 }
 
-CPLErr ZLIB_Band::Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img) 
+CPLErr ZLIB_Band::Compress(buf_mgr &dst, buf_mgr &src) 
 {
     return CompressZLIB(dst,src,img);
 }
 
+ZLIB_Band::ZLIB_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level): 
+    GDALMRFRasterBand(pDS, image, b, level)
+{
+    deflate = FALSE;
+}

@@ -125,19 +125,17 @@ static boolean empty_output_buffer(j_compress_ptr cinfo) {
 CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img) 
 
 {
-
     // The cinfo should stay open and reside in the DS, since it can be left initialized
     // It saves some time because it has the tables initialized
     struct jpeg_compress_struct cinfo;
     ErrorMgr jerr;
-//    ILImage *img=&(pmDS->current);
 
     jpeg_destination_mgr jmgr;
-    jmgr.next_output_byte=(JOCTET *)dst.buffer;
-    jmgr.free_in_buffer=dst.size;
-    jmgr.init_destination=init_or_terminate_destination;
-    jmgr.empty_output_buffer=empty_output_buffer;
-    jmgr.term_destination=init_or_terminate_destination;
+    jmgr.next_output_byte = (JOCTET *)dst.buffer;
+    jmgr.free_in_buffer = dst.size;
+    jmgr.init_destination = init_or_terminate_destination;
+    jmgr.empty_output_buffer = empty_output_buffer;
+    jmgr.term_destination = init_or_terminate_destination;
 
     // Look at the source of this, some interesting tidbits
     jpeg_create_compress(&cinfo);
@@ -145,9 +143,9 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
     cinfo.err=&jerr;
 
     // The page specific info, size and color spaces
-    cinfo.image_width=img.pagesize.x;
-    cinfo.image_height=img.pagesize.y;
-    cinfo.input_components=img.pagesize.c;
+    cinfo.image_width = img.pagesize.x;
+    cinfo.image_height = img.pagesize.y;
+    cinfo.input_components = img.pagesize.c;
     switch (cinfo.input_components) {
     case 1:cinfo.in_color_space=JCS_GRAYSCALE; break;
     case 4:cinfo.in_color_space=JCS_CMYK; break;
@@ -157,7 +155,7 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
     // Set all required fields and overwrite the ones we want to change
     jpeg_set_defaults(&cinfo);
 
-    jpeg_set_quality(&cinfo,img.quality,TRUE);
+    jpeg_set_quality(&cinfo, img.quality, TRUE);
     cinfo.dct_method=JDCT_FLOAT;
 
     int linesize=cinfo.image_width*cinfo.num_components*((cinfo.data_precision==8)?1:2);
@@ -193,38 +191,42 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
  * @param sz if non-zero, test that uncompressed data fits in the buffer.
  */
 
-CPLErr DecompressJPEG(buf_mgr &dst,buf_mgr &isrc) 
+CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands) 
 
 {
     // Locals, clean up after themselves
     jpeg_decompress_struct cinfo={0};
     ErrorMgr jerr;
 
-    struct jpeg_source_mgr src={(JOCTET *)isrc.buffer,isrc.size};
+    struct jpeg_source_mgr src={(JOCTET *)isrc.buffer, isrc.size};
 
     cinfo.err=&jerr;
-    src.term_source=src.init_source=stub_source_dec;
-    src.skip_input_data=skip_input_data_dec;
-    src.fill_input_buffer=fill_input_buffer_dec;
-    src.resync_to_restart=jpeg_resync_to_restart;
+    src.term_source = src.init_source = stub_source_dec;
+    src.skip_input_data = skip_input_data_dec;
+    src.fill_input_buffer = fill_input_buffer_dec;
+    src.resync_to_restart = jpeg_resync_to_restart;
 
     if (jerr.signaled()) {
         CPLError(CE_Failure,CPLE_AppDefined,"MRF: Error reading JPEG page");
         return CE_Failure;
     }
     jpeg_create_decompress(&cinfo);
-    cinfo.src=&src;
-    jpeg_read_header(&cinfo,TRUE);
+    cinfo.src = &src;
+    jpeg_read_header(&cinfo, TRUE);
     // Use float, it is actually faster than the ISLOW method by a tiny bit
-    cinfo.dct_method=JDCT_FLOAT;
+    cinfo.dct_method = JDCT_FLOAT;
+    if (nbands == 3 && cinfo.num_components != nbands)
+	cinfo.out_color_space = JCS_RGB;
+    int linesize = cinfo.image_width * nbands * ((cinfo.data_precision==8)?1:2);
+
     jpeg_start_decompress(&cinfo);
-    int linesize=cinfo.image_width*cinfo.num_components*((cinfo.data_precision==8)?1:2);
+
     // We have a missmatch between the real and the declared data format
     // warn and fail if output buffer is too small
     if (linesize*cinfo.image_height!=dst.size) {
         CPLError(CE_Warning,CPLE_AppDefined,"MRF: read JPEG size is wrong");
         if (linesize*cinfo.image_height>dst.size) {
-            CPLError(CE_Failure,CPLE_AppDefined,"MRF: JPEG decompress buffer insufficient");
+            CPLError(CE_Failure,CPLE_AppDefined,"MRF: JPEG decompress buffer overflow");
             jpeg_destroy_decompress(&cinfo);
             return CE_Failure;
         }
@@ -245,11 +247,11 @@ CPLErr DecompressJPEG(buf_mgr &dst,buf_mgr &isrc)
 
 CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src) 
 { 
-    return DecompressJPEG(dst,src); 
+    return DecompressJPEG(dst, src, img.pagesize.c); 
 }
 
-CPLErr JPEG_Band::Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img) 
+CPLErr JPEG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 { 
-    return CompressJPEG(dst,src,img);
+    return CompressJPEG(dst, src, img);
 }
 

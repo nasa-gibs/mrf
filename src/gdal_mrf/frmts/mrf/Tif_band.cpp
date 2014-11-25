@@ -149,7 +149,7 @@ CPLErr TIF_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     return DecompressTIF(dst, src, img);
 }
 
-CPLErr TIF_Band::Compress(buf_mgr &dst, buf_mgr &src,const ILImage &img) 
+CPLErr TIF_Band::Compress(buf_mgr &dst, buf_mgr &src) 
 { 
     return CompressTIF(dst,src,img, papszOptions); 
 }
