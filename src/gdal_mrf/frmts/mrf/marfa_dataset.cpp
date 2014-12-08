@@ -35,11 +35,26 @@
 *
 *
 ****************************************************************************/
+#define DEBUGDELAY 100000
 
 #include "marfa.h"
 #include <gdal_priv.h>
+#include <assert.h>
 
 #include <vector>
+
+// Sleep is not portable and not covered in GDAL as far as I can tell
+// So we define MRF_sleep_ms, in milliseconds, not very accurate unfortunately
+#if defined(WIN32)
+// Unfortunately this defines all sorts of garbage
+#include <windows.h>
+#define MRF_sleep_ms(t) Sleep(t)
+#else // Assume linux
+// Unfortunately this defines all sorts of garbage
+#include <unistd.h>
+// Usleep is in usec
+#define MRF_sleep_ms(t) usleep(t*1000)
+#endif
 
 using std::vector;
 using std::string;
@@ -67,10 +82,8 @@ GDALMRFDataset::GDALMRFDataset()
 
 void GDALMRFDataset::SetPBuffer(unsigned int sz)
 {
-    //	fprintf(stderr, "Old size is %d %x, new is %d\n", pbsize, pbuffer, sz);
     pbuffer = CPLRealloc(pbuffer, sz);
     pbsize = (pbuffer == 0) ? 0:sz;
-    //	fprintf(stderr, "After size is %d\n", pbsize);
 }
 
 GDALMRFDataset::~GDALMRFDataset()
@@ -826,7 +839,10 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	mode = "r+b";
 	ifp.acc = GF_Write;
     }
-    ifp.FP = VSIFOpenL(current.idxfname, mode );
+    ifp.FP = VSIFOpenL(current.idxfname, mode);
+
+    int expected_size = idxSize;
+    if (clonedSource) expected_size*=2;
 
     // Got it open or it doesn't need one
     //
@@ -834,17 +850,36 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     // But we can't tell them apart as of now.  So the only mode working now is the indexed one
     // 
     // if (ifp.FP || current.comp == IL_NONE)
-    if (ifp.FP)
-	return ifp.FP;
+    if (NULL != ifp.FP) {
+
+	if (source.empty())
+	    return ifp.FP;
+
+	// Make sure the index is large enough before proceeding
+	// Timeout in .1 seconds, can't really guarantee the accuracy
+	// So this is about half second, more than sufficient
+	int timeout = 5;
+	do {
+	    if (CheckFileSize(current.idxfname, expected_size, GA_ReadOnly))
+		return ifp.FP;
+	    MRF_sleep_ms(100);
+	} while (--timeout);
+
+	// If we get here it is a time-out
+	CPLError(CE_Failure, CPLE_AppDefined,
+	    "GDAL MRF: Timeout on fetching cloned index file %s\n", current.idxfname.c_str());
+	return NULL;
+    }
 
     // Error if this is not a caching MRF
     if (source.empty()) {
 	CPLError(CE_Failure, CPLE_AppDefined,
 	"GDAL MRF: Can't open index file %s\n", current.idxfname.c_str());
-	return ifp.FP;
+	return NULL;
     }
 
-    // Caching MRF and index could be read only
+    // Caching/Cloning MRF and index could be read only
+    // Is this actually works, we should try again, maybe somebody else just created the file?
     mode = "rb";
     ifp.acc = GF_Read;
     ifp.FP = VSIFOpenL(current.idxfname, mode);
@@ -852,6 +887,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	return ifp.FP;
 
     // Caching and index file absent, create it
+    // Due to a race, multiple processes might do this at the same time, but that is fine
     ifp.FP = VSIFOpenL(current.idxfname,"wb");
     if (NULL == ifp.FP) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't create the MRF cache index file %s",
@@ -859,59 +895,27 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	return NULL;
     }
     VSIFCloseL(ifp.FP);
+    ifp.FP = NULL;
 
-    // Make it large enough
-    if (!CheckFileSize(current.idxfname, idxSize, GA_Update)) {
+    // Make it large enough for caching and for cloning
+    if (!CheckFileSize(current.idxfname, expected_size, GA_Update)) {
 	CPLError(CE_Failure,CPLE_AppDefined,"Can't extend the cache index file %s",
 	    current.idxfname.c_str());
 	return NULL;
     }
 
-    // Open it again in rw mode
+    // Try opening it again in rw mode so we can read and write into it
     mode = "r+b";
     ifp.acc = GF_Write;
     ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
 
     if (NULL == ifp.FP) {
 	CPLError(CE_Failure, CPLE_AppDefined,
-	    "GDAL MRF: Can't open cache index file %s\n", full.idxfname.c_str());
+	    "GDAL MRF: Can't reopen cache index file %s\n", full.idxfname.c_str());
 	return NULL;
     }
-
-    if (!clonedSource) 
-	return ifp.FP;
-
-    // For cloned files, fetch the source index and append it when creating the index
-    GDALMRFDataset *pSrc = static_cast<GDALMRFDataset *>(GetSrcDS());
-    // Don't close this, the source takes care of it
-    VSILFILE *srcidx = pSrc->IdxFP();
-    if (!srcidx) return NULL; // Source reported the error
-    VSIFSeekL(ifp.FP, 0, SEEK_END); // Go to the end
-
-    const int CPYSZ = 16384;
-    char *buffer = static_cast<char *>(CPLMalloc(CPYSZ)); // Buffer to copy the source to the clone index
-    size_t read_bytes, written_bytes, copied_bytes = 0;
-    do {
-	read_bytes = VSIFReadL(buffer, 1, CPYSZ, srcidx);
-	if (read_bytes != 0) {
-	    written_bytes = VSIFWriteL(buffer, 1, read_bytes, ifp.FP);
-	    if (written_bytes != read_bytes)
-		break;
-	}
-	copied_bytes += read_bytes;
-    } while ( read_bytes == CPYSZ && idxSize > copied_bytes );
-    CPLFree(buffer);
-
-    if (copied_bytes != idxSize) {
-	CPLError(CE_Failure,CPLE_AppDefined,"Can't read the cloned source index",
-	    pSrc->current.idxfname.c_str());
-	return NULL;
-    }
-    // Make sure it hit the disk
-    VSIFFlushL(ifp.FP);
-    // Done, the cloned index is now appended
     return ifp.FP;
-}
+ }
 
 //
 // Returns the dataset data file or null 
@@ -930,10 +934,8 @@ VSILFILE *GDALMRFDataset::DataFP() {
     }
 
     dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
-    if (dfp.FP) {
-	CPLDebug("MRF_IO", "Opened %s mode %s\n",current.datfname.c_str(),mode);
+    if (dfp.FP)
 	return dfp.FP;
-    }
 
     // It could be a caching MRF
     if (source.empty()) {
@@ -1025,8 +1027,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     // Pick up the source data image, if there is one
     source = CPLStrdup(CPLGetXMLValue(config,"CachedSource.Source",0));
     // Is it a clone?
-    if (!source.empty())
-	clonedSource = on(CPLGetXMLValue(config, "CachedSource.Source.clone", "no"));
+    clonedSource = on(CPLGetXMLValue(config, "CachedSource.Source.clone", "no"));
 
     options = CPLStrdup(CPLGetXMLValue(config,"Options",0));
     optlist = CSLTokenizeString2(options.c_str()," \t\n\r",
@@ -1623,7 +1624,7 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
     if (sizeof(tinfo) != VSIFWriteL(&tinfo, 1, sizeof(tinfo), ifp))
 	ret=CE_Failure;
 
-    // Removed because the data might not be in the file yet, can't flush that one
+    // Removed because the data might not be in the file yet, can't flush here
     //
     // Flush index if this is a caching MRF
     //    if (GetSrcDS() != NULL)
@@ -1671,4 +1672,90 @@ CPLErr GDALMRFDataset::GetGeoTransform( double *gt)
     memcpy(gt,GeoTransform, 6*sizeof(double));
     if (!bGeoTransformValid) return CE_Failure;
     return CE_None;
+}
+
+/**
+*\brief Read a tile index
+*
+* It handles the non-existent index case, for no compression
+* The bias is non-zero only when the cloned index is read
+*/
+
+CPLErr GDALMRFDataset::ReadTileIdx(ILIdx &tinfo, const ILSize &pos, const ILImage &img, const GIntBig bias)
+
+{
+    VSILFILE *ifp = IdxFP();
+    GIntBig offset = bias + IdxOffset(pos, img);
+    if (ifp == NULL && img.comp == IL_NONE) {
+	tinfo.size = current.pageSizeBytes;
+	tinfo.offset = offset * tinfo.size;
+	return CE_None;
+    }
+
+    if (ifp == NULL) {
+	CPLError( CE_Failure, CPLE_FileIO, "Can't open index file");
+	return CE_Failure;
+    }
+
+    VSIFSeekL(ifp, offset, SEEK_SET);
+    if (1 != VSIFReadL(&tinfo, sizeof(ILIdx), 1, ifp))
+	return CE_Failure;
+    // Convert them to native form
+    tinfo.offset = net64(tinfo.offset);
+    tinfo.size   = net64(tinfo.size);
+
+    if ( 0 == bias || 0 != tinfo.size || 0 != tinfo.offset )
+	return CE_None;
+
+    // zero size and zero offset in sourced index means that this portion is un-initialized
+
+    // Should be cloned and the offset within the cloned index
+    offset -= bias;
+    assert(offset < bias);
+    assert(clonedSource);
+
+
+    // Read this block from the remote index, prepare it and store it in the right place
+    // The block size in bytes, should be a multiple of 16, to have full index entries
+    const int CPYSZ = 32768;
+    // Adjust offset to the start of the block
+    offset = ( offset / CPYSZ ) * CPYSZ;
+    GIntBig size = min(CPYSZ, bias - offset);
+    size /= sizeof(ILIdx); // In records
+    vector<ILIdx> buf(size);
+    ILIdx *buffer = &buf[0]; // Buffer to copy the source to the clone index
+
+
+    // Fetch the data from the cloned index
+    GDALMRFDataset *pSrc = static_cast<GDALMRFDataset *>(GetSrcDS());
+
+    VSILFILE *srcidx = pSrc->IdxFP();
+    if (!srcidx) {
+	CPLError( CE_Failure, CPLE_FileIO, "Can't open cloned source index");
+	return CE_Failure; // Source reported the error
+    }
+
+    VSIFSeekL(srcidx, offset, SEEK_SET);
+    size = VSIFReadL(buffer, sizeof(ILIdx), size, srcidx);
+    if (size != buf.size()) {
+	CPLError( CE_Failure, CPLE_FileIO, "Can't read cloned source index");
+	return CE_Failure; // Source reported the error
+    }
+
+    // Mark the empty records as checked, by making the offset non-zero
+    for (vector<ILIdx>::iterator it = buf.begin(); it != buf.end(); it++) {
+	if (it->offset == 0 && it->size == 0)
+	    it->offset = net64(1);
+    }
+
+    // Write it in the right place in the local index file
+    VSIFSeekL(ifp, bias + offset, SEEK_SET);
+    size = VSIFWriteL(&buf[0], sizeof(ILIdx), size, ifp);
+    if (size != buf.size()) {
+	CPLError( CE_Failure, CPLE_FileIO, "Can't write to cloning MRF index");
+	return CE_Failure; // Source reported the error
+    }
+
+    // Cloned index updated, restart this function, it will work now
+    return ReadTileIdx(tinfo, pos, img, bias);
 }

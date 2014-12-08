@@ -262,16 +262,26 @@ protected:
     virtual CPLErr IBuildOverviews( const char*, int, int*, int, int*, 
 	GDALProgressFunc, void* );
 
+
     // Write a tile, the infooffset is the relative position in the index file
     virtual CPLErr WriteTile(void *buff, GUIntBig infooffset, GUIntBig size=0);
 
     // For versioned MRFs, add a version
     CPLErr AddVersion();
 
+    // Read the index record itself
+    CPLErr ReadTileIdx(ILIdx &tinfo, const ILSize &pos, const ILImage &img, const GIntBig bias=0);
+
     VSILFILE *IdxFP();
     VSILFILE *DataFP();
-    GDALRWFlag IdxMode() { return ifp.acc; };
-    GDALRWFlag DataMode() { return dfp.acc; };
+    GDALRWFlag IdxMode() { 
+	if (!ifp.FP) IdxFP();
+	return ifp.acc;
+    };
+    GDALRWFlag DataMode() {
+	if (!dfp.FP) DataFP();
+	return dfp.acc; 
+    };
     GDALDataset *GetSrcDS();
 
     /*
@@ -331,9 +341,7 @@ protected:
     GDALColorTable *poColorTable;
     int Quality;
 
-    // Default data file and access
     VF dfp;
-    // Default index file and access
     VF ifp;
 
     std::vector<double> vNoData,vMin,vMax;
@@ -384,35 +392,24 @@ protected:
     ILImage img;
 //    VSILFILE *dfp;
 //    VSILFILE *ifp;
-    VF dfp;
-    VF ifp;
     std::vector<GDALMRFRasterBand *> overviews;
     int overview;
 
     VSILFILE *IdxFP() {
-        if (ifp.FP != NULL) 
-	    return ifp.FP;
-    // Return and keep track of the parent one
-	ifp.FP = poDS->IdxFP();
-	ifp.acc = poDS->IdxMode();
-        return ifp.FP;
+	return poDS->IdxFP();
     }
 
     VSILFILE *DataFP() {
-        if (dfp.FP != NULL) 
-            return dfp.FP;
-	dfp.FP  = poDS->DataFP();
-	dfp.acc = poDS->DataMode();
-        return dfp.FP;
+	return poDS->DataFP();
     }
 
-    GDALRWFlag IdxMode() { return ifp.acc; };
-    GDALRWFlag DataMode() { return dfp.acc; };
+    GDALRWFlag IdxMode() { return poDS->IdxMode(); };
+    GDALRWFlag DataMode() { return poDS->DataMode(); };
 
     // How many bytes are in a page
-    GUInt32 pageSizeBytes() { 
-        return poDS->current.pageSizeBytes;
-    }
+//    GUInt32 pageSizeBytes() { 
+//        return poDS->current.pageSizeBytes;
+//    }
 
     // How many bytes are in a band block (not a page, a single band block)
     // Easiest is to calculate it from the pageSizeBytes
@@ -425,7 +422,7 @@ protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src) =0;
 
     // Read the index record itself, can be overwritten
-    virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &, GIntBig bias = 0);
+//    virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &, GIntBig bias = 0);
 
     GIntBig bandbit() {
         return ((GIntBig)1) << m_band; 

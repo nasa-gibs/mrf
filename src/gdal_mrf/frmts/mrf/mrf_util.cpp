@@ -463,9 +463,6 @@ GDALColorEntry HSVSwap(const GDALColorEntry& cein) {
  */
 
 int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
-    // Don't check anything when reading files
-    if (eAccess != GA_Update)
-        return true;
 
     VSIStatBufL statb;
     if (VSIStatL(fname, &statb))
@@ -473,15 +470,18 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
     if (statb.st_size >= sz)
 	return true;
 
+    // Don't change anything unless updating
+    if (eAccess != GA_Update)
+        return false;
+
     // There is no ftruncate in VSI, only truncate()
     VSILFILE *ifp = VSIFOpenL(fname, "r+b");
 
-// There is no VSIFTruncateL in gdal 1.8 and lower
+// There is no VSIFTruncateL in gdal 1.8 and lower, so seek and write something at the end
 #if GDAL_VERSION_MAJOR == 1 && GDAL_VERSION_MINOR <= 8
-
-    ILIdx tidx = {0,0};
-    VSIFSeekL(ifp, sz - sizeof(ILIdx), SEEK_SET);
-    int ret = ( sizeof(tidx) == VSIFWriteL(&tidx, sizeof(tidx),1,ifp) );
+    int zero=0;
+    VSIFSeekL(ifp, sz - sizeof(zero), SEEK_SET);
+    int ret = (sizeof(zero) == VSIFWriteL(&zero, sizeof(zero), 1,ifp));
 #else
     int ret = VSIFTruncateL(ifp, sz);
 #endif

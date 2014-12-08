@@ -44,6 +44,7 @@
 #include <ogr_spatialref.h>
 
 #include <vector>
+#include <assert.h>
 #include "../zlib/zlib.h"
 
 using std::vector;
@@ -174,7 +175,6 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nBlockYSize = img.pagesize.y;
     nBlocksPerRow = img.pcount.x;
     nBlocksPerColumn = img.pcount.y;
-    dfp.FP = ifp.FP = NULL;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
     deflate = CSLFetchBoolean(poDS->optlist, "DEFLATE", FALSE);
 }
@@ -466,17 +466,13 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
 CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 {
+    CPLDebug("MRF_IB","FetchClonedBlock %d,%d,0,%d, level  %d\n", xblk, yblk, m_band, m_l);
 
+    VSILFILE *srcfd;
     // Paranoid check
-    if (!poDS->clonedSource) {
-	CPLError(CE_Failure, CPLE_AppDefined, 
-	    "MRF: FetchClonedBlock called for a non-clone MRF");
-	// This is not an error for a cache, the data is fine
-	return CE_Failure;
-    }
+    assert(poDS->clonedSource);
 
     GDALMRFDataset *poSrc;
-
     if ( 0 == (poSrc = static_cast<GDALMRFDataset *>(poDS->GetSrcDS()))) {
 	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't open source file %s", poDS->source.c_str());
 	return CE_Failure;
@@ -495,7 +491,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 
     // Get the cloned source tile info
     // The cloned source index is after the current one
-    if (CE_None != ReadTileIdx(req, tinfo, poDS->idxSize)) {
+    if (CE_None != poDS->ReadTileIdx(tinfo, req, img, poDS->idxSize)) {
 	CPLError(CE_Failure, CPLE_AppDefined, "MRF: Unable to read cloned index entry");
 	return CE_Failure;
     }
@@ -511,11 +507,18 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 	return FillBlock(buffer);
     }
 
+    srcfd = poSrc->DataFP();
+    if (NULL == srcfd) {
+	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't open source data file %s", 
+	    poDS->source.c_str());
+	return CE_Failure;
+    }
+
     // Need to read the tile from the source
     char *buf = static_cast<char *>(CPLMalloc(tinfo.size));
 
-    VSIFSeekL(poSrc->DataFP(), tinfo.offset, SEEK_SET);
-    if (tinfo.size != VSIFReadL( buf, 1, tinfo.size, poSrc->DataFP()) ) {
+    VSIFSeekL(srcfd, tinfo.offset, SEEK_SET);
+    if (tinfo.size != VSIFReadL( buf, 1, tinfo.size, srcfd) ) {
 	CPLFree(buf);
 	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't read data from source %s",
 	    poSrc->current.datfname.c_str() );
@@ -546,9 +549,9 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     ILIdx tinfo;
     GInt32 cstride=img.pagesize.c;
     ILSize req(xblk,yblk,0,m_band/cstride,m_l);
-    CPLDebug("MRF_IB","IReadBlock %d,%d,0,%d, level  %d\n",xblk,yblk,m_band,m_l);
+    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d\n", xblk, yblk, m_band, m_l);
 
-    if (CE_None != ReadTileIdx(req, tinfo)) {
+    if (CE_None != poDS->ReadTileIdx(tinfo, req, img)) {
 	CPLError( CE_Failure, CPLE_AppDefined,
 	    "MRF: Unable to read index at offset %lld", IdxOffset(req, img));
 	return CE_Failure;
@@ -566,12 +569,12 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 	return FetchBlock(xblk, yblk, buffer);
     }
 
-    CPLDebug("MRF_IB","Tinfo offset %llx, size %llx\n", tinfo.offset, tinfo.size);
+    CPLDebug("MRF_IB","Tinfo offset %lld, size %lld\n", tinfo.offset, tinfo.size);
     // If we have a tile, read it
 
     // Should use a permanent buffer, like the pbuffer mechanism
     // Get a large buffer, in case we need to unzip
-    void *data = CPLMalloc(img.pageSizeBytes);
+    void *data = CPLMalloc(tinfo.size);
 
     VSILFILE *dfp = DataFP();
 
@@ -591,15 +594,18 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     // We got the data, do we need to decompress it before decoding?
     if (deflate) {
 	// Use the pbuffer, then move it back
-	uLongf size = img.pageSizeBytes; // This is how big the pbuffer is
-	if (Z_OK != uncompress((Bytef *) poDS->pbuffer, &size,
+	uLongf size = img.pageSizeBytes + 1440; // in case the raw page is a bit larger
+	void *deflated_data = CPLMalloc(size);
+	if (Z_OK != uncompress((Bytef *) deflated_data, &size,
 	    (Bytef *) data, tinfo.size)) {
 		// Warn but let the packing report errors, if any
 		CPLError(CE_Warning, CPLE_AppDefined, "Page data is not zlib compressed");
+		CPLFree(deflated_data);
 	} else {
-	    //  Got decompressed, copy it back and set the size for unpacking
+	    //  Got decompressed, free the original data
 	    tinfo.size = size;
-	    memcpy(data, poDS->pbuffer, size);
+	    CPLFree(data);
+	    data=deflated_data;
 	}
     }
 
@@ -767,15 +773,19 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     // Use the space after pagesizebytes for compressed output, it is of pbsize
     char *outbuff = (char *)tbuffer + img.pageSizeBytes;
 
-    buf_mgr dst={outbuff, poDS->pbsize};
+    buf_mgr dst = {outbuff, poDS->pbsize};
     Compress(dst, src);
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
     if (deflate) {
-	usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, img.quality/10);
+	// Move the packed part at the start of tbuffer, to make more space available
+	memcpy(tbuffer, outbuff, dst.size);
+	dst.buffer = (char *)tbuffer;
+	usebuff = DeflateBlock(dst, img.pageSizeBytes + poDS->pbsize - dst.size, img.quality/10);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
+	    CPLFree(tbuffer);
 	    return CE_Failure;
 	}
     }
@@ -785,33 +795,4 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 
     poDS->bdirty = 0;
     return ret;
-}
-
-/**
-*\brief Read a tile index
-*
-* It handles the non-existent index case, for no compression
-* 
-*/
-
-CPLErr GDALMRFRasterBand::ReadTileIdx(const ILSize &pos, ILIdx &tinfo, GIntBig bias ) 
-
-{
-
-    VSILFILE *ifp = IdxFP();
-    GIntBig offset = bias + IdxOffset(pos, img);
-    if (ifp == NULL && img.comp == IL_NONE) {
-	tinfo.size = pageSizeBytes();
-	tinfo.offset = offset * tinfo.size;
-	return CE_None;
-    }
-    if (ifp == NULL)
-	return CE_Failure;
-
-    VSIFSeekL(ifp, offset, SEEK_SET);
-    if (1 != VSIFReadL(&tinfo, sizeof(ILIdx), 1, ifp))
-	return CE_Failure;
-    tinfo.offset = net64(tinfo.offset);
-    tinfo.size   = net64(tinfo.size);
-    return CE_None;
 }
