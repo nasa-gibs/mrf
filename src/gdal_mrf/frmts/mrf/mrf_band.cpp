@@ -121,43 +121,42 @@ static void swab_buff(buf_mgr &src, const ILImage &img)
 /**
 *\brief Deflates a buffer, extrasize is the available size in the buffer past the input
 *  If the output fits past the data, it uses that area
-* otherwise it uses a temporary buffer and copies the data over the input, returning a pointer to it
+* otherwise it uses a temporary buffer and copies the data over the input on return, returning a pointer to it
 */
-static void *DeflateBlock(buf_mgr &dst, size_t extrasize, int quality) {
+static void *DeflateBlock(buf_mgr &src, size_t extrasize, int flags) {
     // The one we might need to allocate
     void *dbuff = NULL;
-    // The one we use, after the packed data
-    void *usebuff = dst.buffer + dst.size;
-    uLongf size = extrasize; // Available space
+    buf_mgr dst;
+    // The one we could use, after the packed data
+    dst.buffer = src.buffer + src.size;
+    dst.size = extrasize;
 
     // Allocate a temp buffer if there is not sufficient space,
     // We need to have a bit more than half the buffer available
-    if (size < (dst.size + 64)) {
-	size = dst.size + 64;
-	dbuff = CPLMalloc(size);
-	if (!dbuff)
+    if (extrasize < (src.size + 64)) {
+	dst.size = src.size + 64;
+
+	dbuff = CPLMalloc(dst.size);
+	dst.buffer = (char *)dbuff;
+	if (!dst.buffer)
 	    return NULL;
-	usebuff = dbuff;
     }
 
-    int status = compress2((Bytef *)usebuff, &size,
-	(Bytef *)dst.buffer, dst.size, quality); // Default compression
-    if (status != Z_OK) {
+    if (!ZPack(src, dst, flags)) {
 	CPLFree(dbuff); // Safe to call with NULL
 	return NULL;
     }
 
-    // Update the dst.size for the writer
-    dst.size = size;
+    // source size is used to hold the output size
+    src.size = dst.size;
     // If we didnt' allocate a buffer, the receiver can use it already
     if (!dbuff) 
-	return usebuff;
+	return dst.buffer;
 
-    // If we allocated a buffer, we need to copy the data to the user buffer 
-    // and clean up.
-    memcpy(dst.buffer, dbuff, size);
+    // If we allocated a buffer, we need to copy the data to the input buffer 
+    memcpy(src.buffer, dbuff, src.size);
     CPLFree(dbuff);
-    return dst.buffer;
+    return src.buffer;
 }
 
 GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
@@ -177,6 +176,27 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nBlocksPerColumn = img.pcount.y;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
     deflate = CSLFetchBoolean(poDS->optlist, "DEFLATE", FALSE);
+    // Bring the quality to 0 to 9
+    deflate_flags = img.quality / 10;
+    // Pick up the twists, aka GZ, RAWZ headers
+    if (CSLFetchBoolean(poDS->optlist, "GZ", FALSE))
+	deflate_flags |= ZFLAG_GZ;
+    else if (CSLFetchBoolean(poDS->optlist, "RAWZ", FALSE))
+	deflate_flags |= ZFLAG_RAW;
+    // And Pick up the ZLIB strategy, if any
+    const char *zstrategy = CSLFetchNameValueDef(poDS->optlist, "Z_STRATEGY", NULL);
+    if (zstrategy) {
+	int zv = 0;
+	if (EQUAL(zstrategy, "Z_HUFFMAN_ONLY"))
+	    zv = Z_HUFFMAN_ONLY;
+	else if (EQUAL(zstrategy, "Z_RLE"))
+	    zv = Z_RLE;
+	else if (EQUAL(zstrategy, "Z_FILTERED"))
+	    zv = Z_FILTERED;
+	else if (EQUAL(zstrategy, "Z_FIXED"))
+	    zv = Z_FIXED;
+	deflate_flags |= (zv << 6);
+    }
 }
 
 // Clean up the overviews if they exist
@@ -435,7 +455,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
     if (deflate) {
-	usebuff = DeflateBlock( filedst, poDS->pbsize - filedst.size, img.quality/10);
+	usebuff = DeflateBlock( filedst, poDS->pbsize - filedst.size, deflate_flags);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 	    return CE_Failure;
@@ -586,35 +606,38 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     VSIFSeekL(dfp, tinfo.offset, SEEK_SET);
     if (1 != VSIFReadL(data, tinfo.size, 1, dfp)) {
 	CPLFree(data);
-	CPLError(CE_Failure, CPLE_AppDefined, "Unable to read data page, %lld@%lld",
+	CPLError(CE_Failure, CPLE_AppDefined, "Unable to read data page, %ld@%lx",
 	    tinfo.size, tinfo.offset);
 	return CE_Failure;
     }
 
+    buf_mgr src = {(char *)data, tinfo.size};
+    buf_mgr dst;
+
     // We got the data, do we need to decompress it before decoding?
     if (deflate) {
-	// Use the pbuffer, then move it back
-	uLongf size = img.pageSizeBytes + 1440; // in case the raw page is a bit larger
-	void *deflated_data = CPLMalloc(size);
-	if (Z_OK != uncompress((Bytef *) deflated_data, &size,
-	    (Bytef *) data, tinfo.size)) {
-		// Warn but let the packing report errors, if any
-		CPLError(CE_Warning, CPLE_AppDefined, "Page data is not zlib compressed");
-		CPLFree(deflated_data);
-	} else {
-	    //  Got decompressed, free the original data
-	    tinfo.size = size;
+	dst.size = img.pageSizeBytes + 1440; // in case the packed page is a bit larger than the raw one
+	dst.buffer = (char *)CPLMalloc(dst.size);
+
+	if (ZUnPack(src, dst, deflate_flags)) {
+	    // Got it unpacked, update the pointers
 	    CPLFree(data);
-	    data=deflated_data;
+	    tinfo.size = dst.size;
+	    data = dst.buffer;
+	} else { // Warn and assume the data was not deflated
+	    CPLError(CE_Warning, CPLE_AppDefined, "Can't inflate page!");
+	    CPLFree(dst.buffer);
 	}
     }
 
-    buf_mgr src={(char *)data, tinfo.size};
+    src.buffer = (char *)data;
+    src.size = tinfo.size;
 
-    // For reading, the size has to be pageSizeBytes
-    buf_mgr dst={(char *)buffer, img.pageSizeBytes};
+    // After unpacking, the size has to be pageSizeBytes
+    dst.buffer = (char *)buffer;
+    dst.size = img.pageSizeBytes;
 
-    // If pages are interleaved, use the dataset page buffer
+    // If pages are interleaved, use the dataset page buffer instead
     if (1!=cstride)
 	dst.buffer = (char *)poDS->pbuffer;
 
@@ -678,7 +701,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	Compress(dst, src);
 	void *usebuff = dst.buffer;
 	if (deflate) {
-	    usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, img.quality/10);
+	    usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, deflate_flags);
 	    if (!usebuff) {
 		CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 		return CE_Failure;
@@ -782,7 +805,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	// Move the packed part at the start of tbuffer, to make more space available
 	memcpy(tbuffer, outbuff, dst.size);
 	dst.buffer = (char *)tbuffer;
-	usebuff = DeflateBlock(dst, img.pageSizeBytes + poDS->pbsize - dst.size, img.quality/10);
+	usebuff = DeflateBlock(dst, img.pageSizeBytes + poDS->pbsize - dst.size, deflate_flags);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 	    CPLFree(tbuffer);

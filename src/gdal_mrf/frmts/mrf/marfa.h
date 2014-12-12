@@ -23,6 +23,24 @@
 #include <iostream>
 #include <sstream>
 
+// ZLIB Bit flag fields
+// 0:3 - level, 4 - GZip, 5 RAW zlib, 6:9 strategy
+#define ZFLAG_LMASK 0xF
+// GZ and RAW are mutually exclusive, GZ has higher priority
+// If neither is set, use zlib stream format
+#define ZFLAG_GZ 0x10
+#define ZFLAG_RAW 0x20
+
+// Mask for zlib strategy, valid values are 0 to 4 shifted six bits, see zlib for meaning
+// Can use one of:
+// Z_DEFAULT : whatever zlib decides
+// Z_FILTERED : optimized for delta encoding
+// Z_HUFFMAN_ONLY : Only huffman encoding (adaptive)
+// Z_RLE : Only next character matches
+// Z_FIXED : Static huffman, faster decoder
+//
+#define ZFLAG_SMASK 0x1c0
+
 // Force LERC to be included, normally off, detected in the makefile
 // #define LERC
 
@@ -170,8 +188,12 @@ CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
 GDALColorEntry GetXMLColorEntry(CPLXMLNode *p);
 GDALColorEntry HSVSwap(const GDALColorEntry& cein);
 GIntBig IdxSize(const ILImage &full, const int scale=0);
-int FetchBoolean( char **papszStrList, const char *pszKey, int bDefault);
-
+// Similar to uncompress() from zlib, accepts the ZFLAG_RAW
+// Return true if it worked
+int ZUnPack(const buf_mgr &src, buf_mgr &dst, int flags);
+// Similar to compress2() but with flags to control zlib features
+// Returns true if it worked
+int ZPack(const buf_mgr &src, buf_mgr &dst, int flags);
 // checks that the file exists and is at least sz, if access is update it extends it
 int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess);
 
@@ -386,6 +408,7 @@ protected:
     // 0 based
     GInt32 m_band;
     int deflate;
+    int deflate_flags;
     // Level of this band
     GInt32 m_l;
     // The info about the current image, to enable R-sets

@@ -1720,7 +1720,7 @@ CPLErr GDALMRFDataset::ReadTileIdx(ILIdx &tinfo, const ILSize &pos, const ILImag
     const int CPYSZ = 32768;
     // Adjust offset to the start of the block
     offset = ( offset / CPYSZ ) * CPYSZ;
-    GIntBig size = min(CPYSZ, bias - offset);
+    GIntBig size = MIN(size_t(CPYSZ), size_t(bias - offset));
     size /= sizeof(ILIdx); // In records
     vector<ILIdx> buf(size);
     ILIdx *buffer = &buf[0]; // Buffer to copy the source to the clone index

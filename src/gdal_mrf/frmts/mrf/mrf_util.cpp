@@ -30,6 +30,8 @@
  */
 
 #include "marfa.h"
+#include <zlib.h>
+// #include <algorithm>
 
 static const char *ILC_N[]={ "PNG", "PPNG", "JPEG", "NONE", "DEFLATE", "TIF", 
 #if defined(LERC)
@@ -488,3 +490,64 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
     VSIFCloseL(ifp);
     return !ret;
 };
+
+// Similar to compress2() but with flags to control zlib features
+// Returns true if it worked
+int ZPack(const buf_mgr &src, buf_mgr &dst, int flags) {
+    z_stream stream = {0};
+    int err;
+
+    stream.next_in = (Bytef*)src.buffer;
+    stream.avail_in = (uInt)src.size;
+    stream.next_out = (Bytef*)dst.buffer;
+    stream.avail_out = (uInt)dst.size;
+
+    int level = std::min(9, flags & ZFLAG_LMASK);
+    int wb = MAX_WBITS;
+    // if gz flag is set, ignore raw request
+    if (flags & ZFLAG_GZ) wb += 16;
+    else if (flags & ZFLAG_RAW) wb = -wb;
+    int memlevel = 8; // Good compromise
+    int strategy = (flags & ZFLAG_SMASK) >> 6;
+    if (strategy > 4) strategy = 0;
+
+    err = deflateInit2(&stream, level, Z_DEFLATED, wb, memlevel, strategy);
+    if (err != Z_OK) return err;
+
+    err = deflate(&stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        deflateEnd(&stream);
+        return false;
+    }
+    dst.size = stream.total_out;
+    err = deflateEnd(&stream);
+    return err == Z_OK;
+}
+
+// Similar to uncompress() from zlib, accepts the ZFLAG_RAW
+// Return true if it worked
+int ZUnPack(const buf_mgr &src, buf_mgr &dst, int flags) {
+
+    z_stream stream = {0};
+    int err;
+
+    stream.next_in = (Bytef*)src.buffer;
+    stream.avail_in = (uInt)src.size;
+    stream.next_out = (Bytef*)dst.buffer;
+    stream.avail_out = (uInt)dst.size;
+
+    // 32 means autodetec gzip or zlib header, negative 15 is for raw
+    int wb = (ZFLAG_RAW & flags) ? -MAX_WBITS: 32 + MAX_WBITS;
+    err = inflateInit2(&stream, wb);
+    if (err != Z_OK) return false;
+
+    err = inflate(&stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+	inflateEnd(&stream);
+	return false;
+    }
+    dst.size = stream.total_out;
+    err = inflateEnd(&stream);
+    return err == Z_OK;
+}
+
