@@ -231,11 +231,15 @@ CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, con
     CPLString fn = CPLGetXMLValue(node, token, "");
     if (fn.size() == 0) // Not provided
 	return getFname(in, def);
+    int slashPos = fn.find_first_of("\\/");
 
-    int slash = fn.find_first_of("\\/");
-    // Absolute path
-    if (slash != fn.npos && in.find_first_of("\\/") != in.npos && fn.find_first_not_of('.') != slash )
+    // Does it look like an absolute path or we wont't find the basename of in
+    if (slashPos == 0				    // Starts with slash
+	|| (slashPos == 2 && fn[1] == ':')	    // Starts with disk letter column
+	|| !(slashPos == fn.find_first_not_of('.')) // Does not start with dots and then slash
+	|| in.find_first_of("\\/") == in.npos)      // We con't get a basename from in
 	return fn;
+
     // Relative path, prepand the path from the in file name
     return in.substr(0, in.find_last_of("\\/")+1) + fn;
 }
