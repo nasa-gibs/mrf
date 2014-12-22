@@ -577,7 +577,7 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
 	    cds->GetRasterBand(i)->GetOverview(l));
 
 	SetBand(i,band);
-	band->SetColorInterpretation(BandInterp(nBands,i));
+	band->SetColorInterpretation(band->GetColorInterpretation());
     }
 
     return CE_None;
@@ -820,10 +820,13 @@ char      **GDALMRFDataset::GetFileList()
 	papszFileList = CSLAddString( papszFileList, fname);
 
     // These two should be real
-    papszFileList = CSLAddString( papszFileList, full.datfname);
-    papszFileList = CSLAddString( papszFileList, full.idxfname);
-    if (!source.empty())
-	papszFileList = CSLAddString( papszFileList, source);
+    // We don't really want to add these files, since they will be erased when an mrf is overwritten
+    // This collides with the concept that the data file never shrinks.  Same goes with the index, in case
+    // we just want to add things to it.
+    //    papszFileList = CSLAddString( papszFileList, full.datfname);
+    //    papszFileList = CSLAddString( papszFileList, full.idxfname);
+    //    if (!source.empty())
+    //	papszFileList = CSLAddString( papszFileList, source);
 
     return papszFileList;
 }
@@ -1038,8 +1041,30 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     for (int i=1;i<=nBands;i++) {
 	// The subimages are low resolution copies of the current one.
 	GDALMRFRasterBand *band = newMRFRasterBand(this, current, i);
+	GDALColorInterp ci = GCI_Undefined;
+
+	switch (nBands) {
+	case 1:
+	case 2: 
+	    ci = (i==1) ? GCI_GrayIndex : GCI_AlphaBand;
+	    break;
+	case 3: // RGB
+	case 4: // RBGA
+	    if (i<3)
+		ci = (i==1) ? GCI_RedBand : GCI_GreenBand;
+	    else
+		ci = (i==3) ? GCI_BlueBand : GCI_AlphaBand;
+	    break;
+	}
+
+	if (GetColorTable())
+	    ci = GCI_PaletteIndex;
+
+	if (CSLFetchBoolean(optlist, "MULTISPECTRAL", FALSE))
+	    ci = GCI_Undefined;
+
+	band->SetColorInterpretation(ci);
 	SetBand(i,band);
-	band->SetColorInterpretation(BandInterp(nBands, i));
     }
 
     if ( NULL != rsets && NULL != rsets->psChild) {

@@ -64,12 +64,18 @@ typedef struct {
     size_t size;
 } buf_mgr;
 
+// A tile index record
+typedef struct {
+    GIntBig offset;
+    GIntBig size;
+} ILIdx;
+
 // Size of an image, also used as a tile or pixel location
 struct ILSize {
     GInt32 x,y,z,c,l;
     ILSize(const int x_=-1, const int y_=-1, const int z_=-1, 
         const int c_=-1, const int l_=-1) 
-    { x=x_;y=y_;z=z_;c=c_;l=l_; }
+    {x=x_; y=y_; z=z_; c=c_; l=l_;}
 
     bool operator==(const ILSize& other)
     {
@@ -80,20 +86,15 @@ struct ILSize {
     bool operator!=(const ILSize& other) { return !(*this==other); }
 };
 
+std::ostream& operator<<(std::ostream &out, const ILSize& sz);
+std::ostream& operator<<(std::ostream &out, const ILIdx& t);
+
 bool is_Endianess_Dependent(GDALDataType dt, ILCompression comp);
 
-#define PPMW
+// #define PPMW
 #ifdef PPMW
 void ppmWrite(const char *fname, const char *data, const ILSize &sz);
 #endif
-
-typedef struct {
-    GIntBig offset;
-    GIntBig size;
-} ILIdx;
-
-std::ostream& operator<<(std::ostream &out, const ILSize& sz);
-std::ostream& operator<<(std::ostream &out, const ILIdx& t);
 
 /**
  * Collects information pertaining to a single raster
@@ -117,6 +118,7 @@ typedef struct {
     CPLString datfname;
     CPLString idxfname;
     GDALDataType dt;
+    GDALColorInterp ci;
 } ILImage;
 
 // Delarations of utility functions
@@ -173,7 +175,6 @@ const char *CompName(ILCompression comp);
 const char *OrderName(ILOrder val);
 ILCompression CompToken(const char *, ILCompression def=IL_ERR_COMP);
 ILOrder OrderToken(const char *, ILOrder def=IL_ERR_ORD);
-GDALColorInterp BandInterp(int ,int);
 CPLString getFname(CPLXMLNode *,const char *, const CPLString &, const char *);
 CPLString getFname(const CPLString &, const char *);
 double getXMLNum(CPLXMLNode *, const char *, double);
@@ -376,8 +377,10 @@ public:
     virtual ~GDALMRFRasterBand();
     virtual CPLErr IReadBlock(int xblk, int yblk, void *buffer);
     virtual CPLErr IWriteBlock(int xblk, int yblk, void *buffer);
-    virtual GDALColorTable *GetColorTable() {return poDS->poColorTable;}
-    virtual GDALColorInterp GetColorInterpretation();
+
+    virtual GDALColorTable *GetColorTable() { return poDS->poColorTable; }
+    virtual GDALColorInterp GetColorInterpretation() { return img.ci; }
+    CPLErr SetColorInterpretation(GDALColorInterp ci) { img.ci = ci; return CE_None;}
     virtual double  GetNoDataValue(int * pbSuccess);
     virtual double  GetMinimum(int *);
     virtual double  GetMaximum(int *);
@@ -395,44 +398,27 @@ public:
 
     const char *GetOptionValue(const char *opt, const char *def);
     const ILImage *GetImage();
-    void SetAccess( GDALAccess eA) {
-        eAccess=eA; 
-    }
-    void SetDeflate(int v) {
-	deflate = (v != 0);
-    }
+    void SetAccess( GDALAccess eA) { eAccess=eA; }
+    void SetDeflate(int v) { deflate = (v != 0); }
 
 protected:
-    // Pointer to my DS (of GDALMRFDataset type)
+    // Pointer to the GDALMRFDataset
     GDALMRFDataset *poDS;
     // 0 based
     GInt32 m_band;
     int deflate;
     int deflate_flags;
-    // Level of this band
+    // Level count of this band
     GInt32 m_l;
     // The info about the current image, to enable R-sets
     ILImage img;
-//    VSILFILE *dfp;
-//    VSILFILE *ifp;
     std::vector<GDALMRFRasterBand *> overviews;
     int overview;
 
-    VSILFILE *IdxFP() {
-	return poDS->IdxFP();
-    }
-
-    VSILFILE *DataFP() {
-	return poDS->DataFP();
-    }
-
-    GDALRWFlag IdxMode() { return poDS->IdxMode(); };
-    GDALRWFlag DataMode() { return poDS->DataMode(); };
-
-    // How many bytes are in a page
-//    GUInt32 pageSizeBytes() { 
-//        return poDS->current.pageSizeBytes;
-//    }
+    VSILFILE *IdxFP() {	return poDS->IdxFP(); }
+    GDALRWFlag IdxMode() { return poDS->IdxMode(); }
+    VSILFILE *DataFP() { return poDS->DataFP(); }
+    GDALRWFlag DataMode() { return poDS->DataMode(); }
 
     // How many bytes are in a band block (not a page, a single band block)
     // Easiest is to calculate it from the pageSizeBytes
@@ -447,27 +433,19 @@ protected:
     // Read the index record itself, can be overwritten
 //    virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &, GIntBig bias = 0);
 
-    GIntBig bandbit() {
-        return ((GIntBig)1) << m_band; 
-    }
-    GIntBig bandbit(int b) {
-        return ((GIntBig)1) << b; 
-    }
-    GIntBig AllBandMask() { 
-        return bandbit(poDS->nBands)-1;
-    }
+    GIntBig bandbit(int b) { return ((GIntBig)1) << b;}
+    GIntBig bandbit() { return bandbit(m_band);}
+    GIntBig AllBandMask() { return bandbit(poDS->nBands)-1;}
 
     // Overview Support
     // Inherited from GDALRasterBand
     // These are called only in the base level RasterBand
     virtual int GetOverviewCount() {return static_cast<int>(overviews.size());}
     virtual GDALRasterBand *GetOverview(int n) {
-        if (n<(int)overviews.size()) return overviews[n];
-        return 0;
+	if ( n >= (int)overviews.size()) return NULL;
+	return overviews[n];
     }
-    void AddOverview(GDALMRFRasterBand *b) {
-        overviews.push_back(b);
-    }
+    void AddOverview(GDALMRFRasterBand *b) { overviews.push_back(b); }
 };
 
 /**
@@ -550,12 +528,12 @@ protected:
 class GDALMRFLRasterBand : public GDALPamRasterBand {
 public:
     GDALMRFLRasterBand(GDALMRFRasterBand *b) { 
-        pBand=b ;
-        eDataType=b->GetRasterDataType();
-        b->GetBlockSize(&nBlockXSize,&nBlockYSize);
-        eAccess=b->GetAccess();
-        nRasterXSize=b->GetXSize();
-        nRasterYSize=b->GetYSize();
+        pBand = b ;
+        eDataType = b->GetRasterDataType();
+        b->GetBlockSize(&nBlockXSize, &nBlockYSize);
+        eAccess = b->GetAccess();
+        nRasterXSize = b->GetXSize();
+        nRasterYSize = b->GetYSize();
     }
     virtual CPLErr IReadBlock(int xblk, int yblk, void *buffer) {
         return pBand->IReadBlock(xblk,yblk,buffer);

@@ -217,17 +217,6 @@ const char * GDALMRFRasterBand::GetOptionValue(const char *opt, const char *def)
     return CPLGetConfigOption(opt, def);
 }
 
-/************************************************************************/
-/*                       GetColorInterpretation()                       */
-/************************************************************************/
-
-GDALColorInterp GDALMRFRasterBand::GetColorInterpretation()
-{
-    if (poDS->GetColorTable()) 
-	return GCI_PaletteIndex;
-    return BandInterp(poDS->nBands, m_band+1);
-}
-
 // Utility function, returns a value from a vector corresponding to the band index
 // or the first entry
 static double getBandValue(std::vector<double> &v,int idx)

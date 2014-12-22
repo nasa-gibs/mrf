@@ -54,36 +54,6 @@ void GDALRegister_mrf(void);
 void GDALDeregister_mrf( GDALDriver * ) {};
 CPL_C_END
 
-/************************************************************************/
-/*                           BandInterp()                               */
-/************************************************************************/
-
-/**
- * \brief Utility function to calculate color band interpretation.
- * Only handles Gray, GrayAlpha, RGB and RGBA, based on total band count
- *
- * @param nbands is the total number of bands in the image
- *
- * @param band is the band number, starting with 1
- *
- * @return GDALColorInterp of the band
- */
-
-GDALColorInterp BandInterp(int nbands, int band) 
-{
-    switch (nbands) {
-    case 1: return GCI_GrayIndex;
-    case 2: return ((band==1)?GCI_GrayIndex:GCI_AlphaBand);
-    case 3: // RGB
-    case 4: // RBGA
-        if (band<3)
-            return ((band==1)?GCI_RedBand:GCI_GreenBand);
-        return ((band==3)?GCI_BlueBand:GCI_AlphaBand);
-    default:
-        return GCI_Undefined;
-    }
-}
-
 /**
  *  Get the string for a compression type
  */
@@ -224,6 +194,9 @@ CPLString getFname(const CPLString &in, const char *ext)
  * If the token is not defined by CPLGetXMLValue, if the extension of the in name is .xml, 
  * it returns the token with the extension changed to defext.  
  * Otherwise it retuns the token itself
+ * It is pretty hard to separate local vs remote due to the gdal file name ornaments
+ * Absolute file names are: ?:/* or /*
+ * 
  */
 
 CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, const char *def) 
