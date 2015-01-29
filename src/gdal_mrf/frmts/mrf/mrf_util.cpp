@@ -79,10 +79,10 @@ ILCompression CompToken(const char *opt, ILCompression def)
     int i;
     if (NULL==opt) return def;
     for (i=0; ILCompression(i)<IL_ERR_COMP; i++)
-        if (EQUAL(opt,ILComp_Name[i]))
-            break;
+	if (EQUAL(opt,ILComp_Name[i]))
+	    break;
     if (IL_ERR_COMP==ILCompression(i)) 
-        return def;
+	return def;
     return ILCompression(i);
 }
 
@@ -95,10 +95,10 @@ ILOrder OrderToken(const char *opt, ILOrder def)
     int i;
     if (NULL==opt) return def;
     for (i=0; ILOrder(i)<IL_ERR_ORD; i++)
-        if (EQUAL(opt,ILOrder_Name[i]))  
-            break;
+	if (EQUAL(opt,ILOrder_Name[i]))  
+	    break;
     if (IL_ERR_ORD==ILOrder(i)) 
-        return def;
+	return def;
     return ILOrder(i);
 }
 
@@ -109,7 +109,7 @@ ILOrder OrderToken(const char *opt, ILOrder def)
 std::ostream& operator<<(std::ostream &out, const ILSize& sz)
 {
     out << "X=" << sz.x << ",Y=" << sz.y << ",Z=" << sz.z 
-        << ",C=" << sz.c << ",L=" << sz.l;
+	<< ",C=" << sz.c << ",L=" << sz.l;
     return out;
 }
 
@@ -125,30 +125,30 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
     FILE *fp=fopen(fname,"wb");
     switch(sz.c) {
     case 4: 
-        {
-            fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-            char *d=(char *)data;
-            for(int i=sz.x*sz.y;i;i--) {
-                fwrite(d,3,1,fp);
-                d+=4;
-            }
-            break;
-        }
+	{
+	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	    char *d=(char *)data;
+	    for(int i=sz.x*sz.y;i;i--) {
+		fwrite(d,3,1,fp);
+		d+=4;
+	    }
+	    break;
+	}
     case 3:
-        {
-            fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-            fwrite(data,sz.x*sz.y,3,fp);
-            break;
-        }
+	{
+	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	    fwrite(data,sz.x*sz.y,3,fp);
+	    break;
+	}
     case 1:
-        {
-            fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
-            fwrite(data,sz.x,sz.y,fp);
-            break;
-        }
+	{
+	    fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
+	    fwrite(data,sz.x,sz.y,fp);
+	    break;
+	}
     default:
-        fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
-        return;
+	fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
+	return;
     }
     fclose(fp);
 }
@@ -182,8 +182,8 @@ CPLString getFname(const CPLString &in, const char *ext)
     CPLString ret(in);
 
     if ((strlen(ext)==4) && (strlen(in)>4)) {
-        ret.replace(ret.size()-4,4,ext);
-        return ret;
+	ret.replace(ret.size()-4,4,ext);
+	return ret;
     }
 
     return CPLString(ext);
@@ -238,8 +238,8 @@ double getXMLNum(CPLXMLNode *node, const char *pszPath, double def)
 GIntBig IdxOffset(const ILSize &pos, const ILImage &img) 
 {
     return img.idxoffset+sizeof(ILIdx)*
-        ((GIntBig)pos.c+img.pcount.c*(pos.x+img.pcount.x*
-        (pos.y+img.pcount.y*pos.z)));
+	((GIntBig)pos.c+img.pcount.c*(pos.x+img.pcount.x*
+	(pos.y+img.pcount.y*pos.z)));
 }
 
 // Is compression type endianess dependent?
@@ -262,49 +262,49 @@ void GDALRegister_mrf(void)
     GDALDriver *driver;
 
     if (GDALGetDriverByName("MRF") == NULL) {
-        driver = new GDALDriver();
-        driver->SetDescription("MRF");
-        driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Meta Raster Format");
-        driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_marfa.html");
+	driver = new GDALDriver();
+	driver->SetDescription("MRF");
+	driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Meta Raster Format");
+	driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_marfa.html");
 
-        // These will need to be revisited, do we support complex data types too?
-        driver->SetMetadataItem(GDAL_DMD_CREATIONDATATYPES,
+	// These will need to be revisited, do we support complex data types too?
+	driver->SetMetadataItem(GDAL_DMD_CREATIONDATATYPES,
 				"Byte UInt16 Int16 Int32 UInt32 Float32 Float64");
 
-        driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
-            "<CreationOptionList>\n"
-            "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>\n"
-            "       <Value>JPEG</Value>"
-            "       <Value>PNG</Value>"
-            "       <Value>PPNG</Value>"
+	driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
+	    "<CreationOptionList>\n"
+	    "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>\n"
+	    "       <Value>JPEG</Value>"
+	    "       <Value>PNG</Value>"
+	    "       <Value>PPNG</Value>"
 	    "	    <Value>TIF</Value>"
-            "       <Value>DEFLATE</Value>"
-            "       <Value>NONE</Value>"
+	    "       <Value>DEFLATE</Value>"
+	    "       <Value>NONE</Value>"
 #if defined(LERC)
 	    "	    <Value>LERC</Value>"
 #endif
-            "   </Option>\n"
-            "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
-            "       <Value>PIXEL</Value>"
-            "       <Value>BAND</Value>"
-            "   </Option>\n"
-            "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
+	    "   </Option>\n"
+	    "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
+	    "       <Value>PIXEL</Value>"
+	    "       <Value>BAND</Value>"
+	    "   </Option>\n"
+	    "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
 	    "	<Option name='OPTIONS' type='string' description='Freeform dataset parameters'/>\n"
-            "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
-            "   <Option name='BLOCKXSIZE' type='int' description='Page x size, default=512'/>\n"
-            "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
-            "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
+	    "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
+	    "   <Option name='BLOCKXSIZE' type='int' description='Page x size, default=512'/>\n"
+	    "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
+	    "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
 //	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
 	    "	<Option name='UNIFORM_SCALE' type='int' description='Uniform overlays in MRF, only 2 is tested'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
-            "</CreationOptionList>\n");
+	    "</CreationOptionList>\n");
 
-        driver->pfnOpen = GDALMRFDataset::Open;
-        driver->pfnIdentify = GDALMRFDataset::Identify;
-        driver->pfnUnloadDriver = GDALDeregister_mrf;
-        driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
-        GetGDALDriverManager()->RegisterDriver(driver);
+	driver->pfnOpen = GDALMRFDataset::Open;
+	driver->pfnIdentify = GDALMRFDataset::Identify;
+	driver->pfnUnloadDriver = GDALDeregister_mrf;
+	driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
+	GetGDALDriverManager()->RegisterDriver(driver);
     }
 }
 
@@ -325,7 +325,7 @@ GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *pDS, const ILImage &image, i
     case IL_LERC: bnd = new LERC_Band(pDS,image,b,level); break;
 #endif
     default:
-        return NULL;
+	return NULL;
     }
     // Copy the RW mode from the dataset
     bnd->SetAccess(pDS->eAccess);
@@ -372,7 +372,7 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement )
 
 {
     if( psRoot == NULL || pszElement == NULL )
-        return NULL;
+	return NULL;
 
     // If the strings starts with '=', skip it and test the root
     // If not, start testing with the next sibling
@@ -380,10 +380,10 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement )
     else psRoot=psRoot->psNext;
 
     for (;psRoot!=NULL;psRoot=psRoot->psNext)
-        if ((psRoot->eType == CXT_Element ||
-             psRoot->eType == CXT_Attribute)
-             && EQUAL(pszElement,psRoot->pszValue))
-            return psRoot;
+	if ((psRoot->eType == CXT_Element ||
+	     psRoot->eType == CXT_Attribute)
+	     && EQUAL(pszElement,psRoot->pszValue))
+	    return psRoot;
 
     return NULL;
 }
@@ -403,7 +403,7 @@ void XMLSetAttributeVal(CPLXMLNode *parent,const char* pszName,
 }
 
 CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
-        const char*pszName,const ILSize &sz,const char *frmt)
+	const char*pszName,const ILSize &sz,const char *frmt)
 {
     CPLXMLNode *node=CPLCreateXMLNode(parent,CXT_Element,pszName);
     XMLSetAttributeVal(node,"x",sz.x,frmt);
@@ -451,7 +451,7 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
 
     // Don't change anything unless updating
     if (eAccess != GA_Update)
-        return false;
+	return false;
 
     // There is no ftruncate in VSI, only truncate()
     VSILFILE *ifp = VSIFOpenL(fname, "r+b");
@@ -493,8 +493,8 @@ int ZPack(const buf_mgr &src, buf_mgr &dst, int flags) {
 
     err = deflate(&stream, Z_FINISH);
     if (err != Z_STREAM_END) {
-        deflateEnd(&stream);
-        return false;
+	deflateEnd(&stream);
+	return false;
     }
     dst.size = stream.total_out;
     err = deflateEnd(&stream);

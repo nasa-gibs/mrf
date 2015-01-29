@@ -55,42 +55,65 @@ using std::string;
 // These are separate to allow for optimization
 
 template <typename T> void cpy_stride_in(void *dst, 
-        const void *src, int c, int stride)
+	const void *src, int c, int stride)
 {
     T *s=(T *)src;
     T *d=(T *)dst;
 
     while (c--) {
-        *d++=*s;
-        s+=stride;
+	*d++=*s;
+	s+=stride;
     }
 }
 
 template <typename T> void cpy_stride_out(void *dst, 
-        const void *src, int c, int stride)
+	const void *src, int c, int stride)
 {
     T *s=(T *)src;
     T *d=(T *)dst;
 
     while (c--) {
-        *d=*s++;
-        d+=stride;
+	*d=*s++;
+	d+=stride;
     }
 }
 
-// Is the buffer filled with zeros
-inline int is_zero(const char *b,size_t count)
+// Does every value in the buffer have the same value, using strict comparison
+template<typename T> inline int isAllVal(const T *b, size_t bytecount, double ndv)
+
 {
-    while (count--) if (*b++) return 0;
+    T val = (T)(ndv);
+    size_t count = bytecount / sizeof(T);
+    while (count--)
+	if (*(b++) != val)
+	    return FALSE;
     return TRUE;
 }
 
-// Does every byte in the buffer have the same value
-inline int is_empty(const char *b,size_t count, char val=0)
-
+// Dispatcher based on gdal data type
+static int isAllVal(GDALDataType gt, void *b, size_t bytecount, double ndv)
 {
-    while (count--) if (*(b++)!=val) return 0;
-    return TRUE;
+    // Test to see if it has data
+    int isempty = false;
+
+    // A case branch in a temporary macro, conversion from gdal enum to type
+#define TEST_T(GType, type)\
+    case GType: \
+	isempty = isAllVal((type *)b, bytecount, ndv);\
+	break
+
+    switch (gt) {
+	TEST_T(GDT_Byte, GByte);
+	TEST_T(GDT_UInt16, GUInt16);
+	TEST_T(GDT_Int16, GInt16);
+	TEST_T(GDT_UInt32, GUInt32);
+	TEST_T(GDT_Int32, GInt32);
+	TEST_T(GDT_Float32, float);
+	TEST_T(GDT_Float64, double);
+    }
+#undef TEST_T
+
+    return isempty;
 }
 
 // Swap bytes in place, unconditional
@@ -269,13 +292,14 @@ template<typename T> CPLErr buff_fill(void *b, size_t count, const T ndv)
 */
 CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
 {
-    double ndv = img.NoDataValue;
+    int success;
+    double ndv = GetNoDataValue(&success);
+    if (!success) ndv = 0.0L;
+
     size_t bsb = blockSizeBytes();
 
-    // use 0 if NoData is not defined
-    if (!img.hasNoData) ndv = 0.0L;
-    // use memset for speed for bytes, or if nodata is not defined
-    if (!img.hasNoData || eDataType == GDT_Byte) {
+    // use memset for speed for bytes, or if nodata is zeros
+    if (eDataType == GDT_Byte || 0.0L == ndv ) {
 	memset(buffer, ndv, bsb);
 	return CE_None;
     }
@@ -291,7 +315,7 @@ CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
     }
 #undef bf
 
-    return CE_Failure;
+    return CE_None;
 }
 
 /*\brief Interleave block read
@@ -317,11 +341,12 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 	    blocks.push_back(poBlock);
 	} 
 
-	// Just the right mix of templates and macros make deinterleaving tidy
+// Just the right mix of templates and macros make deinterleaving tidy
 #define CpySI(T) cpy_stride_in<T> (ob, (T *)poDS->pbuffer + i,\
     blockSizeBytes()/sizeof(T), img.pagesize.c)
 
 	// Page is already in poDS->pbuffer, not empty
+	// There are only four cases, since only the real data type matters
 	switch (GDALGetDataTypeSize(eDataType)/8)
 	{
 	case 1: CpySI(GByte); break;
@@ -339,6 +364,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 
     return CE_None;
 }
+
 
 /**
 *\brief Fetch a block from the backing store dataset and keep a copy in the cache
@@ -404,7 +430,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     if (clip) 
 	FillBlock(ob);
 
-    // Use the dataset RasterIO if reading all bands
+    // Use the dataset RasterIO to read all bands
     CPLErr ret = poSrcDS->RasterIO( GF_Read, Xoff, Yoff, readszx, readszy,
 	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
 	eDataType, cstride, (cstride==1)? &nBand:NULL,
@@ -418,11 +444,11 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // Might have the block in the pbuffer, mark it
     poDS->tile = req;
 
-    // If it should not be stored, mark it as such
-    if (eDataType == GDT_Byte && poDS->vNoData.size()) {
-	if (is_empty((char *)ob, img.pageSizeBytes, (char)GetNoDataValue(0)))
-	    return poDS->WriteTile((void *)1, infooffset, 0);
-    } else if (is_zero((char *)ob, img.pageSizeBytes))
+    // Test to see if it need to be written, or just marked
+    int success;
+    double val = GetNoDataValue(&success);
+    if (!success) val = 0.0;
+    if (isAllVal(eDataType, ob, img.pageSizeBytes, val))
 	return poDS->WriteTile((void *)1, infooffset, 0);
 
     // Write the page in the local cache
@@ -668,11 +694,12 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	m_band, m_l, cstride);
 
     if (1 == cstride) {     // Separate bands, we can write it as is
-	// Empty page skip. Byte data only, the NoData needs more work
-	if ((eDataType==GDT_Byte) && (poDS->vNoData.size())) {
-	    if (is_empty((char *)buffer, img.pageSizeBytes, char(GetNoDataValue(0))))
-		return poDS->WriteTile(0, infooffset, 0);
-	} else if (is_zero((char *)buffer, img.pageSizeBytes)) // Don't write buffers with zero
+	// Empty page skip
+
+	int success;
+	double val = GetNoDataValue(&success);
+	if (!success) val = 0.0;
+	if (isAllVal(eDataType, buffer, img.pageSizeBytes, val))
 	    return poDS->WriteTile(0, infooffset, 0);
 
 	// Use the pbuffer to hold the compressed page before writing it
@@ -709,7 +736,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     void *tbuffer = CPLMalloc(img.pageSizeBytes + poDS->pbsize);
 
     if (!tbuffer) {
-    	CPLError(CE_Failure,CPLE_AppDefined, "MRF: Can't allocate write buffer");
+	CPLError(CE_Failure,CPLE_AppDefined, "MRF: Can't allocate write buffer");
 	return CE_Failure;
     }
 	
@@ -737,11 +764,11 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	}
 
 	// Keep track of empty bands, but encode them anyhow, in case some are not empty
-	if ((eDataType == GDT_Byte) && poDS->vNoData.size()) {
-	    if (is_empty(pabyThisImage, blockSizeBytes(), (char)GetNoDataValue(0)))
-		empties |= bandbit(iBand);
-        } else if (is_zero(pabyThisImage, blockSizeBytes()))
-	    empties |= bandbit(iBand);
+	int success;
+	double val = GetNoDataValue(&success);
+	if (!success) val = 0.0;
+	if (isAllVal(eDataType, buffer, img.pageSizeBytes, val))
+	    empties != bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
 	// Just the right mix of templates and macros make this real tidy

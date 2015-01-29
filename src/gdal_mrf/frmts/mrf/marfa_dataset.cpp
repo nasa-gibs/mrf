@@ -35,7 +35,6 @@
 *
 *
 ****************************************************************************/
-#define DEBUGDELAY 100000
 
 #include "marfa.h"
 #include <gdal_priv.h>
@@ -71,6 +70,7 @@ GDALMRFDataset::GDALMRFDataset()
     pbsize=0;
     bdirty=0;
     scale = 0; // Unset
+    bNeedsFlush = 0;
     level=-1;
     optlist=0;
     cds=0;
@@ -162,9 +162,9 @@ CPLErr GDALMRFDataset::AdviseRead( int nXOff, int nYOff, int nXSize, int nYSize,
  *
  */
 CPLErr GDALMRFDataset::IRasterIO( GDALRWFlag eRWFlag, int nXOff, int nYOff, int nXSize, int nYSize,
-                       void *pData, int nBufXSize, int nBufYSize, GDALDataType eBufType,
-                       int nBandCount, int *panBandMap,
-                       int nPixelSpace, int nLineSpace, int nBandSpace)
+		       void *pData, int nBufXSize, int nBufYSize, GDALDataType eBufType,
+		       int nBandCount, int *panBandMap,
+		       int nPixelSpace, int nLineSpace, int nBandSpace)
 {
     CPLDebug("MRF_IO", "IRasterIO %s, %d, %d, %d, %d, bufsz %d,%d,%d strides P %d, L %d, B %d \n",
 	eRWFlag == GF_Write ? "Write":"Read",
@@ -267,7 +267,8 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 		//  Set the uniform node, in case it was not set before, and save the new configuration
 		CPLSetXMLValue(config, "Rsets.#model", "uniform");
 		CPLSetXMLValue(config, "Rsets.#scale", CPLString().Printf("%g",scale).c_str());
-		if (!CPLSerializeXMLTreeToFile(config, fname)) {
+
+		if (!WriteConfig(config)) {
 		    CPLError(CE_Failure,CPLE_AppDefined,"MRF: Can't rewrite the metadata file");
 		    return CE_Failure;
 		}
@@ -1165,7 +1166,7 @@ static CPLString PrintDouble(double d)
 
 
 /**
- *\Brief Create a MRF file from an existing DS
+ *\Brief Create an MRF file from an existing DS
  */
 GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename, 
 					GDALDataset *poSrcDS, int bStrict, char **papszOptions, 
@@ -1191,7 +1192,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     bool nbo=NET_ORDER;
 
     // Use the info from the input image
-    // Use the poSrcDS or the first band to find out info about the dataset
+    // Use the poSrcDS or the first band to get info about the dataset
     GDALRasterBand *poPBand=poSrcDS->GetRasterBand(1);
     GDALDataType dt=poPBand->GetRasterDataType();
 
@@ -1261,11 +1262,11 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     nbo = on(CSLFetchNameValue(papszOptions,"NETBYTEORDER"));
 
     // Use the source compression if we understand it
-    comp=CompToken(poPBand->GetMetadataItem("COMPRESSION","IMAGE_STRUCTURE"),comp);
+    comp = CompToken(poPBand->GetMetadataItem("COMPRESSION","IMAGE_STRUCTURE"),comp);
 
     // Input options, overrides
     pszValue=CSLFetchNameValue(papszOptions,"COMPRESS");
-    if (pszValue) if (IL_ERR_COMP==(comp=CompToken(pszValue))) {
+    if (pszValue && IL_ERR_COMP==(comp=CompToken(pszValue))) {
 	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: Compression %s is unknown, "
 	    "using PNG", pszValue);
 	comp=IL_PNG;
@@ -1338,7 +1339,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
     // Get the color palette if we only have one band
     if ( 1==nBands && GCI_PaletteIndex==poPBand->GetColorInterpretation() )
-	poColorTable=poPBand->GetColorTable()->Clone();
+	poColorTable = poPBand->GetColorTable()->Clone();
 
     // Check for format is PPNG and we don't have a palette
     // TODO: create option to build a palette, using the syntax from VRT LUT
@@ -1455,7 +1456,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	CPLCreateXMLElementAndValue(config, "Options", options.c_str());
 
     // Dump the XML
-    CPLSerializeXMLTreeToFile(config,pszFilename);
+    CPLSerializeXMLTreeToFile(config, pszFilename);
     CPLDestroyXMLNode(config);
 
     // Now that these files are created on demand, do we still need to create them here?
@@ -1513,6 +1514,52 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
     return poDS;
+}
+
+/**
+ *\Brief Create an MRF dataset, some settings can be changed later
+ */
+
+GDALDataset *
+GDALMRFDataset::Create(const char * pszName,
+int nXSize, int nYSize, int nBands,
+GDALDataType eType, char ** papszOptions)
+
+{
+    GDALMRFDataset *poDS;
+    ILImage img;
+    img.size = ILSize(nXSize, nYSize, 1, nBands);
+
+    // Set defaults
+    ILCompression comp = IL_PNG;
+    // Most formats can't handle more than 4 bands interleaved (JPEG,PNG)
+    ILOrder ord = (nBands < 5) ? IL_Interleaved : IL_Separate;
+    ILSize page(512, 512, 1, 1);
+    int quality = 85;
+
+    poDS = new GDALMRFDataset();
+    poDS->bNeedsFlush = 1;
+    return poDS;
+}
+
+void GDALMRFDataset::FlushCache()
+
+{
+    GDALDataset::FlushCache();
+
+    if (!bNeedsFlush)
+	return;
+
+    bNeedsFlush = 0;
+
+    // We don't write to disk if there is no filename.  This is a 
+    // memory only dataset.
+    if (strlen(GetDescription()) == 0
+	|| EQUALN(GetDescription(), "<MRF_META>", 10))
+	return;
+
+    CPLXMLNode *config = NULL;
+    WriteConfig(config);
 }
 
 // Copy the first index at the end of the file and bump the version count

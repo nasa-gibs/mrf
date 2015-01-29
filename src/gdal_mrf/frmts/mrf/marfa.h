@@ -74,13 +74,13 @@ typedef struct {
 struct ILSize {
     GInt32 x,y,z,c,l;
     ILSize(const int x_=-1, const int y_=-1, const int z_=-1, 
-        const int c_=-1, const int l_=-1) 
+	const int c_=-1, const int l_=-1) 
     {x=x_; y=y_; z=z_; c=c_; l=l_;}
 
     bool operator==(const ILSize& other)
     {
-        return ((x==other.x) && (y==other.y) && (z==other.z) &&
-            (c==other.c) && (l==other.l)); 
+	return ((x==other.x) && (y==other.y) && (z==other.z) &&
+	    (c==other.c) && (l==other.l)); 
     }
 
     bool operator!=(const ILSize& other) { return !(*this==other); }
@@ -137,13 +137,13 @@ static inline unsigned short int swab16(const unsigned short int val)
 static inline unsigned int swab32(unsigned int val)
 {   
     return (unsigned int) (swab16((unsigned short int) val)) << 16
-        | swab16( (unsigned short int) (val >> 16));
+	| swab16( (unsigned short int) (val >> 16));
 }
 
 static inline unsigned long long int swab64(const unsigned long long int val)
 {
     return (unsigned long long int) (swab32((unsigned int)val)) << 32 
-        |  swab32( (unsigned int) (val >> 32));
+	|  swab32( (unsigned int) (val >> 32));
 }
 
 // NET_ORDER is true if machine is BE, false otherwise
@@ -185,7 +185,7 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement);
 void XMLSetAttributeVal(CPLXMLNode *parent,const char* pszName,
     const double val, const char *frmt=NULL);
 CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
-        const char*pszName,const ILSize &sz,const char *frmt=NULL);
+	const char*pszName,const ILSize &sz,const char *frmt=NULL);
 GDALColorEntry GetXMLColorEntry(CPLXMLNode *p);
 GDALColorEntry HSVSwap(const GDALColorEntry& cein);
 GIntBig IdxSize(const ILImage &full, const int scale=0);
@@ -237,9 +237,16 @@ public:
 
     static GDALDataset *Open(GDALOpenInfo *);
     static int Identify(GDALOpenInfo *);
+    void FlushCache();
+
     static GDALDataset *CreateCopy(const char *pszFilename, GDALDataset *poSrcDS,
-            int bStrict, char **papszOptions, GDALProgressFunc pfnProgress,
-            void *pProgressData);
+	    int bStrict, char **papszOptions, GDALProgressFunc pfnProgress,
+	    void *pProgressData);
+
+    static GDALDataset *Create(const char * pszName,
+	int nXSize, int nYSize, int nBands,
+	GDALDataType eType, char ** papszOptions);
+
 
     virtual const char *GetProjectionRef();
     virtual CPLErr SetProjection(const char *proj);
@@ -267,7 +274,7 @@ public:
     const CPLString GetFname() {return fname;};
     // Patches a region of all the next overview, argument counts are in blocks
     virtual CPLErr PatchOverview(int BlockX,int BlockY,int Width,int Height, 
-        int srcLevel=0, int recursive=false);
+	int srcLevel=0, int recursive=false);
 
 protected:
     CPLErr LevelInit(const int l);
@@ -328,8 +335,9 @@ protected:
     int clonedSource; // Is it a cloned source
 
     int hasVersions; // Does it support versions
-    int verCount;    // The last version
-    GIntBig idxSize;// The size of each version index, or the size of the cloned index
+    int verCount; // The last version
+    GIntBig idxSize; // The size of each version index, or the size of the cloned index
+    int bNeedsFlush; // Does the XML need to be written
 
     // Freeform sticky dataset options
     CPLString options;
@@ -423,7 +431,7 @@ protected:
     // How many bytes are in a band block (not a page, a single band block)
     // Easiest is to calculate it from the pageSizeBytes
     GUInt32 blockSizeBytes() { 
-        return poDS->current.pageSizeBytes / poDS->current.pagesize.c;
+	return poDS->current.pageSizeBytes / poDS->current.pagesize.c;
     }
 
     // Compresion and decompression functions.  To be overwritten by specific implementations
@@ -476,7 +484,7 @@ class JPEG_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
     JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) : 
-        GDALMRFRasterBand(pDS,image,b,int(level)) {};
+	GDALMRFRasterBand(pDS,image,b,int(level)) {};
     virtual ~JPEG_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
@@ -528,33 +536,33 @@ protected:
 class GDALMRFLRasterBand : public GDALPamRasterBand {
 public:
     GDALMRFLRasterBand(GDALMRFRasterBand *b) { 
-        pBand = b ;
-        eDataType = b->GetRasterDataType();
-        b->GetBlockSize(&nBlockXSize, &nBlockYSize);
-        eAccess = b->GetAccess();
-        nRasterXSize = b->GetXSize();
-        nRasterYSize = b->GetYSize();
+	pBand = b ;
+	eDataType = b->GetRasterDataType();
+	b->GetBlockSize(&nBlockXSize, &nBlockYSize);
+	eAccess = b->GetAccess();
+	nRasterXSize = b->GetXSize();
+	nRasterYSize = b->GetYSize();
     }
     virtual CPLErr IReadBlock(int xblk, int yblk, void *buffer) {
-        return pBand->IReadBlock(xblk,yblk,buffer);
+	return pBand->IReadBlock(xblk,yblk,buffer);
     }
     virtual CPLErr IWriteBlock(int xblk, int yblk, void *buffer) {
-        return pBand->IWriteBlock(xblk,yblk,buffer);
+	return pBand->IWriteBlock(xblk,yblk,buffer);
     }
     virtual GDALColorTable *GetColorTable() {
-        return pBand->GetColorTable();
+	return pBand->GetColorTable();
     }
     virtual GDALColorInterp GetColorInterpretation() {
-        return pBand->GetColorInterpretation();
+	return pBand->GetColorInterpretation();
     }
     virtual double  GetNoDataValue(int * pbSuccess) {
-        return pBand->GetNoDataValue(pbSuccess);
+	return pBand->GetNoDataValue(pbSuccess);
     }
     virtual double  GetMinimum(int *b) {
-        return pBand->GetMinimum(b);
+	return pBand->GetMinimum(b);
     }
     virtual double  GetMaximum(int *b) {
-        return pBand->GetMaximum(b);
+	return pBand->GetMaximum(b);
     }
     
 protected:
