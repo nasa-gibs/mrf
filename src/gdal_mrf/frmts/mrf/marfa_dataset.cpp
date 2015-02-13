@@ -58,12 +58,15 @@
 using std::vector;
 using std::string;
 
+// Initialize as invalid
 GDALMRFDataset::GDALMRFDataset()
-
 {
     //		     X0   Xx   Xy  Y0    Yx   Yy   
     double gt[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
-    memcpy( GeoTransform, gt, 6*sizeof(double));
+
+    ILImage img;
+
+    memcpy(GeoTransform, gt, sizeof(gt));
     bGeoTransformValid=FALSE;
     ifp.FP = dfp.FP = 0;
     pbuffer=0;
@@ -72,12 +75,12 @@ GDALMRFDataset::GDALMRFDataset()
     scale = 0; // Unset
     bNeedsFlush = 0;
     level=-1;
-    optlist=0;
-    cds=0;
+    tile = ILSize();
+    optlist = NULL;
+    cds=NULL;
     poSrcDS=NULL;
-    pszProjection=0;
-    poColorTable=0;
-    tile=ILSize();
+    pszProjection=NULL;
+    poColorTable=NULL;
 }
 
 void GDALMRFDataset::SetPBuffer(unsigned int sz)
@@ -557,7 +560,7 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
     SetProjection(cds->GetProjectionRef());
 
     SetMetadataItem("INTERLEAVE",OrderName(current.order),"IMAGE_STRUCTURE");
-    SetMetadataItem("COMPRESS",CompName(current.comp),"IMAGE_STRUCTURE");
+    SetMetadataItem("COMPRESSION",CompName(current.comp),"IMAGE_STRUCTURE");
 
     for (int i=0;i<6;i++)
 	GeoTransform[i]=cds->GeoTransform[i];
@@ -592,7 +595,7 @@ inline bool on(const char *pszValue) {
 }
 
 /**
-*\brief Initialize the image structure 
+*\brief Initialize the image structure from XML
 * 
 * @param image, the structure to be initialized
 * @param config, the Raster node of the xml structure
@@ -796,7 +799,7 @@ static CPLErr Init_ILImage(ILImage &image, CPLXMLNode *config, GDALMRFDataset *d
 	image.pagesize.x * image.pagesize.y * image.pagesize.z * image.pagesize.c;
 
     // Calculate the page count, including the total for the level
-    pcount(image.pcount,image.size,image.pagesize);
+    image.pagecount = pcount(image.size,image.pagesize);
 
     // Data File Name and offset
     image.datfname = getFname(defimage, "DataFile", ds->GetFname(), ILComp_Ext[image.comp]);
@@ -985,27 +988,26 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     if (CE_None!=ret)
 	return ret;
 
-    // Bounding box
-    CPLXMLNode *bbox = CPLGetXMLNode(config, "GeoTags.BoundingBox");
-    if (NULL!=bbox) {
-	double x0,x1,y0,y1;
+	// Bounding box
+	CPLXMLNode *bbox = CPLGetXMLNode(config, "GeoTags.BoundingBox");
+	if (NULL!=bbox) {
+		double x0,x1,y0,y1;
 
-	x0=atof(CPLGetXMLValue(bbox,"minx","0"));
-	x1=atof(CPLGetXMLValue(bbox,"maxx","1"));
-	y1=atof(CPLGetXMLValue(bbox,"maxy","1"));
-	y0=atof(CPLGetXMLValue(bbox,"miny","0"));
+		x0=atof(CPLGetXMLValue(bbox,"minx","0"));
+		x1=atof(CPLGetXMLValue(bbox,"maxx","1"));
+		y1=atof(CPLGetXMLValue(bbox,"maxy","1"));
+		y0=atof(CPLGetXMLValue(bbox,"miny","0"));
 
-	GeoTransform[0]=x0;
-	GeoTransform[1]=(x1-x0)/full.size.x;
-	GeoTransform[2]=0;
-	GeoTransform[3]=y1;
-	GeoTransform[4]=0;
-	GeoTransform[5]=(y0-y1)/full.size.y;
-	bGeoTransformValid=TRUE;
-    }
+		GeoTransform[0]=x0;
+		GeoTransform[1]=(x1-x0)/full.size.x;
+		GeoTransform[2]=0;
+		GeoTransform[3]=y1;
+		GeoTransform[4]=0;
+		GeoTransform[5]=(y0-y1)/full.size.y;
+		bGeoTransformValid=TRUE;
+	}
 
-    SetProjection(CPLGetXMLValue(config,"GeoTags.Projection",
-	ProjToWKT("EPSG:4326")));
+    SetProjection(CPLGetXMLValue(config,"GeoTags.Projection",""));
 
     // Copy the full size to current, data and index are not yet open
     current = full;
@@ -1014,7 +1016,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     // Dataset metadata setup
     SetMetadataItem("INTERLEAVE",OrderName(current.order), "IMAGE_STRUCTURE");
-    SetMetadataItem("COMPRESS",CompName(current.comp), "IMAGE_STRUCTURE");
+    SetMetadataItem("COMPRESSION",CompName(current.comp), "IMAGE_STRUCTURE");
     if (is_Endianess_Dependent(current.dt, current.comp))
 	SetMetadataItem("NETBYTEORDER", current.nbo?"TRUE":"FALSE", "IMAGE_STRUCTURE");
 
@@ -1127,14 +1129,14 @@ GDALDataset *GDALMRFDataset::GetSrcDS() {
 GIntBig GDALMRFDataset::AddOverviews(int scale) {
     // Fit the overlays
     ILImage img=full;
-    while (1 != img.pcount.x*img.pcount.y)
+    while (1 != img.pagecount.x*img.pagecount.y)
     {
 	// Adjust the offsets for indices
-	img.idxoffset += sizeof(ILIdx)*img.pcount.l;
+	img.idxoffset += sizeof(ILIdx)*img.pagecount.l;
 	img.size.x = pcount(img.size.x, scale);
 	img.size.y = pcount(img.size.y, scale);
 	img.size.l++; // Increment the level
-	pcount(img.pcount, img.size, img.pagesize);
+	img.pagecount = pcount(img.size, img.pagesize);
 	// Create and register the the overviews for each band
 	for (int i=1;i<=nBands;i++) {
 	    GDALMRFRasterBand *b=(GDALMRFRasterBand *)GetRasterBand(i);
@@ -1144,7 +1146,7 @@ GIntBig GDALMRFDataset::AddOverviews(int scale) {
     }
 
     // Last adjustment, should be a single set of c and z tiles
-    return img.idxoffset + sizeof(ILIdx)*img.pcount.l;
+    return img.idxoffset + sizeof(ILIdx)*img.pagecount.l;
 }
 
 //
@@ -1166,7 +1168,7 @@ static CPLString PrintDouble(double d)
 
 
 /**
- *\Brief Create an MRF file from an existing DS
+ *\Brief Create an MRF file from an existing dataset
  */
 GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename, 
 					GDALDataset *poSrcDS, int bStrict, char **papszOptions, 
@@ -1265,7 +1267,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     comp = CompToken(poPBand->GetMetadataItem("COMPRESSION","IMAGE_STRUCTURE"),comp);
 
     // Input options, overrides
-    pszValue=CSLFetchNameValue(papszOptions,"COMPRESS");
+    pszValue = CSLFetchNameValue(papszOptions,"COMPRESS");
     if (pszValue && IL_ERR_COMP==(comp=CompToken(pszValue))) {
 	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: Compression %s is unknown, "
 	    "using PNG", pszValue);
@@ -1538,7 +1540,17 @@ GDALDataType eType, char ** papszOptions)
     int quality = 85;
 
     poDS = new GDALMRFDataset();
+
+    // Need to build up this node with everything that 
+    CPLXMLNode *config = NULL;
+
+    Init_ILImage(img, config, poDS);
+    // Set the guard
     poDS->bNeedsFlush = 1;
+    img.pagesize = page;
+    poDS->full = img;
+    poDS->current = img;
+
     return poDS;
 }
 

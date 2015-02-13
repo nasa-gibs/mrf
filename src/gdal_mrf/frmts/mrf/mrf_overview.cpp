@@ -304,6 +304,7 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		case GDT_Int32:     average(GInt32);
 		case GDT_Float32:   average(float);
 		case GDT_Float64:   average(double);
+		default: break;
 		}
 #undef average
 

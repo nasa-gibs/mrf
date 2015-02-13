@@ -31,7 +31,6 @@
 
 #include "marfa.h"
 #include <zlib.h>
-// #include <algorithm>
 
 static const char *ILC_N[]={ "PNG", "PPNG", "JPEG", "NONE", "DEFLATE", "TIF", 
 #if defined(LERC)
@@ -158,17 +157,31 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
 // If scale is zero, only base image
 GIntBig IdxSize(const ILImage &full, const int scale) {
     ILImage img=full;
-    pcount(img.pcount,img.size,img.pagesize);
-    GIntBig sz = img.pcount.l;
-    while ( scale != 0 && 1 != img.pcount.x * img.pcount.y )
+    img.pagecount = pcount(img.size, img.pagesize);
+    GIntBig sz = img.pagecount.l;
+    while (scale != 0 && 1 != img.pagecount.x * img.pagecount.y)
     {
 	img.size.x = pcount(img.size.x, scale);
 	img.size.y = pcount(img.size.y, scale);
 	img.size.l++;
-	pcount(img.pcount, img.size, img.pagesize);
-	sz += img.pcount.l;
+	img.pagecount = pcount(img.size, img.pagesize);
+	sz += img.pagecount.l;
     }
     return sz*sizeof(ILIdx);
+}
+
+ILImage::ILImage()
+{
+    dataoffset = idxoffset = 0;
+    quality = 85;
+    size = ILSize(1, 1, 1, 1, 0);
+    pagesize = ILSize(384, 384, 1, 1, 0);
+    pagecount = pcount(size, pagesize);
+    comp = IL_PNG;
+    order = IL_Interleaved;
+    datfname = NULL;
+    idxfname = NULL;
+    ci = GCI_Undefined;
 }
 
 /**
@@ -238,8 +251,8 @@ double getXMLNum(CPLXMLNode *node, const char *pszPath, double def)
 GIntBig IdxOffset(const ILSize &pos, const ILImage &img) 
 {
     return img.idxoffset+sizeof(ILIdx)*
-	((GIntBig)pos.c+img.pcount.c*(pos.x+img.pcount.x*
-	(pos.y+img.pcount.y*pos.z)));
+	((GIntBig)pos.c+img.pagecount.c*(pos.x+img.pagecount.x*
+	(pos.y+img.pagecount.y*pos.z)));
 }
 
 // Is compression type endianess dependent?
@@ -266,6 +279,7 @@ void GDALRegister_mrf(void)
 	driver->SetDescription("MRF");
 	driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Meta Raster Format");
 	driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_marfa.html");
+		driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES" );
 
 	// These will need to be revisited, do we support complex data types too?
 	driver->SetMetadataItem(GDAL_DMD_CREATIONDATATYPES,

@@ -110,6 +110,7 @@ static int isAllVal(GDALDataType gt, void *b, size_t bytecount, double ndv)
 	TEST_T(GDT_Int32, GInt32);
 	TEST_T(GDT_Float32, float);
 	TEST_T(GDT_Float64, double);
+	default : break;
     }
 #undef TEST_T
 
@@ -195,8 +196,8 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nRasterYSize = img.size.y;
     nBlockXSize = img.pagesize.x;
     nBlockYSize = img.pagesize.y;
-    nBlocksPerRow = img.pcount.x;
-    nBlocksPerColumn = img.pcount.y;
+    nBlocksPerRow = img.pagecount.x;
+    nBlocksPerColumn = img.pagecount.y;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
     deflate = CSLFetchBoolean(poDS->optlist, "DEFLATE", FALSE);
     // Bring the quality to 0 to 9
@@ -312,10 +313,11 @@ CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
 	case GDT_Int32:     return bf(GInt32);
 	case GDT_Float32:   return bf(float);
 	case GDT_Float64:   return bf(double);
+	default: break;
     }
 #undef bf
-
-    return CE_None;
+    // Should exit before
+    return CE_Failure;
 }
 
 /*\brief Interleave block read

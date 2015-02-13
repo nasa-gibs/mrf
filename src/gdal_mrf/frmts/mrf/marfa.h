@@ -102,14 +102,15 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz);
  *
  */
 
-typedef struct {
+typedef struct ILImage {
+    ILImage();
     GIntBig dataoffset;
     GIntBig idxoffset;
     GInt32 quality;
     GInt32 pageSizeBytes;
     ILSize size;
     ILSize pagesize;
-    ILSize pcount;
+    ILSize pagecount;
     ILCompression comp;
     ILOrder order;
     int nbo;
@@ -199,23 +200,20 @@ int ZPack(const buf_mgr &src, buf_mgr &dst, int flags);
 int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess);
 
 // Number of pages of size psz needed to hold n elements
-inline int pcount(const int n, const int sz) {
-    return (n-1) / sz +1;
-}
-
-// Total page count for a given image, pos is in pages
-inline int pcount(const ILSize &pages) {
-    return pages.x*pages.y*pages.z*pages.c;
+static inline int pcount(const int n, const int sz) {
+    return 1 + (n-1) / sz;
 }
 
 // Set up page count
-inline void pcount(ILSize &pages, const ILSize &size, const ILSize &psz) {
-    pages.x = pcount(size.x,psz.x);
-    pages.y = pcount(size.y,psz.y);
-    pages.c = pcount(size.c,psz.c);
-    pages.z = pcount(size.z,psz.z);
-    // since pages don't have overviews, use it to hold total number of pages
-    pages.l = pcount(pages);
+// since page count can't have overviews, use it to hold total number of pages
+static inline const ILSize pcount(const ILSize &size, const ILSize &psz) {
+    ILSize pcnt = ILSize(
+	pcount(size.x, psz.x),
+	pcount(size.y, psz.y),
+	pcount(size.c, psz.c),
+	pcount(size.z, psz.z));
+    pcnt.l = pcnt.x*pcnt.y*pcnt.z*pcnt.c;
+    return pcnt;
 }
 
 // Wrapper around the VISFile, remembers how the file was opened
