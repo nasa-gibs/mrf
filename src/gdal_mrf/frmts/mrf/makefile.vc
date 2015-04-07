@@ -7,7 +7,7 @@ OBJ	=	Tif_band.obj Raw_band.obj PNG_band.obj JPEG_band.obj mrf_band.obj mrf_over
 !IF EXIST(LERC_Band.cpp)
 LERC	=	TRUE
 EXTRAFLAGS	=	/DLERC
-OBJ	=	$(OBJ) BitMask.obj BitStuffer.obj RLE.obj CntZImage.obj LERC_Band.obj
+OBJ	=	$(OBJ) BitStuffer.obj CntZImage.obj LERC_Band.obj BitMask.obj
 !ENDIF
 
 PLUGIN_DLL =	gdal_mrf.dll
@@ -22,7 +22,7 @@ default:	$(OBJ)
 	xcopy /D  /Y *.obj ..\o
 
 !IFDEF LERC
-$(OBJ):	marfa.h BitMask.h BitStuffer.h CntZImage.h Defines.h Image.h RLE.h TImage.hpp
+$(OBJ):	marfa.h BitMask.h BitStuffer.h CntZImage.h Defines.h Image.h TImage.hpp
 !ELSE
 $(OBJ): marfa.h
 !ENDIF

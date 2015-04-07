@@ -429,7 +429,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	ob = poDS->pbuffer;
 
     // Fill buffer with NoData if clipping
-    if (clip) 
+    if (clip)
 	FillBlock(ob);
 
     // Use the dataset RasterIO to read all bands
@@ -586,7 +586,8 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     ILIdx tinfo;
     GInt32 cstride=img.pagesize.c;
     ILSize req(xblk,yblk,0,m_band/cstride,m_l);
-    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d\n", xblk, yblk, m_band, m_l);
+    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset %lld\n", xblk, yblk, m_band, m_l,
+	IdxOffset(req,img));
 
     if (CE_None != poDS->ReadTileIdx(tinfo, req, img)) {
 	CPLError( CE_Failure, CPLE_AppDefined,
