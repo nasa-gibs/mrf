@@ -210,9 +210,9 @@ static inline const ILSize pcount(const ILSize &size, const ILSize &psz) {
     ILSize pcnt = ILSize(
 	pcount(size.x, psz.x),
 	pcount(size.y, psz.y),
-	pcount(size.c, psz.c),
-	pcount(size.z, psz.z));
-    pcnt.l = pcnt.x*pcnt.y*pcnt.z*pcnt.c;
+	pcount(size.z, psz.z),
+	pcount(size.c, psz.c));
+	pcnt.l = pcnt.x*pcnt.y*pcnt.z*pcnt.c;
     return pcnt;
 }
 

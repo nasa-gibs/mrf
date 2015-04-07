@@ -179,8 +179,6 @@ ILImage::ILImage()
     pagecount = pcount(size, pagesize);
     comp = IL_PNG;
     order = IL_Interleaved;
-    datfname = NULL;
-    idxfname = NULL;
     ci = GCI_Undefined;
 }
 
