@@ -30,6 +30,7 @@
  */
 
 #include "marfa.h"
+#include <zlib.h>
 
 static const char *ILC_N[]={ "PNG", "PPNG", "JPEG", "NONE", "DEFLATE", "TIF", 
 #if defined(LERC)
@@ -51,36 +52,6 @@ CPL_C_START
 void GDALRegister_mrf(void);
 void GDALDeregister_mrf( GDALDriver * ) {};
 CPL_C_END
-
-/************************************************************************/
-/*                           BandInterp()                               */
-/************************************************************************/
-
-/**
- * \brief Utility function to calculate color band interpretation.
- * Only handles Gray, GrayAlpha, RGB and RGBA, based on total band count
- *
- * @param nbands is the total number of bands in the image
- *
- * @param band is the band number, starting with 1
- *
- * @return GDALColorInterp of the band
- */
-
-GDALColorInterp BandInterp(int nbands, int band) 
-{
-    switch (nbands) {
-    case 1: return GCI_GrayIndex;
-    case 2: return ((band==1)?GCI_GrayIndex:GCI_AlphaBand);
-    case 3: // RGB
-    case 4: // RBGA
-        if (band<3)
-            return ((band==1)?GCI_RedBand:GCI_GreenBand);
-        return ((band==3)?GCI_BlueBand:GCI_AlphaBand);
-    default:
-        return GCI_Undefined;
-    }
-}
 
 /**
  *  Get the string for a compression type
@@ -107,10 +78,10 @@ ILCompression CompToken(const char *opt, ILCompression def)
     int i;
     if (NULL==opt) return def;
     for (i=0; ILCompression(i)<IL_ERR_COMP; i++)
-        if (EQUAL(opt,ILComp_Name[i]))
-            break;
+	if (EQUAL(opt,ILComp_Name[i]))
+	    break;
     if (IL_ERR_COMP==ILCompression(i)) 
-        return def;
+	return def;
     return ILCompression(i);
 }
 
@@ -123,10 +94,10 @@ ILOrder OrderToken(const char *opt, ILOrder def)
     int i;
     if (NULL==opt) return def;
     for (i=0; ILOrder(i)<IL_ERR_ORD; i++)
-        if (EQUAL(opt,ILOrder_Name[i]))  
-            break;
+	if (EQUAL(opt,ILOrder_Name[i]))  
+	    break;
     if (IL_ERR_ORD==ILOrder(i)) 
-        return def;
+	return def;
     return ILOrder(i);
 }
 
@@ -137,7 +108,7 @@ ILOrder OrderToken(const char *opt, ILOrder def)
 std::ostream& operator<<(std::ostream &out, const ILSize& sz)
 {
     out << "X=" << sz.x << ",Y=" << sz.y << ",Z=" << sz.z 
-        << ",C=" << sz.c << ",L=" << sz.l;
+	<< ",C=" << sz.c << ",L=" << sz.l;
     return out;
 }
 
@@ -153,68 +124,62 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
     FILE *fp=fopen(fname,"wb");
     switch(sz.c) {
     case 4: 
-        {
-            fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-            char *d=(char *)data;
-            for(int i=sz.x*sz.y;i;i--) {
-                fwrite(d,3,1,fp);
-                d+=4;
-            }
-            break;
-        }
+	{
+	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	    char *d=(char *)data;
+	    for(int i=sz.x*sz.y;i;i--) {
+		fwrite(d,3,1,fp);
+		d+=4;
+	    }
+	    break;
+	}
     case 3:
-        {
-            fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-            fwrite(data,sz.x*sz.y,3,fp);
-            break;
-        }
+	{
+	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	    fwrite(data,sz.x*sz.y,3,fp);
+	    break;
+	}
     case 1:
-        {
-            fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
-            fwrite(data,sz.x,sz.y,fp);
-            break;
-        }
+	{
+	    fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
+	    fwrite(data,sz.x,sz.y,fp);
+	    break;
+	}
     default:
-        fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
-        return;
+	fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
+	return;
     }
     fclose(fp);
 }
 #endif
 
-// CSLFetchBoolean is currently broken, so we overwrite it
-int FetchBoolean( char **papszStrList, const char *pszKey, int bDefault )
-
-{
-    const char *pszValue;
-
-    if (CSLFindString( papszStrList, pszKey ) == -1)
-        return bDefault;
-
-//    pszValue = papszStrList[CSLFindString( papszStrList, pszKey)];
-    pszValue = CSLFetchNameValue(papszStrList, pszKey );
-    if( pszValue )
-        return CSLTestBoolean( pszValue );
-
-    return TRUE;
-}
-
-
 // Returns the size of the index for image and overlays
 // If scale is zero, only base image
 GIntBig IdxSize(const ILImage &full, const int scale) {
     ILImage img=full;
-    pcount(img.pcount,img.size,img.pagesize);
-    GIntBig sz = img.pcount.l;
-    while ( scale != 0 && 1 != img.pcount.x * img.pcount.y )
+    img.pagecount = pcount(img.size, img.pagesize);
+    GIntBig sz = img.pagecount.l;
+    while (scale != 0 && 1 != img.pagecount.x * img.pagecount.y)
     {
 	img.size.x = pcount(img.size.x, scale);
 	img.size.y = pcount(img.size.y, scale);
 	img.size.l++;
-	pcount(img.pcount, img.size, img.pagesize);
-	sz += img.pcount.l;
+	img.pagecount = pcount(img.size, img.pagesize);
+	sz += img.pagecount.l;
     }
     return sz*sizeof(ILIdx);
+}
+
+ILImage::ILImage()
+{
+    dataoffset = idxoffset = 0;
+    quality = 85;
+    size = ILSize(1, 1, 1, 1, 0);
+    pagesize = ILSize(384, 384, 1, 1, 0);
+    pagecount = pcount(size, pagesize);
+    comp = IL_PNG;
+    order = IL_Interleaved;
+    ci = GCI_Undefined;
 }
 
 /**
@@ -228,8 +193,8 @@ CPLString getFname(const CPLString &in, const char *ext)
     CPLString ret(in);
 
     if ((strlen(ext)==4) && (strlen(in)>4)) {
-        ret.replace(ret.size()-4,4,ext);
-        return ret;
+	ret.replace(ret.size()-4,4,ext);
+	return ret;
     }
 
     return CPLString(ext);
@@ -240,6 +205,9 @@ CPLString getFname(const CPLString &in, const char *ext)
  * If the token is not defined by CPLGetXMLValue, if the extension of the in name is .xml, 
  * it returns the token with the extension changed to defext.  
  * Otherwise it retuns the token itself
+ * It is pretty hard to separate local vs remote due to the gdal file name ornaments
+ * Absolute file names are: ?:/* or /*
+ * 
  */
 
 CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, const char *def) 
@@ -247,11 +215,15 @@ CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, con
     CPLString fn = CPLGetXMLValue(node, token, "");
     if (fn.size() == 0) // Not provided
 	return getFname(in, def);
+    int slashPos = fn.find_first_of("\\/");
 
-    int slash = fn.find_first_of("\\/");
-    // Absolute path
-    if (slash != fn.npos && in.find_first_of("\\/") != in.npos && fn.find_first_not_of('.') != slash )
+    // Does it look like an absolute path or we wont't find the basename of in
+    if (slashPos == 0				    // Starts with slash
+	|| (slashPos == 2 && fn[1] == ':')	    // Starts with disk letter column
+	|| !(slashPos == fn.find_first_not_of('.')) // Does not start with dots and then slash
+	|| in.find_first_of("\\/") == in.npos)      // We con't get a basename from in
 	return fn;
+
     // Relative path, prepand the path from the in file name
     return in.substr(0, in.find_last_of("\\/")+1) + fn;
 }
@@ -277,8 +249,8 @@ double getXMLNum(CPLXMLNode *node, const char *pszPath, double def)
 GIntBig IdxOffset(const ILSize &pos, const ILImage &img) 
 {
     return img.idxoffset+sizeof(ILIdx)*
-        ((GIntBig)pos.c+img.pcount.c*(pos.x+img.pcount.x*
-        (pos.y+img.pcount.y*pos.z)));
+	((GIntBig)pos.c+img.pagecount.c*(pos.x+img.pagecount.x*
+	(pos.y+img.pagecount.y*pos.z)));
 }
 
 // Is compression type endianess dependent?
@@ -301,49 +273,50 @@ void GDALRegister_mrf(void)
     GDALDriver *driver;
 
     if (GDALGetDriverByName("MRF") == NULL) {
-        driver = new GDALDriver();
-        driver->SetDescription("MRF");
-        driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Meta Raster Format");
-        driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_marfa.html");
+	driver = new GDALDriver();
+	driver->SetDescription("MRF");
+	driver->SetMetadataItem(GDAL_DMD_LONGNAME, "Meta Raster Format");
+	driver->SetMetadataItem(GDAL_DMD_HELPTOPIC, "frmt_marfa.html");
+		driver->SetMetadataItem(GDAL_DCAP_VIRTUALIO, "YES" );
 
-        // These will need to be revisited, do we support complex data types too?
-        driver->SetMetadataItem(GDAL_DMD_CREATIONDATATYPES,
+	// These will need to be revisited, do we support complex data types too?
+	driver->SetMetadataItem(GDAL_DMD_CREATIONDATATYPES,
 				"Byte UInt16 Int16 Int32 UInt32 Float32 Float64");
 
-        driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
-            "<CreationOptionList>\n"
-            "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>\n"
-            "       <Value>JPEG</Value>"
-            "       <Value>PNG</Value>"
-            "       <Value>PPNG</Value>"
+	driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
+	    "<CreationOptionList>\n"
+	    "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>\n"
+	    "       <Value>JPEG</Value>"
+	    "       <Value>PNG</Value>"
+	    "       <Value>PPNG</Value>"
 	    "	    <Value>TIF</Value>"
-            "       <Value>DEFLATE</Value>"
-            "       <Value>NONE</Value>"
+	    "       <Value>DEFLATE</Value>"
+	    "       <Value>NONE</Value>"
 #if defined(LERC)
 	    "	    <Value>LERC</Value>"
 #endif
-            "   </Option>\n"
-            "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
-            "       <Value>PIXEL</Value>"
-            "       <Value>BAND</Value>"
-            "   </Option>\n"
-            "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
+	    "   </Option>\n"
+	    "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
+	    "       <Value>PIXEL</Value>"
+	    "       <Value>BAND</Value>"
+	    "   </Option>\n"
+	    "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
 	    "	<Option name='OPTIONS' type='string' description='Freeform dataset parameters'/>\n"
-            "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
-            "   <Option name='BLOCKXSIZE' type='int' description='Page x size, default=512'/>\n"
-            "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
-            "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
+	    "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
+	    "   <Option name='BLOCKXSIZE' type='int' description='Page x size, default=512'/>\n"
+	    "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
+	    "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
 //	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
 	    "	<Option name='UNIFORM_SCALE' type='int' description='Uniform overlays in MRF, only 2 is tested'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
-            "</CreationOptionList>\n");
+	    "</CreationOptionList>\n");
 
-        driver->pfnOpen = GDALMRFDataset::Open;
-        driver->pfnIdentify = GDALMRFDataset::Identify;
-        driver->pfnUnloadDriver = GDALDeregister_mrf;
-        driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
-        GetGDALDriverManager()->RegisterDriver(driver);
+	driver->pfnOpen = GDALMRFDataset::Open;
+	driver->pfnIdentify = GDALMRFDataset::Identify;
+	driver->pfnUnloadDriver = GDALDeregister_mrf;
+	driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
+	GetGDALDriverManager()->RegisterDriver(driver);
     }
 }
 
@@ -354,16 +327,17 @@ GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *pDS, const ILImage &image, i
     switch(pDS->current.comp)
     {
     case IL_PPNG: // Uses the PNG code, just has a palette in each PNG
-    case IL_PNG:  bnd = new PNG_Band(pDS,image,b,level); break;
+    case IL_PNG:  bnd = new PNG_Band(pDS,image,b,level);  break;
     case IL_JPEG: bnd = new JPEG_Band(pDS,image,b,level); break;
-    case IL_NONE: bnd = new Raw_Band(pDS,image,b,level); break;
-    case IL_ZLIB: bnd = new ZLIB_Band(pDS,image,b,level); break;
-    case IL_TIF:  bnd = new TIF_Band(pDS,image,b,level); break;
+    case IL_NONE: bnd = new Raw_Band(pDS,image,b,level);  break;
+    // ZLIB is a just raw, deflated band
+    case IL_ZLIB: bnd = new Raw_Band(pDS,image,b,level);  bnd->SetDeflate(1); break;
+    case IL_TIF:  bnd = new TIF_Band(pDS,image,b,level);  break;
 #if defined(LERC)
     case IL_LERC: bnd = new LERC_Band(pDS,image,b,level); break;
 #endif
     default:
-        return NULL;
+	return NULL;
     }
     // Copy the RW mode from the dataset
     bnd->SetAccess(pDS->eAccess);
@@ -410,7 +384,7 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement )
 
 {
     if( psRoot == NULL || pszElement == NULL )
-        return NULL;
+	return NULL;
 
     // If the strings starts with '=', skip it and test the root
     // If not, start testing with the next sibling
@@ -418,10 +392,10 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement )
     else psRoot=psRoot->psNext;
 
     for (;psRoot!=NULL;psRoot=psRoot->psNext)
-        if ((psRoot->eType == CXT_Element ||
-             psRoot->eType == CXT_Attribute)
-             && EQUAL(pszElement,psRoot->pszValue))
-            return psRoot;
+	if ((psRoot->eType == CXT_Element ||
+	     psRoot->eType == CXT_Attribute)
+	     && EQUAL(pszElement,psRoot->pszValue))
+	    return psRoot;
 
     return NULL;
 }
@@ -441,7 +415,7 @@ void XMLSetAttributeVal(CPLXMLNode *parent,const char* pszName,
 }
 
 CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
-        const char*pszName,const ILSize &sz,const char *frmt)
+	const char*pszName,const ILSize &sz,const char *frmt)
 {
     CPLXMLNode *node=CPLCreateXMLNode(parent,CXT_Element,pszName);
     XMLSetAttributeVal(node,"x",sz.x,frmt);
@@ -480,9 +454,6 @@ GDALColorEntry HSVSwap(const GDALColorEntry& cein) {
  */
 
 int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
-    // Don't check anything when reading files
-    if (eAccess != GA_Update)
-        return true;
 
     VSIStatBufL statb;
     if (VSIStatL(fname, &statb))
@@ -490,18 +461,82 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
     if (statb.st_size >= sz)
 	return true;
 
+    // Don't change anything unless updating
+    if (eAccess != GA_Update)
+	return false;
+
     // There is no ftruncate in VSI, only truncate()
     VSILFILE *ifp = VSIFOpenL(fname, "r+b");
 
-// There is no VSIFTruncateL in gdal 1.8 and lower
+// There is no VSIFTruncateL in gdal 1.8 and lower, so seek and write something at the end
 #if GDAL_VERSION_MAJOR == 1 && GDAL_VERSION_MINOR <= 8
-
-    ILIdx tidx = {0,0};
-    VSIFSeekL(ifp, sz - sizeof(ILIdx), SEEK_SET);
-    int ret = ( sizeof(tidx) == VSIFWriteL(&tidx, sizeof(tidx),1,ifp) );
+    int zero=0;
+    VSIFSeekL(ifp, sz - sizeof(zero), SEEK_SET);
+    int ret = (sizeof(zero) == VSIFWriteL(&zero, sizeof(zero), 1,ifp));
 #else
     int ret = VSIFTruncateL(ifp, sz);
 #endif
     VSIFCloseL(ifp);
     return !ret;
 };
+
+// Similar to compress2() but with flags to control zlib features
+// Returns true if it worked
+int ZPack(const buf_mgr &src, buf_mgr &dst, int flags) {
+    z_stream stream = {0};
+    int err;
+
+    stream.next_in = (Bytef*)src.buffer;
+    stream.avail_in = (uInt)src.size;
+    stream.next_out = (Bytef*)dst.buffer;
+    stream.avail_out = (uInt)dst.size;
+
+    int level = std::min(9, flags & ZFLAG_LMASK);
+    int wb = MAX_WBITS;
+    // if gz flag is set, ignore raw request
+    if (flags & ZFLAG_GZ) wb += 16;
+    else if (flags & ZFLAG_RAW) wb = -wb;
+    int memlevel = 8; // Good compromise
+    int strategy = (flags & ZFLAG_SMASK) >> 6;
+    if (strategy > 4) strategy = 0;
+
+    err = deflateInit2(&stream, level, Z_DEFLATED, wb, memlevel, strategy);
+    if (err != Z_OK) return err;
+
+    err = deflate(&stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+	deflateEnd(&stream);
+	return false;
+    }
+    dst.size = stream.total_out;
+    err = deflateEnd(&stream);
+    return err == Z_OK;
+}
+
+// Similar to uncompress() from zlib, accepts the ZFLAG_RAW
+// Return true if it worked
+int ZUnPack(const buf_mgr &src, buf_mgr &dst, int flags) {
+
+    z_stream stream = {0};
+    int err;
+
+    stream.next_in = (Bytef*)src.buffer;
+    stream.avail_in = (uInt)src.size;
+    stream.next_out = (Bytef*)dst.buffer;
+    stream.avail_out = (uInt)dst.size;
+
+    // 32 means autodetec gzip or zlib header, negative 15 is for raw
+    int wb = (ZFLAG_RAW & flags) ? -MAX_WBITS: 32 + MAX_WBITS;
+    err = inflateInit2(&stream, wb);
+    if (err != Z_OK) return false;
+
+    err = inflate(&stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+	inflateEnd(&stream);
+	return false;
+    }
+    dst.size = stream.total_out;
+    err = inflateEnd(&stream);
+    return err == Z_OK;
+}
+

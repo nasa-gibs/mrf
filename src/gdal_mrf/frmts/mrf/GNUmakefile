@@ -2,14 +2,21 @@
 
 include ../../GDALmake.opt
 
-OBJ	=	marfa_dataset.o mrf_band.o JPEG_band.o PNG_band.o ZLIB_band.o Raw_band.o Tif_band.o mrf_util.o mrf_overview.o
+FILES	=	marfa_dataset mrf_band JPEG_band PNG_band Raw_band Tif_band mrf_util mrf_overview
+OBJ 	=	$(addsuffix .o, $(FILES))
+LO_O_OBJ	=	$(addsuffix .lo,$(basename $(O_OBJ)))
 
-CPPFLAGS	:= -fPIC	$(GDAL_INCLUDE) $(CPPFLAGS)
+ifneq ("$(wildcard LERC_band.cpp)","")
+FILES	:= LERC_band BitMask BitStuffer CntZImage $(FILES)
+CPPFLAGS := -DLERC
+endif
+
+CPPFLAGS	:= -fPIC $(GDAL_INCLUDE) $(CPPFLAGS)
 
 default:	$(OBJ:.o=.$(OBJ_EXT))
 
 clean:
-	rm -rf *.o *.lo .libs/$(OBJ) .libs $(O_OBJ) gdal_mrf.so.1
+	rm -rf *.o *.lo .libs/$(OBJ) .libs $(O_OBJ) $(LO_O_OBJ) gdal_mrf.so.1
 
 install-obj:	$(O_OBJ:.o=.$(OBJ_EXT))
 

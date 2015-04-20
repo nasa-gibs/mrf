@@ -63,7 +63,7 @@ void pngEH(png_struct *png, png_const_charp message)
 // Read memory handlers for PNG
 // No check for attempting to read past the end of the buffer
 
-void read_png(png_structp pngp, png_bytep data, png_size_t length)
+static void read_png(png_structp pngp, png_bytep data, png_size_t length)
 {
     buf_mgr *pmgr=(buf_mgr *)png_get_io_ptr(pngp);
     memcpy(data,pmgr->buffer,length);
@@ -71,7 +71,7 @@ void read_png(png_structp pngp, png_bytep data, png_size_t length)
     pmgr->size-=length;
 }
 
-void write_png( png_structp pngp, png_bytep data, png_size_t length) {
+static void write_png( png_structp pngp, png_bytep data, png_size_t length) {
     buf_mgr *mgr=(buf_mgr *) png_get_io_ptr(pngp);
 
     if (length<=mgr->size) {
