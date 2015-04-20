@@ -73,10 +73,10 @@ GDALMRFDataset::GDALMRFDataset()
     pbsize=0;
     bdirty=0;
     scale = 0; // Unset
+    hasVersions = false;
     bNeedsFlush = 0;
     level=-1;
     tile = ILSize();
-    optlist = NULL;
     cds=NULL;
     poSrcDS=NULL;
     pszProjection=NULL;
@@ -102,8 +102,6 @@ GDALMRFDataset::~GDALMRFDataset()
     delete poSrcDS;
     delete poColorTable;
 
-    // OK to pass null
-    CSLDestroy(optlist);
     // CPLFree ignores being called with NULL, so these are safe
     CPLFree(pbuffer);
     CPLFree(pszProjection);
@@ -369,7 +367,7 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 static void list2vec(std::vector<double> &v,const char *pszList) {
     if ((pszList==NULL)||(pszList[0]==0)) return;
     char **papszTokens=CSLTokenizeString2(pszList," \t\n\r",
-	CSLT_STRIPLEADSPACES|CSLT_STRIPENDSPACES);
+	CSLT_STRIPLEADSPACES | CSLT_STRIPENDSPACES);
     v.clear();
     for (int i=0;i<CSLCount(papszTokens);i++)
 	v.push_back(CPLStrtod(papszTokens[i],NULL));
@@ -392,22 +390,17 @@ void GDALMRFDataset::SetMaxValue(const char *pszVal) {
 *\brief Idenfity a MRF file, lightweight
 *
 * Lightweight test, otherwise Open gets called.
-* It should make sure all three files exist
 *
 */
 int GDALMRFDataset::Identify(GDALOpenInfo *poOpenInfo)
 
 {
-    if ((poOpenInfo->nHeaderBytes == 0) &&
-	EQUALN((const char *) poOpenInfo->pszFilename,"<MRF_META>", 10))
+    CPLString fn(poOpenInfo->pszFilename);
+    if (fn.find(":MRF:") != string::npos)
 	return TRUE;
-    if ((poOpenInfo->nHeaderBytes >= 10) &&
-	EQUALN((const char *) poOpenInfo->pabyHeader, "<MRF_META>", 10))
-	return TRUE;
-    if (poOpenInfo->nHeaderBytes == 0 &&
-	EQUALN(poOpenInfo->pszFilename, "MRF:", 4))
-	return TRUE;
-    return FALSE;
+    if (poOpenInfo->nHeaderBytes >= 10)
+	fn = (char *) poOpenInfo->pabyHeader;
+    return EQUALN(fn.c_str(), "<MRF_META>", 10);
 }
 
 
@@ -438,6 +431,31 @@ int GDALMRFDataset::WriteConfig(CPLXMLNode *config)
     return CPLSerializeXMLTreeToFile(config,fname);
 }
 
+static void
+split(vector<string> & theStringVector,  /* Altered/returned value */
+const string &theString,
+size_t start,
+const  char theDelimiter)
+{
+    size_t end = theString.find(theDelimiter, start);
+    if (string::npos == end) {
+	theStringVector.push_back(theString.substr(start));
+	return;
+    }
+    theStringVector.push_back(theString.substr(start, end - start));
+    split(theStringVector, theString, end + 1, theDelimiter);
+}
+
+// If the vector contains a string which starts with the prefix letter followed by an integer value
+// it returns the integer
+// Otherwise it returns the default
+static int getval(const vector<string> &theStringVector, const char prefix, int default) {
+    for (int i = 0; i < theStringVector.size(); i++)
+	if (theStringVector[i][0] == prefix)
+	    return atoi(&(theStringVector[i][1]));
+    return default;
+}
+
 /**
 *\Brief Open a MRF file
 *
@@ -448,39 +466,37 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     CPLXMLNode *config = NULL;
     CPLErr ret = CE_None;
     const char* pszFileName = poOpenInfo->pszFilename;
+
     int level = -1;
     int version = 0;
+    int z_dimension = 1;
+    string fn; // Used to parse and adjust the file name
 
-    // Test that this is a MRF file
-    // Allow for the whole metadata to be passed as the filename
-    if ((poOpenInfo->nHeaderBytes == 0) &&
-	EQUALN(pszFileName,"<MRF_META>", 10))
-	config = CPLParseXMLString(pszFileName);
-    else if ((poOpenInfo->nHeaderBytes >= 10) &&
-	EQUALN((const char *) poOpenInfo->pabyHeader, "<MRF_META>", 10)) 
+    // Different ways to open it
+    if (poOpenInfo->nHeaderBytes >= 10 && 
+	EQUALN((const char *)poOpenInfo->pabyHeader, "<MRF_META>", 10)) // Regular file name
 	config = CPLParseXMLFile(pszFileName);
-    else if ((poOpenInfo->nHeaderBytes == 0) && EQUALN(pszFileName,"MRF:",4)) {
-	pszFileName+=4;
-	if (!isdigit(*pszFileName)) {
-	    if (*pszFileName == 'v' || *pszFileName == 'V' ) {
-		pszFileName++; // Version open
-		version=atoi(pszFileName);
-	    } else {
-		CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Use MRF:<num>:filename");
-		return NULL;
+    else {
+	if (EQUALN(pszFileName, "<MRF_META>", 10)) // Content as file name
+	    config = CPLParseXMLString(pszFileName);
+	else
+	{ // Try Ornate file name
+	    fn = pszFileName;
+	    size_t pos = fn.find(":MRF:");
+	    if (string::npos != pos) { // Tokenize and pick known options
+		vector<string> tokens;
+		split(tokens, fn, pos + 5, ':');
+		level	    = getval(tokens, 'L', -1);
+		version	    = getval(tokens, 'V', 0);
+		z_dimension = getval(tokens, 'Z', 1);
+		fn.resize(pos); // Cut the ornamentations
+		pszFileName = fn.c_str();
+		config = CPLParseXMLFile(pszFileName);
 	    }
-	} else level=atoi(pszFileName);
-	pszFileName=strstr(pszFileName, ":")+1;
-	if (!pszFileName) {
-	    CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Incorect file name");
-	    return NULL;
 	}
-	config = CPLParseXMLFile(pszFileName);
     }
-    else
-	return NULL;
 
-    if (config == NULL)
+    if (!config)
 	return NULL;
 
     GDALMRFDataset *ds = new GDALMRFDataset();
@@ -529,8 +545,10 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 
 // Adjust the band images with the right offset, then adjust the sizes
 CPLErr GDALMRFDataset::SetVersion(int version) {
-    if ( !hasVersions || version > verCount)
+    if (!hasVersions || version > verCount) {
+	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Version number error!");
 	return CE_Failure;
+    }
     // Size of one version index
     for (int bcount = 1; bcount <= nBands; bcount++) {
 	GDALMRFRasterBand *srcband = (GDALMRFRasterBand *)GetRasterBand(bcount);
@@ -572,10 +590,12 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
     nRasterXSize=current.size.x;
     nRasterYSize=current.size.y;
     nBands=current.size.c;
+    hasVersions = cds->hasVersions;
+    verCount = cds->verCount;
 
     bGeoTransformValid=TRUE;
 
-    // Add the bands
+    // Add the bands, copy constructor so they can be closed independently
     for (int i=1;i<=nBands;i++) {
 	GDALMRFLRasterBand *band=new GDALMRFLRasterBand((GDALMRFRasterBand *)
 	    cds->GetRasterBand(i)->GetOverview(l));
@@ -1034,10 +1054,15 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     source = CPLStrdup(CPLGetXMLValue(config,"CachedSource.Source",0));
     // Is it a clone?
     clonedSource = on(CPLGetXMLValue(config, "CachedSource.Source.clone", "no"));
-
-    options = CPLStrdup(CPLGetXMLValue(config,"Options",0));
-    optlist = CSLTokenizeString2(options.c_str()," \t\n\r",
-	CSLT_STRIPLEADSPACES|CSLT_STRIPENDSPACES);
+    // Pick up the options, if any
+    optlist.Assign(CSLTokenizeString2(CPLGetXMLValue(config,"Options",0),
+	" \t\n\r", CSLT_STRIPLEADSPACES | CSLT_STRIPENDSPACES));
+    for (int i = 0; i < optlist.Count(); i++) {
+	CPLString s(optlist[i]);
+	s.resize(s.find_first_of(":="));
+	const char *key = s.c_str();
+	SetMetadataItem( key, optlist.FetchNameValue(key), "IMAGE_STRUCTURE");
+    }
 
     // We have the options, so we can call rasterband
     CPLXMLNode *rsets=CPLGetXMLNode(config,"Rsets");
@@ -1063,7 +1088,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	if (GetColorTable())
 	    ci = GCI_PaletteIndex;
 
-	if (CSLFetchBoolean(optlist, "MULTISPECTRAL", FALSE))
+	if (optlist.FetchBoolean("MULTISPECTRAL", FALSE))
 	    ci = GCI_Undefined;
 
 	band->SetColorInterpretation(ci);

@@ -338,8 +338,7 @@ protected:
     int bNeedsFlush; // Does the XML need to be written
 
     // Freeform sticky dataset options
-    CPLString options;
-    char **optlist;
+    CPLStringList optlist;
 
     // If caching data, the parent dataset
     GDALDataset *poSrcDS;
