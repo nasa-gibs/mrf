@@ -432,10 +432,10 @@ int GDALMRFDataset::WriteConfig(CPLXMLNode *config)
 }
 
 static void
-split(vector<string> & theStringVector,  /* Altered/returned value */
+split(vector<string> & theStringVector,  // Altered/returned value
 const string &theString,
-size_t start,
-const  char theDelimiter)
+size_t start = 0,
+const  char theDelimiter = ' ')
 {
     size_t end = theString.find(theDelimiter, start);
     if (string::npos == end) {
@@ -446,13 +446,12 @@ const  char theDelimiter)
     split(theStringVector, theString, end + 1, theDelimiter);
 }
 
-// If the vector contains a string which starts with the prefix letter followed by an integer value
-// it returns the integer
+// Returns the number following the prefix if it exists in one of the vector strings
 // Otherwise it returns the default
-static int getval(const vector<string> &theStringVector, const char prefix, int default) {
+static int getnum(const vector<string> &theStringVector, const char prefix, int default) {
     for (int i = 0; i < theStringVector.size(); i++)
 	if (theStringVector[i][0] == prefix)
-	    return atoi(&(theStringVector[i][1]));
+	    return atoi(theStringVector[i].c_str()+1);
     return default;
 }
 
@@ -467,8 +466,8 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     CPLErr ret = CE_None;
     const char* pszFileName = poOpenInfo->pszFilename;
 
-    int level = -1;
-    int version = 0;
+    int level = -1; // All levels
+    int version = 0; // Current
     int z_dimension = 1;
     string fn; // Used to parse and adjust the file name
 
@@ -486,9 +485,9 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 	    if (string::npos != pos) { // Tokenize and pick known options
 		vector<string> tokens;
 		split(tokens, fn, pos + 5, ':');
-		level	    = getval(tokens, 'L', -1);
-		version	    = getval(tokens, 'V', 0);
-		z_dimension = getval(tokens, 'Z', 1);
+		level	    = getnum(tokens, 'L', -1);
+		version	    = getnum(tokens, 'V', 0);
+		z_dimension = getnum(tokens, 'Z', 1);
 		fn.resize(pos); // Cut the ornamentations
 		pszFileName = fn.c_str();
 		config = CPLParseXMLFile(pszFileName);
@@ -1057,6 +1056,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     // Pick up the options, if any
     optlist.Assign(CSLTokenizeString2(CPLGetXMLValue(config,"Options",0),
 	" \t\n\r", CSLT_STRIPLEADSPACES | CSLT_STRIPENDSPACES));
+    // Load all the options in the IMAGE_STRUCTURE metadata
     for (int i = 0; i < optlist.Count(); i++) {
 	CPLString s(optlist[i]);
 	s.resize(s.find_first_of(":="));
@@ -1073,16 +1073,15 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
 	switch (nBands) {
 	case 1:
-	case 2: 
+	case 2:
 	    ci = (i==1) ? GCI_GrayIndex : GCI_AlphaBand;
 	    break;
-	case 3: // RGB
-	case 4: // RBGA
+	case 3:
+	case 4:
 	    if (i<3)
 		ci = (i==1) ? GCI_RedBand : GCI_GreenBand;
 	    else
 		ci = (i==3) ? GCI_BlueBand : GCI_AlphaBand;
-	    break;
 	}
 
 	if (GetColorTable())
@@ -1299,60 +1298,51 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	comp=IL_PNG;
     }
 
-    // Order, from source, overwritten by options
+    // Order from source, may be overwritten by options
     pszValue = poPBand->GetMetadataItem("INTERLEAVE", "IMAGE_STRUCTURE");
-    if (0 != CSLFetchNameValue(papszOptions,"INTERLEAVE"))
-	pszValue = CSLFetchNameValue(papszOptions,"INTERLEAVE");
+    if (0 != CSLFetchNameValue(papszOptions, "INTERLEAVE"))
+	pszValue = CSLFetchNameValue(papszOptions, "INTERLEAVE");
 
-
-#if defined(LERC)
-    if (comp==IL_LERC)
-	ord=IL_Separate;
-#endif
-
-    if (pszValue) if (IL_ERR_ORD==(ord=OrderToken(pszValue))) {
-	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: Interleave model %s is unknown, "
-	    "using PIXEL",pszValue);
-	ord=IL_Interleaved;
+    if (pszValue && IL_ERR_ORD == (ord = OrderToken(pszValue))) {
+	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: Interleave %s is unknown", pszValue);
+	return NULL;
     }
 
+
     // Error checks and synchronizations
+#if defined(LERC)
+    if (comp == IL_LERC)
+	ord = IL_Separate;
+#endif
 
     // If interleaved model is requested and no page size is set,
     // use the number of bands
-    if (nBands>1 && IL_Interleaved==ord)
+    if (nBands > 1 && IL_Interleaved==ord)
 	page.c=nBands;
 
     // Check compression based limitations
     if (1 != page.c) {
-	if ((IL_PNG==comp)||(IL_PPNG==comp)) {
-	    if (page.c>4) {
-		CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: %s "
-		    " Compression can't handle %d pixel interleaved bands\n",
-		    CompName(IL_PNG),page.c);
-		return NULL;
-	    }
+	if (IL_PNG==comp && page.c>4) {
+	    CPLError(CE_Failure, CPLE_AppDefined, 
+		"GDAL MRF: PNG can't handle %d pixel interleaved bands\n", page.c);
+	    return NULL;
 	}
-	if (IL_JPEG==comp) {
-	    if ((2==page.c) || (page.c>4)) {
-		CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Compression %s "
-		    "can't handle %d pixel interleaved bands\n",
-		    CompName(IL_JPEG),page.c);
-		return NULL;
-	    }
+	if (IL_JPEG==comp && ((2==page.c) || (page.c>4))) {
+	    CPLError(CE_Failure, CPLE_AppDefined,
+		"GDAL MRF: JPEG can't handle %d pixel interleaved bands\n", page.c);
+	    return NULL;
 	}
-    }
-
 #if defined(LERC)
-    if (comp==IL_LERC && ord!=IL_Separate && page.c != 3 && dt != GDT_Byte) {
-	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: LERC only handles BAND Interleave");
-	ord=IL_Separate;
-	page.c = 1;
-    }
+	if (IL_LERC == comp && (page.c != 3 || dt != GDT_Byte)) {
+	    CPLError(CE_Failure, CPLE_AppDefined,
+		"GDAL MRF: LERC can't handle interleaved bands\n");
+	    return NULL;
+	}
 #endif
+    }
 
-    // Check data type
-    if ((IL_JPEG==comp) && (dt!=GDT_Byte)) {
+    // Check data type for certain compressions
+    if ((IL_JPEG==comp) && (dt!=GDT_Byte)) { // For now
 	CPLError(CE_Failure,CPLE_AppDefined, "GDAL MRF: JPEG compression only supports byte data");
 	return NULL;
     } else if ((IL_PNG==comp) && (dt!=GDT_Byte) && (dt!=GDT_Int16) && (dt!=GDT_UInt16)) {
@@ -1361,6 +1351,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	return NULL;
     }
 
+    // default file names
     CPLString fname_data(getFname(pszFilename, ILComp_Ext[comp]));
     CPLString fname_idx(getFname(pszFilename, ".idx"));
 
@@ -1384,6 +1375,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     img.pagesize = page;
 
     // Build the XML file
+
     CPLXMLNode *config=CPLCreateXMLNode(NULL,CXT_Element,"MRF_META");
     if (!source.empty()) {
 	CPLXMLNode *CS = CPLCreateXMLNode(config, CXT_Element, "CachedSource");

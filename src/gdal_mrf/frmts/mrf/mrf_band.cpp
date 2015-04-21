@@ -391,7 +391,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return FetchClonedBlock(xblk, yblk, buffer);
 
     GDALDataset *poSrcDS;
-    GInt32 cstride = img.pagesize.c;
+    const GInt32 cstride = img.pagesize.c; // 1 if pixel interleaved
     ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
     GUIntBig infooffset = IdxOffset(req, img);
 
@@ -433,13 +433,12 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	FillBlock(ob);
 
     // Use the dataset RasterIO to read all bands
-    CPLErr ret = poSrcDS->RasterIO( GF_Read, Xoff, Yoff, readszx, readszy,
+    CPLErr ret = poSrcDS->RasterIO(GF_Read, Xoff, Yoff, readszx, readszy,
 	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
-	eDataType, cstride, (cstride==1)? &nBand:NULL,
-	// pixel, line, band stride
-	vsz * img.pagesize.c,
-	vsz * img.pagesize.c * img.pagesize.x, 
-	vsz * img.pagesize.c * img.pagesize.x * img.pagesize.y );
+	eDataType, cstride, NULL,
+	vsz * cstride, 	// pixel, line, band stride
+	vsz * cstride * img.pagesize.x,
+	(cstride != 1) ? vsz : vsz * img.pagesize.x * img.pagesize.y );
 
     if (ret != CE_None)
 	return ret;
