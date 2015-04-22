@@ -1131,17 +1131,15 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 *\Brief Get the source dataset, open it if necessary
 */
 GDALDataset *GDALMRFDataset::GetSrcDS() {
-    if (poSrcDS) 
-	return poSrcDS;
-    // Does it actualy have a file name
-    if (source.empty())
-	return 0;
+    if (poSrcDS) return poSrcDS;
+    if (source.empty())	return 0;
     // Try to open it, add the path from the current MRF if this file doesn't have one but the file does
-    if (source.find_first_of("/\\") == std::string::npos
-	&& fname.find_first_of("/\\") != std::string::npos )
-	    source = fname.substr(0,fname.find_last_of("/\\")) + "/" + source;
+    if (fname.find_first_of("/\\") != string::npos &&  // Have a path in the current file
+	(source.find_first_of("/\\") == std::string::npos ||  // No path in the source
+	 ('.' == source[0] && source.find_first_not_of("./\\") > 1)))  // Or source name is relative
+	    source = fname.substr(0 , fname.find_last_of("/\\") + 1) + source;
     return
-	poSrcDS = (GDALDataset *) (GDALOpenShared( source.c_str(), GA_ReadOnly ));
+	poSrcDS = (GDALDataset *) GDALOpenShared(source.c_str(), GA_ReadOnly);
 }
 
 /**

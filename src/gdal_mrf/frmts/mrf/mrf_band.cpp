@@ -435,13 +435,12 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // Use the dataset RasterIO to read all bands
     CPLErr ret = poSrcDS->RasterIO(GF_Read, Xoff, Yoff, readszx, readszy,
 	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
-	eDataType, cstride, NULL,
+	eDataType, cstride, (1 == cstride)? &nBand: NULL,
 	vsz * cstride, 	// pixel, line, band stride
 	vsz * cstride * img.pagesize.x,
 	(cstride != 1) ? vsz : vsz * img.pagesize.x * img.pagesize.y );
 
-    if (ret != CE_None)
-	return ret;
+    if (ret != CE_None)	return ret;
     // Might have the block in the pbuffer, mark it
     poDS->tile = req;
 
@@ -515,7 +514,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     }
 
     if (DataMode() == GF_Read) {
-	// Can't store, so just fetch from source, which is an MRF with the same structure
+	// Can't store, so just fetch from source, which is an MRF with identical structure
 	GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(poSrc->GetRasterBand(nBand));
 	if (b->GetOverviewCount() && m_l)
 	    b = static_cast<GDALMRFRasterBand *>(b->GetOverview(m_l-1));
@@ -583,10 +582,10 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 {
     ILIdx tinfo;
-    GInt32 cstride=img.pagesize.c;
-    ILSize req(xblk,yblk,0,m_band/cstride,m_l);
-    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset %lld\n", xblk, yblk, m_band, m_l,
-	IdxOffset(req,img));
+    GInt32 cstride = img.pagesize.c;
+    ILSize req(xblk, yblk, 0, m_band / cstride, m_l);
+    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset %lld\n", 
+	xblk, yblk, m_band, m_l, IdxOffset(req,img));
 
     if (CE_None != poDS->ReadTileIdx(tinfo, req, img)) {
 	CPLError( CE_Failure, CPLE_AppDefined,
