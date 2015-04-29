@@ -308,7 +308,7 @@ void GDALRegister_mrf(void)
 	    "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
 //	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
-	    "	<Option name='UNIFORM_SCALE' type='int' description='Uniform overlays in MRF, only 2 is tested'/>\n"
+	    "	<Option name='UNIFORM_SCALE' type='int' description='Scale of overlays in MRF, usually 2'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
 	    "</CreationOptionList>\n");
 
@@ -316,6 +316,7 @@ void GDALRegister_mrf(void)
 	driver->pfnIdentify = GDALMRFDataset::Identify;
 	driver->pfnUnloadDriver = GDALDeregister_mrf;
 	driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
+	driver->pfnCreate = GDALMRFDataset::Create;
 	GetGDALDriverManager()->RegisterDriver(driver);
     }
 }
@@ -400,28 +401,84 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement )
     return NULL;
 }
 
-void XMLSetAttributeVal(CPLXMLNode *parent,const char* pszName,
+//
+// Extension to CSL, set an entry if it doesn't already exist
+//
+char **CSLAddIfMissing(char **papszList,
+    const char *pszName, const char *pszValue)
+{
+    if (CSLFetchNameValue(papszList, pszName))
+	return papszList;
+    return CSLSetNameValue(papszList, pszName, pszValue);
+}
+    
+//
+// Print a double in way when read with strtod
+//
+CPLString PrintDouble(double d, char *frmt)
+{
+
+    CPLString res;
+    res.FormatC(d, 0);
+    double v = CPLStrtod(res.c_str(), NULL);
+    if (d == v) return res;
+
+    //  This would be the right code with a C99 compiler that supports %a readback in strod()
+    //    return CPLString().Printf("%a",d);
+
+    return CPLString().FormatC(d, frmt);
+}
+
+void XMLSetAttributeVal(CPLXMLNode *parent, const char* pszName,
+    const char *val)
+{
+    CPLCreateXMLNode(parent, CXT_Attribute, pszName);
+    CPLSetXMLValue(parent, pszName, val);
+}
+
+void XMLSetAttributeVal(CPLXMLNode *parent, const char* pszName,
     const double val, const char *frmt)
 {
-    CPLCreateXMLNode(parent,CXT_Attribute,pszName);
-    CPLString sVal;
-    sVal.FormatC(val,frmt);
+    XMLSetAttributeVal(parent, pszName, CPLString().FormatC(val, frmt));
 
-//  Unfortunately the %a doesn't work in VisualStudio scanf or strtod
-//    if (strtod(sVal.c_str(),0) != val)
-//	sVal.Printf("%a",val);
-
-    CPLSetXMLValue(parent,pszName,sVal);
+    //  Unfortunately the %a doesn't work in VisualStudio scanf or strtod
+    //    if (strtod(sVal.c_str(),0) != val)
+    //	sVal.Printf("%a",val);
 }
 
 CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
-	const char*pszName,const ILSize &sz,const char *frmt)
+    const char*pszName, const ILSize &sz, const char *frmt)
 {
-    CPLXMLNode *node=CPLCreateXMLNode(parent,CXT_Element,pszName);
-    XMLSetAttributeVal(node,"x",sz.x,frmt);
-    XMLSetAttributeVal(node,"y",sz.y,frmt);
-    XMLSetAttributeVal(node,"c",sz.c,frmt);
+    CPLXMLNode *node = CPLCreateXMLNode(parent, CXT_Element, pszName);
+    XMLSetAttributeVal(node, "x", sz.x, frmt);
+    XMLSetAttributeVal(node, "y", sz.y, frmt);
+    XMLSetAttributeVal(node, "c", sz.c, frmt);
     return node;
+}
+
+//
+// Prints a vector of doubles into a string and sets that string as the value of an XML attribute
+// If all values are the same, it only prints one
+//
+void XMLSetAttributeVal(CPLXMLNode *parent,
+    const char*pszName, std::vector<double> const &values)
+{
+    if (values.empty())
+	return;
+
+    CPLString value;
+    double val = values[0];
+    int single_val = true;
+    for (int i = 0; i < values.size(); i++) {
+	if (val != values[i])
+	    single_val = false;
+	value.append(PrintDouble(values[i]) + " ");
+	value.resize(value.size() - 1); // Cut the last space
+    }
+    if (single_val)
+	value = PrintDouble(values[0]);
+    CPLCreateXMLNode(parent, CXT_Attribute, pszName);
+    CPLSetXMLValue(parent, pszName, value);
 }
 
 /**
@@ -431,19 +488,10 @@ CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
 
 GDALColorEntry GetXMLColorEntry(CPLXMLNode *p) {
     GDALColorEntry ce;
-    ce.c1= static_cast<short>(getXMLNum(p,"c1",0));
-    ce.c2= static_cast<short>(getXMLNum(p,"c2",0));
-    ce.c3= static_cast<short>(getXMLNum(p,"c3",0));
-    ce.c4= static_cast<short>(getXMLNum(p,"c4",255));
-    return ce;
-}
-
-// Swap c2 and c3, converting from HSV to the GDAL supported HLS
-// Useless since GDAL only supports RGBA
-GDALColorEntry HSVSwap(const GDALColorEntry& cein) {
-    GDALColorEntry ce(cein);
-    ce.c2=ce.c3;
-    ce.c3=cein.c2;
+    ce.c1 = static_cast<short>(getXMLNum(p, "c1", 0));
+    ce.c2 = static_cast<short>(getXMLNum(p, "c2", 0));
+    ce.c3 = static_cast<short>(getXMLNum(p, "c3", 0));
+    ce.c4 = static_cast<short>(getXMLNum(p, "c4", 255));
     return ce;
 }
 

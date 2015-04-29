@@ -236,8 +236,7 @@ GDALMRFRasterBand::~GDALMRFRasterBand()
 const char * GDALMRFRasterBand::GetOptionValue(const char *opt, const char *def)
 {
     const char *optValue = poDS->optlist.FetchNameValue(opt);
-    if (0 != optValue)
-	return optValue;
+    if (optValue) return optValue;
     return CPLGetConfigOption(opt, def);
 }
 
