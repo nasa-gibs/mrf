@@ -229,8 +229,13 @@ CPLErr PNG_Band::CompressPNG(buf_mgr &dst, buf_mgr &src)
 
 #endif
 
-    // Should let the quality control the compression level
+    // Let the quality control the compression level
+    // Supposedly low numbers work well too while being fast
     png_set_compression_level(pngp, img.quality / 10);
+
+    // Custom strategy for zlib, set using the band option Z_STRATEGY
+    if (deflate_flags & ZFLAG_SMASK)
+	png_set_compression_strategy(pngp, (deflate_flags & ZFLAG_SMASK) >> 6);
 
     // Write the palete and the transparencies if they exist
     if (PNGColors != NULL)
@@ -296,32 +301,33 @@ PNG_Band::PNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) 
 GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
 
 {
-    if (image.comp == IL_PPNG)
-    {  // Convert the GDAL LUT to PNG style
-	GDALColorTable *poCT = GetColorTable();
-	TransSize = PalSize = poCT->GetColorEntryCount();
+    if (image.comp != IL_PPNG)
+	return;
 
-	png_color *pasPNGColors = (png_color *)CPLMalloc(sizeof(png_color) * PalSize);
-	unsigned char *pabyAlpha = (unsigned char *)CPLMalloc(TransSize);
-	PNGColors = (void *)pasPNGColors;
-	PNGAlpha = (void *)pabyAlpha;
-	bool NoTranspYet = true;
+    // Convert the GDAL LUT to PNG style
+    GDALColorTable *poCT = GetColorTable();
+    TransSize = PalSize = poCT->GetColorEntryCount();
 
-	// Set the palette from the end to reduce the size of the opacity mask
-	for (int iColor = PalSize - 1; iColor >= 0; iColor--)
-	{
-	    GDALColorEntry  sEntry;
-	    poCT->GetColorEntryAsRGB(iColor, &sEntry);
+    png_color *pasPNGColors = (png_color *)CPLMalloc(sizeof(png_color) * PalSize);
+    unsigned char *pabyAlpha = (unsigned char *)CPLMalloc(TransSize);
+    PNGColors = (void *)pasPNGColors;
+    PNGAlpha = (void *)pabyAlpha;
+    bool NoTranspYet = true;
 
-	    pasPNGColors[iColor].red = (png_byte)sEntry.c1;
-	    pasPNGColors[iColor].green = (png_byte)sEntry.c2;
-	    pasPNGColors[iColor].blue = (png_byte)sEntry.c3;
-	    if (NoTranspYet && sEntry.c4 == 255)
-		TransSize--;
-	    else {
-		NoTranspYet = false;
-		pabyAlpha[iColor] = (unsigned char)sEntry.c4;
-	    }
+    // Set the palette from the end to reduce the size of the opacity mask
+    for (int iColor = PalSize - 1; iColor >= 0; iColor--)
+    {
+	GDALColorEntry  sEntry;
+	poCT->GetColorEntryAsRGB(iColor, &sEntry);
+
+	pasPNGColors[iColor].red = (png_byte)sEntry.c1;
+	pasPNGColors[iColor].green = (png_byte)sEntry.c2;
+	pasPNGColors[iColor].blue = (png_byte)sEntry.c3;
+	if (NoTranspYet && sEntry.c4 == 255)
+	    TransSize--;
+	else {
+	    NoTranspYet = false;
+	    pabyAlpha[iColor] = (unsigned char)sEntry.c4;
 	}
     }
 }

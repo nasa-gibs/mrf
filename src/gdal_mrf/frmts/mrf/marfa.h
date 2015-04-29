@@ -433,7 +433,7 @@ public:
     // de-interlace a buffer in pixel blocks
     CPLErr RB(int xblk, int yblk, buf_mgr src, void *buffer);
 
-    const char *GetOptionValue(const char *opt, const char *def);
+    const char *GetOptionValue(const char *opt, const char *def) const;
     void SetAccess(GDALAccess eA) { eAccess = eA; }
     void SetDeflate(int v) { deflate = (v != 0); }
 
@@ -461,6 +461,8 @@ protected:
     GUInt32 blockSizeBytes() {
 	return poDS->current.pageSizeBytes / poDS->current.pagesize.c;
     }
+
+    const CPLStringList & GetOptlist() const { return poDS->optlist; }
 
     // Compresion and decompression functions.  To be overwritten by specific implementations
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src) = 0;

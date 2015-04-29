@@ -183,6 +183,11 @@ static void *DeflateBlock(buf_mgr &src, size_t extrasize, int flags) {
     return src.buffer;
 }
 
+//
+// The deflate_flags are available in all bands even if the DEFLATE option 
+// itself is not set.  This allows for PNG features to be controlled, as well
+// as any other bands that use zlib by itself
+//
 GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
 					const ILImage &image, int band, int ov)
 {
@@ -199,18 +204,19 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nBlocksPerRow = img.pagecount.x;
     nBlocksPerColumn = img.pagecount.y;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
-    deflate = poDS->optlist.FetchBoolean("DEFLATE", FALSE);
+
+    deflate = GetOptlist().FetchBoolean("DEFLATE", FALSE);
     // Bring the quality to 0 to 9
     deflate_flags = img.quality / 10;
     // Pick up the twists, aka GZ, RAWZ headers
-    if (poDS->optlist.FetchBoolean("GZ", FALSE))
+    if (GetOptlist().FetchBoolean("GZ", FALSE))
 	deflate_flags |= ZFLAG_GZ;
-    else if (poDS->optlist.FetchBoolean("RAWZ", FALSE))
+    else if (GetOptlist().FetchBoolean("RAWZ", FALSE))
 	deflate_flags |= ZFLAG_RAW;
     // And Pick up the ZLIB strategy, if any
-    const char *zstrategy = poDS->optlist.FetchNameValueDef("Z_STRATEGY", NULL);
+    const char *zstrategy = GetOptlist().FetchNameValueDef("Z_STRATEGY", NULL);
     if (zstrategy) {
-	int zv = 0;
+	int zv = Z_DEFAULT_STRATEGY;
 	if (EQUAL(zstrategy, "Z_HUFFMAN_ONLY"))
 	    zv = Z_HUFFMAN_ONLY;
 	else if (EQUAL(zstrategy, "Z_RLE"))
@@ -233,7 +239,7 @@ GDALMRFRasterBand::~GDALMRFRasterBand()
 }
 
 // Look for a string from the dataset options or from the environment
-const char * GDALMRFRasterBand::GetOptionValue(const char *opt, const char *def)
+const char * GDALMRFRasterBand::GetOptionValue(const char *opt, const char *def) const
 {
     const char *optValue = poDS->optlist.FetchNameValue(opt);
     if (optValue) return optValue;
