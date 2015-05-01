@@ -307,10 +307,13 @@ void GDALRegister_mrf(void)
 	    "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
 	    "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
-//	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
 	    "	<Option name='UNIFORM_SCALE' type='int' description='Scale of overlays in MRF, usually 2'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
-	    "</CreationOptionList>\n");
+	    "   <Option name='PHOTOMETRIC' type='string-select' default='DEFAULT' description='Band interpretation, may affect encoding'>\n"
+	    "	    <Value>MULTISPECTRAL</Value>"
+	    "   </Option>\n"
+	    "</CreationOptionList>\n"
+	    );
 
 	driver->pfnOpen = GDALMRFDataset::Open;
 	driver->pfnIdentify = GDALMRFDataset::Identify;

@@ -61,7 +61,7 @@ using std::string;
 // Initialize as invalid
 GDALMRFDataset::GDALMRFDataset()
 {
-    //		     X0   Xx   Xy  Y0    Yx   Yy   
+    //		     X0   Xx   Xy  Y0    Yx   Yy
     double gt[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
 
     ILImage img;
@@ -735,6 +735,10 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
 
     image.quality = atoi(CPLGetXMLValue(defimage, "Quality", "85"));
 
+    const char * photo_val = CPLGetXMLValue(defimage, "Photometric", NULL);
+    if (photo_val)
+	ds->SetPhotometricInterpretation(photo_val);
+
     if (image.quality < 0 && image.quality>99) {
 	CPLError(CE_Warning, CPLE_AppDefined, "GDAL MRF: Quality setting error, using default of 85");
 	image.quality = 85;
@@ -991,6 +995,10 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 	}
     }
 
+    // special photometric interpretation
+    if (!photometric.empty())
+	CPLCreateXMLElementAndValue(raster, "Photometric", photometric);
+
     if (is_Endianess_Dependent(full.dt, full.comp)) // Need to set the order
 	CPLCreateXMLElementAndValue(raster, "NetByteOrder",
 	(full.nbo || NET_ORDER) ? "TRUE" : "FALSE");
@@ -1128,10 +1136,11 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     // We have the options, so we can call rasterband
     CPLXMLNode *rsets = CPLGetXMLNode(config, "Rsets");
     for (int i = 1; i <= nBands; i++) {
-	// The subimages are low resolution copies of the current one.
+	// The overviews are low resolution copies of the current one.
 	GDALMRFRasterBand *band = newMRFRasterBand(this, current, i);
 	GDALColorInterp ci = GCI_Undefined;
 
+	// Default color interpretation
 	switch (nBands) {
 	case 1:
 	case 2:
@@ -1148,8 +1157,15 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	if (GetColorTable())
 	    ci = GCI_PaletteIndex;
 
+	// Legacy, deprecated
 	if (optlist.FetchBoolean("MULTISPECTRAL", FALSE))
 	    ci = GCI_Undefined;
+
+	// New style
+	if (photometric.size()) {
+	    if ("MULTISPECTRAL" == photometric)
+		ci = GCI_Undefined;
+	}
 
 	band->SetColorInterpretation(ci);
 	SetBand(i, band);
@@ -1736,6 +1752,9 @@ void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
 
     val = opt.FetchNameValue("UNIFORM_SCALE");
     if (val) scale = atoi(val);
+
+    val = opt.FetchNameValue("PHOTOMETRIC");
+    if (val) photometric = val;
 
     optlist.Assign(CSLTokenizeString2(opt.FetchNameValue("OPTIONS"),
 	" \t\n\r", CSLT_STRIPLEADSPACES | CSLT_STRIPENDSPACES));

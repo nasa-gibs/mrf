@@ -262,9 +262,15 @@ public:
 	GDALDataType eType, char ** papszOptions);
 
 
-    virtual const char *GetProjectionRef() { return Projection.c_str(); }
+    virtual const char *GetProjectionRef() { return projection; }
     virtual CPLErr SetProjection(const char *proj) {
-	Projection = proj;
+	projection = proj;
+	return CE_None;
+    }
+
+    virtual const char *GetPhotometricInterpretation() { return photometric; }
+    virtual CPLErr SetPhotometricInterpretation(const char *photo) {
+	photometric = photo;
 	return CE_None;
     }
 
@@ -396,7 +402,12 @@ protected:
     // GeoTransform support
     double GeoTransform[6];
     int bGeoTransformValid;
-    CPLString Projection;
+
+    // Projection string, WKT
+    CPLString projection;
+
+    // Photometric interpretation
+    CPLString photometric;
 
     GDALColorTable *poColorTable;
     int Quality;
