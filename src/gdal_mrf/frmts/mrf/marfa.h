@@ -216,14 +216,13 @@ static inline int pcount(const int n, const int sz) {
     return 1 + (n - 1) / sz;
 }
 
-// Set up page count
-// since page count can't have overviews, use it to hold total number of pages
+// Returns a pagecount per dimension, .l will have the total number
 static inline const ILSize pcount(const ILSize &size, const ILSize &psz) {
-    ILSize pcnt = ILSize(
-	pcount(size.x, psz.x),
-	pcount(size.y, psz.y),
-	pcount(size.z, psz.z),
-	pcount(size.c, psz.c));
+    ILSize pcnt;
+    pcnt.x = pcount(size.x, psz.x);
+    pcnt.y = pcount(size.y, psz.y);
+    pcnt.z = pcount(size.z, psz.z);
+    pcnt.c = pcount(size.c, psz.c);
     pcnt.l = pcnt.x*pcnt.y*pcnt.z*pcnt.c;
     return pcnt;
 }
@@ -364,6 +363,8 @@ protected:
     ILImage full;
     // How we use it currently
     ILImage current;
+    // The third dimension slice in use
+    int zslice;
 
     // MRF file name
     CPLString fname;

@@ -123,28 +123,22 @@ std::ostream& operator<<(std::ostream &out, const ILIdx& t) {
 void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
     FILE *fp=fopen(fname,"wb");
     switch(sz.c) {
-    case 4: 
-	{
-	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-	    char *d=(char *)data;
-	    for(int i=sz.x*sz.y;i;i--) {
-		fwrite(d,3,1,fp);
-		d+=4;
-	    }
-	    break;
+    case 4:
+	fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	char *d=(char *)data;
+	for(int i=sz.x*sz.y;i;i--) {
+	    fwrite(d,3,1,fp);
+	    d+=4;
 	}
+	break;
     case 3:
-	{
-	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-	    fwrite(data,sz.x*sz.y,3,fp);
-	    break;
-	}
+	fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	fwrite(data,sz.x*sz.y,3,fp);
+	break;
     case 1:
-	{
-	    fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
-	    fwrite(data,sz.x,sz.y,fp);
-	    break;
-	}
+	fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
+	fwrite(data,sz.x,sz.y,fp);
+	break;
     default:
 	fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
 	return;
@@ -156,14 +150,13 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
 // Returns the size of the index for image and overlays
 // If scale is zero, only base image
 GIntBig IdxSize(const ILImage &full, const int scale) {
-    ILImage img=full;
+    ILImage img = full;
     img.pagecount = pcount(img.size, img.pagesize);
     GIntBig sz = img.pagecount.l;
     while (scale != 0 && 1 != img.pagecount.x * img.pagecount.y)
     {
 	img.size.x = pcount(img.size.x, scale);
 	img.size.y = pcount(img.size.y, scale);
-	img.size.l++;
 	img.pagecount = pcount(img.size, img.pagesize);
 	sz += img.pagecount.l;
     }
@@ -284,22 +277,19 @@ void GDALRegister_mrf(void)
 				"Byte UInt16 Int16 Int32 UInt32 Float32 Float64");
 
 	driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
-	    "<CreationOptionList>\n"
-	    "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>\n"
-	    "       <Value>JPEG</Value>"
-	    "       <Value>PNG</Value>"
-	    "       <Value>PPNG</Value>"
-	    "	    <Value>TIF</Value>"
-	    "       <Value>DEFLATE</Value>"
-	    "       <Value>NONE</Value>"
+	    "<CreationOptionList>"
+	    "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>"
+	    "	    <Value>JPEG</Value><Value>PNG</Value><Value>PPNG</Value>"
+	    "	    <Value>TIF</Value><Value>DEFLATE</Value><Value>NONE</Value>"
 #if defined(LERC)
 	    "	    <Value>LERC</Value>"
 #endif
-	    "   </Option>\n"
-	    "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
+	    "   </Option>"
+	    "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>"
 	    "       <Value>PIXEL</Value>"
 	    "       <Value>BAND</Value>"
 	    "   </Option>\n"
+	    "	<Option name='ZSIZE' type='int' description='Third dimension size' default='1'/>"
 	    "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
 	    "	<Option name='OPTIONS' type='string' description='Freeform dataset parameters'/>\n"
 	    "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
@@ -455,6 +445,8 @@ CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
     CPLXMLNode *node = CPLCreateXMLNode(parent, CXT_Element, pszName);
     XMLSetAttributeVal(node, "x", sz.x, frmt);
     XMLSetAttributeVal(node, "y", sz.y, frmt);
+    if (sz.z != 1)
+	XMLSetAttributeVal(node, "z", sz.z, frmt);
     XMLSetAttributeVal(node, "c", sz.c, frmt);
     return node;
 }
@@ -519,9 +511,9 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
     // There is no ftruncate in VSI, only truncate()
     VSILFILE *ifp = VSIFOpenL(fname, "r+b");
 
-// There is no VSIFTruncateL in gdal 1.8 and lower, so seek and write something at the end
+// There is no VSIFTruncateL in gdal 1.8 and lower, seek and write something at the end
 #if GDAL_VERSION_MAJOR == 1 && GDAL_VERSION_MINOR <= 8
-    int zero=0;
+    int zero = 0;
     VSIFSeekL(ifp, sz - sizeof(zero), SEEK_SET);
     int ret = (sizeof(zero) == VSIFWriteL(&zero, sizeof(zero), 1,ifp));
 #else

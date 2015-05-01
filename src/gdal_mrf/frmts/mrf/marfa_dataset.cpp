@@ -72,7 +72,8 @@ GDALMRFDataset::GDALMRFDataset()
     pbuffer = 0;
     pbsize = 0;
     bdirty = 0;
-    scale = 0; // Unset
+    scale = 0;
+    zslice = 0;
     hasVersions = false;
     level = -1;
     tile = ILSize();
@@ -138,6 +139,10 @@ CPLErr GDALMRFDataset::IRasterIO(GDALRWFlag eRWFlag, int nXOff, int nYOff, int n
 	eRWFlag == GF_Write ? "Write" : "Read",
 	nXOff, nYOff, nXSize, nYSize, nBufXSize, nBufYSize, nBandCount,
 	nPixelSpace, nLineSpace, nBandSpace);
+
+    // Finish the Create call
+    if (!bCrystalized)
+	Crystalize();
 
     //
     // Call the parent implementation, which splits it into bands and calls their IRasterIO
@@ -441,7 +446,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 
     int level = -1; // All levels
     int version = 0; // Current
-    int z_dimension = 1;
+    int zslice = 1;
     string fn; // Used to parse and adjust the file name
 
     // Different ways to open it
@@ -460,7 +465,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 		split(tokens, fn, pos + 5, ':');
 		level = getnum(tokens, 'L', -1);
 		version = getnum(tokens, 'V', 0);
-		z_dimension = getnum(tokens, 'Z', 1);
+		zslice = getnum(tokens, 'Z', 1);
 		fn.resize(pos); // Cut the ornamentations
 		pszFileName = fn.c_str();
 		config = CPLParseXMLFile(pszFileName);
@@ -475,6 +480,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     ds->fname = pszFileName;
     ds->eAccess = poOpenInfo->eAccess;
     ds->level = level;
+    ds->zslice = zslice;
 
     if (level != -1) {
 	// Open the whole dataset, then pick one level
@@ -607,20 +613,19 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
 
     // Size is mandatory
     node = CPLGetXMLNode(defimage, "Size");
-    if (!node) {
-	CPLError(CE_Failure, CPLE_AppDefined, "No size defined");
-	return CE_Failure;
+
+    if (node) {
+	image.size = ILSize(
+	    static_cast<int>(getXMLNum(node, "x", -1)),
+	    static_cast<int>(getXMLNum(node, "y", -1)),
+	    static_cast<int>(getXMLNum(node, "z", 1)),
+	    static_cast<int>(getXMLNum(node, "c", 1)),
+	    0);
     }
 
-    image.size = ILSize(
-	static_cast<int>(getXMLNum(node, "x", -1)),
-	static_cast<int>(getXMLNum(node, "y", -1)),
-	static_cast<int>(getXMLNum(node, "z", 1)),
-	static_cast<int>(getXMLNum(node, "c", 1)),
-	0);
     // Basic checks
-    if (image.size.x < 1 || image.size.y < 1) {
-	CPLError(CE_Failure, CPLE_AppDefined, "Need at least x,y size");
+    if (!node || image.size.x < 1 || image.size.y < 1) {
+	CPLError(CE_Failure, CPLE_AppDefined, "Raster size missing");
 	return CE_Failure;
     }
 
@@ -774,12 +779,12 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
     // Calculate the page count, including the total for the level
     image.pagecount = pcount(image.size, image.pagesize);
 
-    // Data File Name and offset
+    // Data File Name and base offset
     image.datfname = getFname(defimage, "DataFile", ds->GetFname(), ILComp_Ext[image.comp]);
     image.dataoffset = static_cast<int>(
 	getXMLNum(CPLGetXMLNode(defimage, "DataFile"), "offset", 0));
 
-    // Index File Name and offset
+    // Index File Name and base offset
     image.idxfname = getFname(defimage, "IndexFile", ds->GetFname(), ".idx");
     image.idxoffset = static_cast<int>(
 	getXMLNum(CPLGetXMLNode(defimage, "IndexFile"), "offset", 0));
@@ -1013,8 +1018,7 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
     if (scale) {
 	CPLCreateXMLNode(config, CXT_Element, "Rsets");
 	CPLSetXMLValue(config, "Rsets.#model", "uniform");
-	CPLSetXMLValue(config, "Rsets.#scale",
-	    CPLString().Printf("%d", scale));
+	CPLSetXMLValue(config, "Rsets.#scale", PrintDouble(scale));
     }
     CPLXMLNode *gtags = CPLCreateXMLNode(config, CXT_Element, "GeoTags");
 
@@ -1106,6 +1110,8 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     SetMetadataItem("COMPRESSION", CompName(current.comp), "IMAGE_STRUCTURE");
     if (is_Endianess_Dependent(current.dt, current.comp))
 	SetMetadataItem("NETBYTEORDER", current.nbo ? "TRUE" : "FALSE", "IMAGE_STRUCTURE");
+    if (full.size.z != 1)
+	SetMetadataItem("ZSIZE", CPLString().Printf("%d", full.size.z), "IMAGE_STRUCTURE");
 
     // Open the files for the current image, either RW or RO
     nRasterXSize = current.size.x;
@@ -1133,8 +1139,11 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	SetMetadataItem(key, optlist.FetchNameValue(key), "IMAGE_STRUCTURE");
     }
 
+    // Adjust the index offset if we have a zslice
+    if (zslice > 0 && zslice < full.size.z)
+	current.idxoffset += idxSize / full.size.z * zslice;
+
     // We have the options, so we can call rasterband
-    CPLXMLNode *rsets = CPLGetXMLNode(config, "Rsets");
     for (int i = 1; i <= nBands; i++) {
 	// The overviews are low resolution copies of the current one.
 	GDALMRFRasterBand *band = newMRFRasterBand(this, current, i);
@@ -1171,6 +1180,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	SetBand(i, band);
     }
 
+    CPLXMLNode *rsets = CPLGetXMLNode(config, "Rsets");
     if (NULL != rsets && NULL != rsets->psChild) {
 	// We have rsets 
 
@@ -1250,7 +1260,7 @@ GDALDataset *GDALMRFDataset::GetSrcDS() {
 
 GIntBig GDALMRFDataset::AddOverviews(int scale) {
     // Fit the overlays
-    ILImage img = full;
+    ILImage img = current;
     while (1 != img.pagecount.x*img.pagecount.y)
     {
 	// Adjust the offsets for indices
@@ -1736,6 +1746,9 @@ void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
     val = opt.FetchNameValue("QUALITY");
     if (val) img.quality = atoi(val);
 
+    val = opt.FetchNameValue("ZSIZE");
+    if (val) img.size.z = atoi(val);
+
     val = opt.FetchNameValue("BLOCKXSIZE");
     if (val) img.pagesize.x = atoi(val);
 
@@ -1831,7 +1844,6 @@ GDALDataType eType, char ** papszOptions)
     }
 
     poDS->current = poDS->full;
-
     poDS->SetDescription(pszName);
 
     // Build a MRF XML and initialize from it, this creates the bands
@@ -2031,7 +2043,7 @@ CPLErr GDALMRFDataset::SetGeoTransform(double *gt)
 }
 
 /*
-*  Should return 0,1,0,0,0,1 even if it was not set
+*  Returns 0,1,0,0,0,1 even if it was not set
 */
 CPLErr GDALMRFDataset::GetGeoTransform(double *gt)
 {
