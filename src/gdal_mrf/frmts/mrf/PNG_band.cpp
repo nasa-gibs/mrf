@@ -301,11 +301,27 @@ PNG_Band::PNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) 
 GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
 
 {
-    if (image.comp != IL_PPNG)
+    // Check error conditions
+    if (image.dt != GDT_Byte && image.dt != GDT_Int16 && image.dt != GDT_UInt16) {
+	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF PNG");
 	return;
+    }
+    if (image.pagesize.c > 4) {
+	CPLError(CE_Failure, CPLE_NotSupported, "MRF PNG can only handle up to 4 bands per page");
+	return;
+    }
+
+    if (image.comp != IL_PPNG)
+	return; // The rest is only for PPNG
 
     // Convert the GDAL LUT to PNG style
     GDALColorTable *poCT = GetColorTable();
+
+    if (!poCT) {
+	CPLError(CE_Failure, CPLE_NotSupported, "MRF PPNG needs a color table");
+	return;
+    }
+
     TransSize = PalSize = poCT->GetColorEntryCount();
 
     png_color *pasPNGColors = (png_color *)CPLMalloc(sizeof(png_color) * PalSize);

@@ -331,8 +331,15 @@ GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *pDS, const ILImage &image, i
     case IL_LERC: bnd = new LERC_Band(pDS,image,b,level); break;
 #endif
     default:
+	return NULL; 
+    }
+
+    // If something was flagged during band creation
+    if (CPLGetLastErrorNo() != CE_None) {
+	delete bnd;
 	return NULL;
     }
+
     // Copy the RW mode from the dataset
     bnd->SetAccess(pDS->eAccess);
     return bnd;

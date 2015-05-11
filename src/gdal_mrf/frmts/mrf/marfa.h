@@ -252,14 +252,9 @@ public:
 	int bStrict, char **papszOptions, GDALProgressFunc pfnProgress,
 	void *pProgressData);
 
-    static GDALDataset *CreateCopy_(const char *pszFilename, GDALDataset *poSrcDS,
-	int bStrict, char **papszOptions, GDALProgressFunc pfnProgress,
-	void *pProgressData);
-
     static GDALDataset *Create(const char * pszName,
 	int nXSize, int nYSize, int nBands,
 	GDALDataType eType, char ** papszOptions);
-
 
     virtual const char *GetProjectionRef() { return projection; }
     virtual CPLErr SetProjection(const char *proj) {
@@ -447,14 +442,14 @@ public:
 
     const char *GetOptionValue(const char *opt, const char *def) const;
     void SetAccess(GDALAccess eA) { eAccess = eA; }
-    void SetDeflate(int v) { deflate = (v != 0); }
+    void SetDeflate(int v) { deflatep = (v != 0); }
 
 protected:
     // Pointer to the GDALMRFDataset
     GDALMRFDataset *poDS;
     // 0 based
     GInt32 m_band;
-    int deflate;
+    int deflatep;
     int deflate_flags;
     // Level count of this band
     GInt32 m_l;

@@ -205,7 +205,7 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nBlocksPerColumn = img.pagecount.y;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
 
-    deflate = GetOptlist().FetchBoolean("DEFLATE", FALSE);
+    deflatep = GetOptlist().FetchBoolean("DEFLATE", FALSE);
     // Bring the quality to 0 to 9
     deflate_flags = img.quality / 10;
     // Pick up the twists, aka GZ, RAWZ headers
@@ -474,7 +474,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
-    if (deflate) {
+    if (deflatep) {
 	usebuff = DeflateBlock( filedst, poDS->pbsize - filedst.size, deflate_flags);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
@@ -636,7 +636,7 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     buf_mgr dst;
 
     // We got the data, do we need to decompress it before decoding?
-    if (deflate) {
+    if (deflatep) {
 	dst.size = img.pageSizeBytes + 1440; // in case the packed page is a bit larger than the raw one
 	dst.buffer = (char *)CPLMalloc(dst.size);
 
@@ -722,7 +722,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	// the bytes in buffer field
 	Compress(dst, src);
 	void *usebuff = dst.buffer;
-	if (deflate) {
+	if (deflatep) {
 	    usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, deflate_flags);
 	    if (!usebuff) {
 		CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
@@ -823,7 +823,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
-    if (deflate) {
+    if (deflatep) {
 	// Move the packed part at the start of tbuffer, to make more space available
 	memcpy(tbuffer, outbuff, dst.size);
 	dst.buffer = (char *)tbuffer;
