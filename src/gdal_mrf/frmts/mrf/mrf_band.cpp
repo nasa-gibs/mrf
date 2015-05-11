@@ -183,6 +183,11 @@ static void *DeflateBlock(buf_mgr &src, size_t extrasize, int flags) {
     return src.buffer;
 }
 
+//
+// The deflate_flags are available in all bands even if the DEFLATE option 
+// itself is not set.  This allows for PNG features to be controlled, as well
+// as any other bands that use zlib by itself
+//
 GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
 					const ILImage &image, int band, int ov)
 {
@@ -199,18 +204,19 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nBlocksPerRow = img.pagecount.x;
     nBlocksPerColumn = img.pagecount.y;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
-    deflate = CSLFetchBoolean(poDS->optlist, "DEFLATE", FALSE);
+
+    deflatep = GetOptlist().FetchBoolean("DEFLATE", FALSE);
     // Bring the quality to 0 to 9
     deflate_flags = img.quality / 10;
     // Pick up the twists, aka GZ, RAWZ headers
-    if (CSLFetchBoolean(poDS->optlist, "GZ", FALSE))
+    if (GetOptlist().FetchBoolean("GZ", FALSE))
 	deflate_flags |= ZFLAG_GZ;
-    else if (CSLFetchBoolean(poDS->optlist, "RAWZ", FALSE))
+    else if (GetOptlist().FetchBoolean("RAWZ", FALSE))
 	deflate_flags |= ZFLAG_RAW;
     // And Pick up the ZLIB strategy, if any
-    const char *zstrategy = CSLFetchNameValueDef(poDS->optlist, "Z_STRATEGY", NULL);
+    const char *zstrategy = GetOptlist().FetchNameValueDef("Z_STRATEGY", NULL);
     if (zstrategy) {
-	int zv = 0;
+	int zv = Z_DEFAULT_STRATEGY;
 	if (EQUAL(zstrategy, "Z_HUFFMAN_ONLY"))
 	    zv = Z_HUFFMAN_ONLY;
 	else if (EQUAL(zstrategy, "Z_RLE"))
@@ -233,11 +239,10 @@ GDALMRFRasterBand::~GDALMRFRasterBand()
 }
 
 // Look for a string from the dataset options or from the environment
-const char * GDALMRFRasterBand::GetOptionValue(const char *opt, const char *def)
+const char * GDALMRFRasterBand::GetOptionValue(const char *opt, const char *def) const
 {
-    const char *optValue = CSLFetchNameValue(poDS->optlist, opt);
-    if (0 != optValue)
-	return optValue;
+    const char *optValue = poDS->optlist.FetchNameValue(opt);
+    if (optValue) return optValue;
     return CPLGetConfigOption(opt, def);
 }
 
@@ -391,7 +396,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return FetchClonedBlock(xblk, yblk, buffer);
 
     GDALDataset *poSrcDS;
-    GInt32 cstride = img.pagesize.c;
+    const GInt32 cstride = img.pagesize.c; // 1 if pixel interleaved
     ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
     GUIntBig infooffset = IdxOffset(req, img);
 
@@ -433,16 +438,14 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	FillBlock(ob);
 
     // Use the dataset RasterIO to read all bands
-    CPLErr ret = poSrcDS->RasterIO( GF_Read, Xoff, Yoff, readszx, readszy,
+    CPLErr ret = poSrcDS->RasterIO(GF_Read, Xoff, Yoff, readszx, readszy,
 	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
-	eDataType, cstride, (cstride==1)? &nBand:NULL,
-	// pixel, line, band stride
-	vsz * img.pagesize.c,
-	vsz * img.pagesize.c * img.pagesize.x, 
-	vsz * img.pagesize.c * img.pagesize.x * img.pagesize.y );
+	eDataType, cstride, (1 == cstride)? &nBand: NULL,
+	vsz * cstride, 	// pixel, line, band stride
+	vsz * cstride * img.pagesize.x,
+	(cstride != 1) ? vsz : vsz * img.pagesize.x * img.pagesize.y );
 
-    if (ret != CE_None)
-	return ret;
+    if (ret != CE_None)	return ret;
     // Might have the block in the pbuffer, mark it
     poDS->tile = req;
 
@@ -471,7 +474,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
-    if (deflate) {
+    if (deflatep) {
 	usebuff = DeflateBlock( filedst, poDS->pbsize - filedst.size, deflate_flags);
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
@@ -516,7 +519,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     }
 
     if (DataMode() == GF_Read) {
-	// Can't store, so just fetch from source, which is an MRF with the same structure
+	// Can't store, so just fetch from source, which is an MRF with identical structure
 	GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(poSrc->GetRasterBand(nBand));
 	if (b->GetOverviewCount() && m_l)
 	    b = static_cast<GDALMRFRasterBand *>(b->GetOverview(m_l-1));
@@ -584,10 +587,10 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 {
     ILIdx tinfo;
-    GInt32 cstride=img.pagesize.c;
-    ILSize req(xblk,yblk,0,m_band/cstride,m_l);
-    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset %lld\n", xblk, yblk, m_band, m_l,
-	IdxOffset(req,img));
+    GInt32 cstride = img.pagesize.c;
+    ILSize req(xblk, yblk, 0, m_band / cstride, m_l);
+    CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset %lld\n", 
+	xblk, yblk, m_band, m_l, IdxOffset(req,img));
 
     if (CE_None != poDS->ReadTileIdx(tinfo, req, img)) {
 	CPLError( CE_Failure, CPLE_AppDefined,
@@ -633,7 +636,7 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     buf_mgr dst;
 
     // We got the data, do we need to decompress it before decoding?
-    if (deflate) {
+    if (deflatep) {
 	dst.size = img.pageSizeBytes + 1440; // in case the packed page is a bit larger than the raw one
 	dst.buffer = (char *)CPLMalloc(dst.size);
 
@@ -719,7 +722,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	// the bytes in buffer field
 	Compress(dst, src);
 	void *usebuff = dst.buffer;
-	if (deflate) {
+	if (deflatep) {
 	    usebuff = DeflateBlock(dst, poDS->pbsize - dst.size, deflate_flags);
 	    if (!usebuff) {
 		CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
@@ -820,7 +823,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
-    if (deflate) {
+    if (deflatep) {
 	// Move the packed part at the start of tbuffer, to make more space available
 	memcpy(tbuffer, outbuff, dst.size);
 	dst.buffer = (char *)tbuffer;

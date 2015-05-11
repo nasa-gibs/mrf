@@ -123,28 +123,22 @@ std::ostream& operator<<(std::ostream &out, const ILIdx& t) {
 void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
     FILE *fp=fopen(fname,"wb");
     switch(sz.c) {
-    case 4: 
-	{
-	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-	    char *d=(char *)data;
-	    for(int i=sz.x*sz.y;i;i--) {
-		fwrite(d,3,1,fp);
-		d+=4;
-	    }
-	    break;
+    case 4:
+	fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	char *d=(char *)data;
+	for(int i=sz.x*sz.y;i;i--) {
+	    fwrite(d,3,1,fp);
+	    d+=4;
 	}
+	break;
     case 3:
-	{
-	    fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
-	    fwrite(data,sz.x*sz.y,3,fp);
-	    break;
-	}
+	fprintf(fp,"P6 %d %d 255\n",sz.x,sz.y);
+	fwrite(data,sz.x*sz.y,3,fp);
+	break;
     case 1:
-	{
-	    fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
-	    fwrite(data,sz.x,sz.y,fp);
-	    break;
-	}
+	fprintf(fp,"P5 %d %d 255\n",sz.x,sz.y);
+	fwrite(data,sz.x,sz.y,fp);
+	break;
     default:
 	fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
 	return;
@@ -156,14 +150,13 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
 // Returns the size of the index for image and overlays
 // If scale is zero, only base image
 GIntBig IdxSize(const ILImage &full, const int scale) {
-    ILImage img=full;
+    ILImage img = full;
     img.pagecount = pcount(img.size, img.pagesize);
     GIntBig sz = img.pagecount.l;
     while (scale != 0 && 1 != img.pagecount.x * img.pagecount.y)
     {
 	img.size.x = pcount(img.size.x, scale);
 	img.size.y = pcount(img.size.y, scale);
-	img.size.l++;
 	img.pagecount = pcount(img.size, img.pagesize);
 	sz += img.pagecount.l;
     }
@@ -284,22 +277,19 @@ void GDALRegister_mrf(void)
 				"Byte UInt16 Int16 Int32 UInt32 Float32 Float64");
 
 	driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
-	    "<CreationOptionList>\n"
-	    "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>\n"
-	    "       <Value>JPEG</Value>"
-	    "       <Value>PNG</Value>"
-	    "       <Value>PPNG</Value>"
-	    "	    <Value>TIF</Value>"
-	    "       <Value>DEFLATE</Value>"
-	    "       <Value>NONE</Value>"
+	    "<CreationOptionList>"
+	    "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>"
+	    "	    <Value>JPEG</Value><Value>PNG</Value><Value>PPNG</Value>"
+	    "	    <Value>TIF</Value><Value>DEFLATE</Value><Value>NONE</Value>"
 #if defined(LERC)
 	    "	    <Value>LERC</Value>"
 #endif
-	    "   </Option>\n"
-	    "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>\n"
+	    "   </Option>"
+	    "   <Option name='INTERLEAVE' type='string-select' default='PIXEL'>"
 	    "       <Value>PIXEL</Value>"
 	    "       <Value>BAND</Value>"
 	    "   </Option>\n"
+	    "	<Option name='ZSIZE' type='int' description='Third dimension size' default='1'/>"
 	    "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
 	    "	<Option name='OPTIONS' type='string' description='Freeform dataset parameters'/>\n"
 	    "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
@@ -307,15 +297,19 @@ void GDALRegister_mrf(void)
 	    "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
 	    "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
-//	    "	<Option name='CLONE' type='boolean' description='Is this to be a clone of the cached MRF source'/>\n"
-	    "	<Option name='UNIFORM_SCALE' type='int' description='Uniform overlays in MRF, only 2 is tested'/>\n"
+	    "	<Option name='UNIFORM_SCALE' type='int' description='Scale of overlays in MRF, usually 2'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
-	    "</CreationOptionList>\n");
+	    "   <Option name='PHOTOMETRIC' type='string-select' default='DEFAULT' description='Band interpretation, may affect encoding'>\n"
+	    "	    <Value>MULTISPECTRAL</Value>"
+	    "   </Option>\n"
+	    "</CreationOptionList>\n"
+	    );
 
 	driver->pfnOpen = GDALMRFDataset::Open;
 	driver->pfnIdentify = GDALMRFDataset::Identify;
 	driver->pfnUnloadDriver = GDALDeregister_mrf;
 	driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
+	driver->pfnCreate = GDALMRFDataset::Create;
 	GetGDALDriverManager()->RegisterDriver(driver);
     }
 }
@@ -337,8 +331,15 @@ GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *pDS, const ILImage &image, i
     case IL_LERC: bnd = new LERC_Band(pDS,image,b,level); break;
 #endif
     default:
+	return NULL; 
+    }
+
+    // If something was flagged during band creation
+    if (CPLGetLastErrorNo() != CE_None) {
+	delete bnd;
 	return NULL;
     }
+
     // Copy the RW mode from the dataset
     bnd->SetAccess(pDS->eAccess);
     return bnd;
@@ -400,28 +401,86 @@ CPLXMLNode *SearchXMLSiblings( CPLXMLNode *psRoot, const char *pszElement )
     return NULL;
 }
 
-void XMLSetAttributeVal(CPLXMLNode *parent,const char* pszName,
+//
+// Extension to CSL, set an entry if it doesn't already exist
+//
+char **CSLAddIfMissing(char **papszList,
+    const char *pszName, const char *pszValue)
+{
+    if (CSLFetchNameValue(papszList, pszName))
+	return papszList;
+    return CSLSetNameValue(papszList, pszName, pszValue);
+}
+    
+//
+// Print a double in way when read with strtod
+//
+CPLString PrintDouble(double d, char *frmt)
+{
+
+    CPLString res;
+    res.FormatC(d, 0);
+    double v = CPLStrtod(res.c_str(), NULL);
+    if (d == v) return res;
+
+    //  This would be the right code with a C99 compiler that supports %a readback in strod()
+    //    return CPLString().Printf("%a",d);
+
+    return CPLString().FormatC(d, frmt);
+}
+
+void XMLSetAttributeVal(CPLXMLNode *parent, const char* pszName,
+    const char *val)
+{
+    CPLCreateXMLNode(parent, CXT_Attribute, pszName);
+    CPLSetXMLValue(parent, pszName, val);
+}
+
+void XMLSetAttributeVal(CPLXMLNode *parent, const char* pszName,
     const double val, const char *frmt)
 {
-    CPLCreateXMLNode(parent,CXT_Attribute,pszName);
-    CPLString sVal;
-    sVal.FormatC(val,frmt);
+    XMLSetAttributeVal(parent, pszName, CPLString().FormatC(val, frmt));
 
-//  Unfortunately the %a doesn't work in VisualStudio scanf or strtod
-//    if (strtod(sVal.c_str(),0) != val)
-//	sVal.Printf("%a",val);
-
-    CPLSetXMLValue(parent,pszName,sVal);
+    //  Unfortunately the %a doesn't work in VisualStudio scanf or strtod
+    //    if (strtod(sVal.c_str(),0) != val)
+    //	sVal.Printf("%a",val);
 }
 
 CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
-	const char*pszName,const ILSize &sz,const char *frmt)
+    const char*pszName, const ILSize &sz, const char *frmt)
 {
-    CPLXMLNode *node=CPLCreateXMLNode(parent,CXT_Element,pszName);
-    XMLSetAttributeVal(node,"x",sz.x,frmt);
-    XMLSetAttributeVal(node,"y",sz.y,frmt);
-    XMLSetAttributeVal(node,"c",sz.c,frmt);
+    CPLXMLNode *node = CPLCreateXMLNode(parent, CXT_Element, pszName);
+    XMLSetAttributeVal(node, "x", sz.x, frmt);
+    XMLSetAttributeVal(node, "y", sz.y, frmt);
+    if (sz.z != 1)
+	XMLSetAttributeVal(node, "z", sz.z, frmt);
+    XMLSetAttributeVal(node, "c", sz.c, frmt);
     return node;
+}
+
+//
+// Prints a vector of doubles into a string and sets that string as the value of an XML attribute
+// If all values are the same, it only prints one
+//
+void XMLSetAttributeVal(CPLXMLNode *parent,
+    const char*pszName, std::vector<double> const &values)
+{
+    if (values.empty())
+	return;
+
+    CPLString value;
+    double val = values[0];
+    int single_val = true;
+    for (int i = 0; i < values.size(); i++) {
+	if (val != values[i])
+	    single_val = false;
+	value.append(PrintDouble(values[i]) + " ");
+	value.resize(value.size() - 1); // Cut the last space
+    }
+    if (single_val)
+	value = PrintDouble(values[0]);
+    CPLCreateXMLNode(parent, CXT_Attribute, pszName);
+    CPLSetXMLValue(parent, pszName, value);
 }
 
 /**
@@ -431,19 +490,10 @@ CPLXMLNode *XMLSetAttributeVal(CPLXMLNode *parent,
 
 GDALColorEntry GetXMLColorEntry(CPLXMLNode *p) {
     GDALColorEntry ce;
-    ce.c1= static_cast<short>(getXMLNum(p,"c1",0));
-    ce.c2= static_cast<short>(getXMLNum(p,"c2",0));
-    ce.c3= static_cast<short>(getXMLNum(p,"c3",0));
-    ce.c4= static_cast<short>(getXMLNum(p,"c4",255));
-    return ce;
-}
-
-// Swap c2 and c3, converting from HSV to the GDAL supported HLS
-// Useless since GDAL only supports RGBA
-GDALColorEntry HSVSwap(const GDALColorEntry& cein) {
-    GDALColorEntry ce(cein);
-    ce.c2=ce.c3;
-    ce.c3=cein.c2;
+    ce.c1 = static_cast<short>(getXMLNum(p, "c1", 0));
+    ce.c2 = static_cast<short>(getXMLNum(p, "c2", 0));
+    ce.c3 = static_cast<short>(getXMLNum(p, "c3", 0));
+    ce.c4 = static_cast<short>(getXMLNum(p, "c4", 255));
     return ce;
 }
 
@@ -468,9 +518,9 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
     // There is no ftruncate in VSI, only truncate()
     VSILFILE *ifp = VSIFOpenL(fname, "r+b");
 
-// There is no VSIFTruncateL in gdal 1.8 and lower, so seek and write something at the end
+// There is no VSIFTruncateL in gdal 1.8 and lower, seek and write something at the end
 #if GDAL_VERSION_MAJOR == 1 && GDAL_VERSION_MINOR <= 8
-    int zero=0;
+    int zero = 0;
     VSIFSeekL(ifp, sz - sizeof(zero), SEEK_SET);
     int ret = (sizeof(zero) == VSIFWriteL(&zero, sizeof(zero), 1,ifp));
 #else

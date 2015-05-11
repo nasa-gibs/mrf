@@ -7,7 +7,7 @@ OBJ 	=	$(addsuffix .o, $(FILES))
 LO_O_OBJ	=	$(addsuffix .lo,$(basename $(O_OBJ)))
 
 ifneq ("$(wildcard LERC_band.cpp)","")
-FILES	:= LERC_band BitMask BitStuffer CntZImage $(FILES)
+FILES	:= LERC_band RLE BitMask BitStuffer CntZImage $(FILES)
 CPPFLAGS := -DLERC
 endif
 
