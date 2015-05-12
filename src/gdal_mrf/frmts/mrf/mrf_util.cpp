@@ -310,6 +310,7 @@ void GDALRegister_mrf(void)
 	driver->pfnUnloadDriver = GDALDeregister_mrf;
 	driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
 	driver->pfnCreate = GDALMRFDataset::Create;
+	driver->pfnDelete = GDALMRFDataset::Delete;
 	GetGDALDriverManager()->RegisterDriver(driver);
     }
 }

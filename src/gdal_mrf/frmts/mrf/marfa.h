@@ -256,6 +256,11 @@ public:
 	int nXSize, int nYSize, int nBands,
 	GDALDataType eType, char ** papszOptions);
 
+    // Stub for delete, GDAL should only overwrite the XML
+    static CPLErr Delete(const char * pszName) {
+	return CE_None;
+    }
+
     virtual const char *GetProjectionRef() { return projection; }
     virtual CPLErr SetProjection(const char *proj) {
 	projection = proj;
@@ -284,8 +289,6 @@ public:
     void SetNoDataValue(const char*);
     void SetMinValue(const char*);
     void SetMaxValue(const char*);
-    void SetPBuffer(unsigned int sz);
-    unsigned int GetPBufferSize() { return pbsize; };
     CPLErr SetVersion(int version);
 
     const CPLString GetFname() { return fname; };
@@ -295,6 +298,13 @@ public:
 
     // Creates an XML tree from the current MRF.  If written to a file it becomes an MRF
     CPLXMLNode *BuildConfig();
+
+    void SetPBufferSize(unsigned int sz) {
+	pbsize = sz;
+    }
+    unsigned int GetPBufferSize() {
+	return pbsize;
+    }
 
 protected:
     CPLErr LevelInit(const int l);
@@ -316,6 +326,14 @@ protected:
 
     // Add uniform scale overlays, returns the new size of the index file
     GIntBig AddOverviews(int scale);
+
+    // Late allocation buffer
+    void SetPBuffer(unsigned int sz);
+    void *GetPBuffer() {
+	if (!pbuffer && pbsize)
+	    SetPBuffer(pbsize);
+	return pbuffer;
+    }
 
     virtual CPLErr IRasterIO(GDALRWFlag, int, int, int, int,
 	void *, int, int, GDALDataType,

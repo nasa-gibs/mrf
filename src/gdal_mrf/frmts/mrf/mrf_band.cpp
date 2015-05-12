@@ -349,7 +349,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 	} 
 
 // Just the right mix of templates and macros make deinterleaving tidy
-#define CpySI(T) cpy_stride_in<T> (ob, (T *)poDS->pbuffer + i,\
+#define CpySI(T) cpy_stride_in<T> (ob, (T *)poDS->GetPBuffer() + i,\
     blockSizeBytes()/sizeof(T), img.pagesize.c)
 
 	// Page is already in poDS->pbuffer, not empty
@@ -431,7 +431,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // This is where the whole page fits
     void *ob = buffer;
     if (cstride != 1) 
-	ob = poDS->pbuffer;
+	ob = poDS->GetPBuffer();
 
     // Fill buffer with NoData if clipping
     if (clip)
@@ -660,7 +660,7 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 
     // If pages are interleaved, use the dataset page buffer instead
     if (1!=cstride)
-	dst.buffer = (char *)poDS->pbuffer;
+	dst.buffer = (char *)poDS->GetPBuffer();
 
     CPLErr ret = Decompress(dst, src);
     dst.size = img.pageSizeBytes; // In case the decompress failed, force it back
@@ -712,7 +712,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	poDS->tile = ILSize(); // Mark it corrupt
 
 	buf_mgr src = {(char *)buffer, img.pageSizeBytes};
-	buf_mgr dst = {(char *)poDS->pbuffer, poDS->pbsize};
+	buf_mgr dst = {(char *)poDS->GetPBuffer(), poDS->GetPBufferSize()};
 
 	// Swab the source before encoding if we need to 
 	if (is_Endianess_Dependent(img.dt, img.comp) && (img.nbo != NET_ORDER)) 

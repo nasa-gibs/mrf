@@ -85,6 +85,10 @@ GDALMRFDataset::GDALMRFDataset()
 
 void GDALMRFDataset::SetPBuffer(unsigned int sz)
 {
+    if (sz == 0) {
+	CPLFree(pbuffer);
+	pbsize = 0;
+    }
     pbuffer = CPLRealloc(pbuffer, sz);
     pbsize = (pbuffer == 0) ? 0 : sz;
 }
@@ -377,7 +381,6 @@ int GDALMRFDataset::Identify(GDALOpenInfo *poOpenInfo)
     return EQUALN(fn.c_str(), "<MRF_META>", 10);
 }
 
-
 /**
 *
 *\Brief Read the XML config tree, from file
@@ -539,7 +542,6 @@ CPLErr GDALMRFDataset::SetVersion(int version) {
 }
 
 CPLErr GDALMRFDataset::LevelInit(const int l) {
-
     // Test that this level does exist
     if (l < 0 || l >= cds->GetRasterBand(1)->GetOverviewCount()) {
 	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Overview not present!");
@@ -556,8 +558,7 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
     SetMetadataItem("INTERLEAVE", OrderName(current.order), "IMAGE_STRUCTURE");
     SetMetadataItem("COMPRESSION", CompName(current.comp), "IMAGE_STRUCTURE");
 
-    for (int i = 0; i < 6; i++)
-	GeoTransform[i] = cds->GeoTransform[i];
+    bGeoTransformValid = (CE_None == cds->GetGeoTransform(GeoTransform));
     for (int i = 0; i < l; i++) {
 	GeoTransform[1] /= scale;
 	GeoTransform[5] /= scale;
@@ -566,18 +567,12 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
     nRasterXSize = current.size.x;
     nRasterYSize = current.size.y;
     nBands = current.size.c;
-    hasVersions = cds->hasVersions;
-    verCount = cds->verCount;
-
-    bGeoTransformValid = TRUE;
 
     // Add the bands, copy constructor so they can be closed independently
     for (int i = 1; i <= nBands; i++) {
 	GDALMRFLRasterBand *band = new GDALMRFLRasterBand((GDALMRFRasterBand *)
 	    cds->GetRasterBand(i)->GetOverview(l));
-
 	SetBand(i, band);
-	band->SetColorInterpretation(band->GetColorInterpretation());
     }
 
     return CE_None;
@@ -1323,23 +1318,16 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
 	img = poDS->current; // Deal with the current one here
 
-
 	// Copy data values from source
-	int bHas;
-	double dfData;
 	for (int i = 0; i < poDS->nBands; i++) {
+	    int bHas;
+	    double dfData;
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetNoDataValue(&bHas);
 	    if (bHas)
 		poDS->vNoData.push_back(dfData);
-	}
-
-	for (int i = 0; i < poDS->nBands; i++) {
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMinimum(&bHas);
 	    if (bHas)
 		poDS->vMin.push_back(dfData);
-	}
-
-	for (int i = 0; i < poDS->nBands; i++) {
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMaximum(&bHas);
 	    if (bHas)
 		poDS->vMax.push_back(dfData);
