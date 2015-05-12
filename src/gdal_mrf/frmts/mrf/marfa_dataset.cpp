@@ -269,7 +269,7 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 		continue;
 	    };
 
-	    int srclevel = -0.5 + logb(panOverviewList[i], scale);
+	    int srclevel = int(-0.5 + logb(panOverviewList[i], scale));
 	    GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(GetRasterBand(1));
 
 	    // Warn for requests for invalid levels
@@ -827,7 +827,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	ifp.FP = VSIFOpenL(current.idxfname, mode);
     }
 
-    int expected_size = idxSize;
+    GIntBig expected_size = idxSize;
     if (clonedSource) expected_size *= 2;
 
     if (NULL != ifp.FP) {
@@ -1198,7 +1198,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     }
 
-    idxSize = IdxSize(full, scale);
+    idxSize = IdxSize(full, int(scale));
 
     // If not set by the bands, get a pageSizeBytes buffer
     if (GetPBufferSize() == 0)
