@@ -208,7 +208,7 @@ CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, con
     CPLString fn = CPLGetXMLValue(node, token, "");
     if (fn.size() == 0) // Not provided
 	return getFname(in, def);
-    size_t slashPos = fn.find_first_of("\\/");
+    int slashPos = fn.find_first_of("\\/");
 
     // Does it look like an absolute path or we wont't find the basename of in
     if (slashPos == 0				    // Starts with slash

@@ -120,26 +120,25 @@ static int isAllVal(GDALDataType gt, void *b, size_t bytecount, double ndv)
 // Swap bytes in place, unconditional
 static void swab_buff(buf_mgr &src, const ILImage &img)
 {
-    size_t i;
     switch (GDALGetDataTypeSize(img.dt)) {
     case 16: {
-	short int *b = (short int*)src.buffer;
-	for (i = src.size / 2; i; b++, i--)
-	    *b = swab16(*b);
+	short int *b=(short int*)src.buffer;
+	for (int i=src.size/2;i;b++,i--) 
+	    *b=swab16(*b);
 	break;
-    }
+	     }
     case 32: {
-	int *b = (int*)src.buffer;
-	for (i = src.size / 4; i; b++, i--)
-	    *b = swab32(*b);
+	int *b=(int*)src.buffer;
+	for (int i=src.size/4;i;b++,i--) 
+	    *b=swab32(*b);
 	break;
-    }
+	     }
     case 64: {
-	long long *b = (long long*)src.buffer;
-	for (i = src.size / 8; i; b++, i--)
-	    *b = swab64(*b);
+	long long *b=(long long*)src.buffer;
+	for (int i=src.size/8;i;b++,i--)
+	    *b=swab64(*b);
 	break;
-    }
+	     }
     }
 }
 
@@ -301,13 +300,13 @@ CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
 {
     int success;
     double ndv = GetNoDataValue(&success);
-    if (!success) ndv = 0.0;
+    if (!success) ndv = 0.0L;
 
     size_t bsb = blockSizeBytes();
 
     // use memset for speed for bytes, or if nodata is zeros
     if (eDataType == GDT_Byte || 0.0L == ndv ) {
-	memset(buffer, int(ndv), bsb);
+	memset(buffer, ndv, bsb);
 	return CE_None;
     }
 
@@ -775,7 +774,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	double val = GetNoDataValue(&success);
 	if (!success) val = 0.0;
 	if (isAllVal(eDataType, buffer, img.pageSizeBytes, val))
-	    empties |= bandbit(iBand);
+	    empties != bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
 	// Just the right mix of templates and macros make this real tidy
