@@ -53,6 +53,8 @@ enum ILCompression {
 #endif
     IL_ERR_COMP
 };
+
+// Sequential is not supported by GDAL
 enum ILOrder { IL_Interleaved = 0, IL_Separate, IL_Sequential, IL_ERR_ORD };
 extern char const **ILComp_Name;
 extern char const **ILComp_Ext;
@@ -66,7 +68,7 @@ typedef struct {
     size_t size;
 } buf_mgr;
 
-// A tile index record
+// A tile index record, 16 bytes, big endian
 typedef struct {
     GIntBig offset;
     GIntBig size;
@@ -95,6 +97,7 @@ std::ostream& operator<<(std::ostream &out, const ILIdx& t);
 
 bool is_Endianess_Dependent(GDALDataType dt, ILCompression comp);
 
+// Debugging support
 // #define PPMW
 #ifdef PPMW
 void ppmWrite(const char *fname, const char *data, const ILSize &sz);
@@ -130,7 +133,7 @@ typedef struct ILImage {
 
 /**
  *
- *\brief  Converters beween endianess, if needed.
+ *\brief  Converters beween endianess
  *  Call netXX() to guarantee big endian
  *
  */
@@ -267,7 +270,7 @@ public:
 	return CE_None;
     }
 
-    virtual const char *GetPhotometricInterpretation() { return photometric; }
+    virtual CPLString const &GetPhotometricInterpretation() { return photometric; }
     virtual CPLErr SetPhotometricInterpretation(const char *photo) {
 	photometric = photo;
 	return CE_None;
@@ -391,7 +394,7 @@ protected:
     GIntBig idxSize; // The size of each version index, or the size of the cloned index
     int bCrystalized; // Unset only during the create process
 
-    // Freeform sticky dataset options
+    // Freeform sticky dataset options, as a list of key-value pairs
     CPLStringList optlist;
 
     // If caching data, the parent dataset
@@ -408,10 +411,8 @@ protected:
     // A place to keep an uncompressed block, to keep from allocating it all the time
     void *pbuffer;
     unsigned int pbsize;
-
     ILSize tile; // ID of tile present in buffer
-    // Holds bits, to be used in pixel interleaved (up to 64 bands)
-    GIntBig bdirty;
+    GIntBig bdirty;    // Holds bits, to be used in pixel interleaved (up to 64 bands)
 
     // GeoTransform support
     double GeoTransform[6];
@@ -426,9 +427,10 @@ protected:
     GDALColorTable *poColorTable;
     int Quality;
 
-    VF dfp;
-    VF ifp;
+    VF dfp;  // Data file handle
+    VF ifp;  // Index file handle
 
+    // statistical values
     std::vector<double> vNoData, vMin, vMax;
 };
 
@@ -538,12 +540,18 @@ protected:
 class JPEG_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
-    JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-	GDALMRFRasterBand(pDS, image, b, int(level)) {};
+    JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
     virtual ~JPEG_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
+
+    CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src);
+    CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &src);
+    // Stored format flags, significant only for 3 band data
+    bool sameres;
+    bool rgb;
+    bool optimize;
 };
 
 class Raw_Band : public GDALMRFRasterBand {

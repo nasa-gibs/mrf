@@ -30,8 +30,8 @@
 *
 ******************************************************************************
 *
-*
-*
+*   Since the MRF dataset and the band are so closely tied together, they should be
+*   considered a single class, or a class (dataset) with extensions (bands).
 *
 *
 ****************************************************************************/
@@ -49,7 +49,6 @@
 #include <windows.h>
 #define MRF_sleep_ms(t) Sleep(t)
 #else // Assume linux
-// Unfortunately this defines all sorts of garbage
 #include <unistd.h>
 // Usleep is in usec
 #define MRF_sleep_ms(t) usleep(t*1000)
@@ -60,8 +59,7 @@ using std::string;
 
 // Initialize as invalid
 GDALMRFDataset::GDALMRFDataset()
-{
-    //		     X0   Xx   Xy  Y0    Yx   Yy
+{   //		     X0   Xx   Xy  Y0    Yx   Yy
     double gt[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
 
     ILImage img;

@@ -311,8 +311,8 @@ GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
 	return;
     }
 
-    if (image.comp != IL_PPNG)
-	return; // The rest is only for PPNG
+    if (image.comp != IL_PPNG || b != 1)
+	return; // The rest is only for PPNG, which only has one band
 
     // Convert the GDAL LUT to PNG style
     GDALColorTable *poCT = GetColorTable();

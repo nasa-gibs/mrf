@@ -122,7 +122,7 @@ static boolean empty_output_buffer(j_compress_ptr cinfo) {
  * Returns the compressed size in dest.size
  */
 
-CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img) 
+CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
 
 {
     // The cinfo should stay open and reside in the DS, since it can be left initialized
@@ -138,47 +138,71 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
     jmgr.term_destination = init_or_terminate_destination;
 
     // Look at the source of this, some interesting tidbits
+    cinfo.err = &jerr;
     jpeg_create_compress(&cinfo);
-    cinfo.dest=&jmgr;
-    cinfo.err=&jerr;
+    cinfo.dest = &jmgr;
 
     // The page specific info, size and color spaces
     cinfo.image_width = img.pagesize.x;
     cinfo.image_height = img.pagesize.y;
     cinfo.input_components = img.pagesize.c;
     switch (cinfo.input_components) {
-    case 1:cinfo.in_color_space=JCS_GRAYSCALE; break;
-    case 4:cinfo.in_color_space=JCS_CMYK; break;
-    default:cinfo.in_color_space=JCS_RGB;
+    case 1:cinfo.in_color_space = JCS_GRAYSCALE; break;
+    case 3:cinfo.in_color_space = JCS_RGB; break;  // Stored as YCbCr 4:2:0 by default
+    default:
+	cinfo.in_color_space = JCS_UNKNOWN; // 2, 4-10 bands
     }
 
     // Set all required fields and overwrite the ones we want to change
     jpeg_set_defaults(&cinfo);
 
+    // Override certain settings
     jpeg_set_quality(&cinfo, img.quality, TRUE);
-    cinfo.dct_method=JDCT_FLOAT;
+    cinfo.dct_method = JDCT_FLOAT; // Pretty fast and precise
+    cinfo.optimize_coding = optimize; // Set "OPTIMIZE=TRUE" in OPTIONS
 
-    int linesize=cinfo.image_width*cinfo.num_components*((cinfo.data_precision==8)?1:2);
-    JSAMPROW *rowp=(JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*img.pagesize.y);
-    for (int i=0;i<img.pagesize.y;i++)
-        rowp[i]=(JSAMPROW)(src.buffer+i*linesize);
+    // Do we explicitly turn off the YCC color and downsampling?
+
+    if (cinfo.in_color_space == JCS_RGB) {
+	if (rgb) {  // Stored as RGB
+	    jpeg_set_colorspace(&cinfo, JCS_RGB);  // Huge files
+	} else if (sameres) { // YCC, somewhat larger files with improved color spatial detail
+	    cinfo.comp_info[0].h_samp_factor = 1;
+	    cinfo.comp_info[0].v_samp_factor = 1;
+
+	    // Enabling these lines will make the color components use the same tables as Y, even larger file with slightly better color depth detail
+	    // cinfo.comp_info[1].quant_tbl_no = 0;
+	    // cinfo.comp_info[2].quant_tbl_no = 0;
+
+	    // cinfo.comp_info[1].dc_tbl_no = 0;
+	    // cinfo.comp_info[2].dc_tbl_no = 0;
+
+	    // cinfo.comp_info[1].ac_tbl_no = 0;
+	    // cinfo.comp_info[2].ac_tbl_no = 0;
+	}
+    }
+
+    int linesize = cinfo.image_width*cinfo.num_components*((cinfo.data_precision == 8) ? 1 : 2);
+    JSAMPROW *rowp = (JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*img.pagesize.y);
+    for (int i = 0; i < img.pagesize.y; i++)
+	rowp[i] = (JSAMPROW)(src.buffer + i*linesize);
 
     if (jerr.signaled()) {
-        CPLError(CE_Failure,CPLE_AppDefined,"MRF: JPEG compression error");
-        jpeg_destroy_compress(&cinfo);
-        CPLFree(rowp);
-        return CE_Failure;
+	CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG compression error");
+	jpeg_destroy_compress(&cinfo);
+	CPLFree(rowp);
+	return CE_Failure;
     }
-    
-    jpeg_start_compress(&cinfo,TRUE);
-    jpeg_write_scanlines(&cinfo,rowp,img.pagesize.y);
+
+    jpeg_start_compress(&cinfo, TRUE);
+    jpeg_write_scanlines(&cinfo, rowp, img.pagesize.y);
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
 
     CPLFree(rowp);
 
     // Figure out the size
-    dst.size-=jmgr.free_in_buffer;
+    dst.size -= jmgr.free_in_buffer;
 
     return CE_None;
 }
@@ -191,9 +215,10 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
  * @param sz if non-zero, test that uncompressed data fits in the buffer.
  */
 
-CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands) 
+CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc) 
 
 {
+    int nbands = img.pagesize.c;
     // Locals, clean up after themselves
     jpeg_decompress_struct cinfo={0};
     ErrorMgr jerr;
@@ -207,7 +232,7 @@ CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands)
     src.resync_to_restart = jpeg_resync_to_restart;
 
     if (jerr.signaled()) {
-        CPLError(CE_Failure,CPLE_AppDefined,"MRF: Error reading JPEG page");
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error reading JPEG page");
         return CE_Failure;
     }
     jpeg_create_decompress(&cinfo);
@@ -215,9 +240,19 @@ CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands)
     jpeg_read_header(&cinfo, TRUE);
     // Use float, it is actually faster than the ISLOW method by a tiny bit
     cinfo.dct_method = JDCT_FLOAT;
+
+    //
+    // Tolerate different input if we can do the conversion
+    // Gray and RGB for example
+    // This also means that a RGB MRF can be read as grayscale and vice versa
+    // If libJPEG can't convert it will throw an error
+    // 
     if (nbands == 3 && cinfo.num_components != nbands)
 	cinfo.out_color_space = JCS_RGB;
-    int linesize = cinfo.image_width * nbands * ((cinfo.data_precision==8)?1:2);
+    if (nbands == 1 && cinfo.num_components != nbands)
+	cinfo.out_color_space = JCS_GRAYSCALE;
+
+    int linesize = cinfo.image_width * nbands * ((cinfo.data_precision == 8) ? 1 : 2);
 
     jpeg_start_decompress(&cinfo);
 
@@ -247,11 +282,33 @@ CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands)
 
 CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src) 
 { 
-    return DecompressJPEG(dst, src, img.pagesize.c); 
+    return DecompressJPEG(dst, src); 
 }
 
 CPLErr JPEG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 { 
-    return CompressJPEG(dst, src, img);
+    return CompressJPEG(dst, src);
 }
 
+// PHOTOMETRIC == MULTISPECTRAL turns off YCbCr conversion and downsampling
+JPEG_Band::JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
+GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE)
+{
+    int nbands = image.pagesize.c;
+    //  TODO: Add 12bit JPEG support
+    //    if (image.dt != GDT_Byte && image.dt != GDT_Int16 && image.dt != GDT_UInt16) {
+    if (image.dt != GDT_Byte) {
+	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPEG");
+	return;
+    }
+    if (nbands == 3) { // Only the 3 band is tricky
+	CPLString const &pm = pDS->GetPhotometricInterpretation();
+	if (pm == "RGB" || pm == "MULTISPECTRAL") { // Explicit RGB or MS
+	    rgb = TRUE;
+	    sameres = TRUE;
+	}
+	if (pm == "YCC")
+	    sameres = TRUE;
+    }
+    optimize = GetOptlist().FetchBoolean("OPTIMIZE", TRUE);
+}
