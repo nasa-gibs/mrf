@@ -5,12 +5,23 @@ OBJ	=	Tif_band.obj Raw_band.obj PNG_band.obj JPEG_band.obj mrf_band.obj mrf_over
 
 # Use the LERC_Band.cpp presence as a signal to use LERC
 !IF EXIST(LERC_Band.cpp)
-LERC	=	TRUE
+LERC	=	1
 EXTRAFLAGS	=	/DLERC
 OBJ	=	$(OBJ) BitStuffer.obj CntZImage.obj LERC_Band.obj BitMask.obj
 !ENDIF
 
+!IFDEF JPEG12_SUPPORTED
+OBJ	=	$(OBJ) JPEG12_band.obj
+EXTRAFLAGS	= -DJPEG12_SUPPORTED $(EXTRAFLAGS)
+!ENDIF
+
 PLUGIN_DLL =	gdal_mrf.dll
+
+!IFDEF JPEG_EXTERNAL_LIB
+EXTRAFLAGS =	-I$(JPEGDIR) $(EXTRAFLAGS)
+!ELSE
+EXTRAFLAGS =	-I../jpeg/libjpeg $(JPEG12_FLAGS) $(EXTRAFLAGS)
+!ENDIF
 
 !IFDEF PNG_EXTERNAL_LIB
 EXTRAFLAGS = 	-I../zlib -I$(PNGDIR) $(EXTRAFLAGS)

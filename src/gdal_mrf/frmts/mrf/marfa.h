@@ -548,6 +548,13 @@ protected:
 
     CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &src);
+
+#if defined(JPEG12_SUPPORTED) // Internal only
+#define LIBJPEG_12_H "../jpeg/libjpeg12/jpeglib.h"
+    CPLErr CompressJPEG12(buf_mgr &dst, buf_mgr &src);
+    CPLErr DecompressJPEG12(buf_mgr &dst, buf_mgr &src);
+#endif
+
     // Stored format flags, significant only for 3 band data
     bool sameres;
     bool rgb;

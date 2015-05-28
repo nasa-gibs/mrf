@@ -28,82 +28,83 @@
 /*
  * $Id$
  * JPEG band
- * JPEG page compression and decompression functions
- *
+ * JPEG page compression and decompression functions, gets compiled twice
+ * LIBJPEG_12_H is defined if both 8 and 12 bit JPEG will be supported
+ * JPEG12_ON    is defined for the 12 bit versions
  */
 
 #include "marfa.h"
 #include <setjmp.h>
 
 CPL_C_START
-#include "../jpeg/libjpeg/jpeglib.h"
+#include <jpeglib.h>
 CPL_C_END
 
 /**
- *\Brief Helper class for jpeg error management
- */
+*\Brief Helper class for jpeg error management
+*/
 
-struct ErrorMgr: public jpeg_error_mgr {
+struct ErrorMgr : public jpeg_error_mgr {
     inline ErrorMgr();
     int signaled() { return setjmp(setjmpBuffer); };
     jmp_buf setjmpBuffer;
 };
 
 /**
- *\brief Called when jpeg wants to report a warning
- * msgLevel can be:
- * -1 Corrupt data
- * 0 always display
- * 1... Trace level
- */
+*\brief Called when jpeg wants to report a warning
+* msgLevel can be:
+* -1 Corrupt data
+* 0 always display
+* 1... Trace level
+*/
 
-static void emitMessage (j_common_ptr cinfo, int msgLevel) 
+static void emitMessage(j_common_ptr cinfo, int msgLevel)
 {
-    jpeg_error_mgr* err=cinfo->err;
+    jpeg_error_mgr* err = cinfo->err;
     if (msgLevel > 0) return; // No trace msgs
     // There can be many warnings, just print the first one
     if (err->num_warnings++ >1) return;
     char buffer[JMSG_LENGTH_MAX];
-    err->format_message(cinfo,buffer);
-    CPLError(CE_Failure,CPLE_AppDefined,buffer);
+    err->format_message(cinfo, buffer);
+    CPLError(CE_Failure, CPLE_AppDefined, buffer);
 }
 
 static void errorExit(j_common_ptr cinfo)
 {
-  ErrorMgr* err = (ErrorMgr*)cinfo->err;
-  // format the warning message
-  char buffer[JMSG_LENGTH_MAX];
+    ErrorMgr* err = (ErrorMgr*)cinfo->err;
+    // format the warning message
+    char buffer[JMSG_LENGTH_MAX];
 
-  err->format_message(cinfo, buffer);
-  CPLError(CE_Failure,CPLE_AppDefined,buffer);
-  // return control to the setjmp point
-  longjmp(err->setjmpBuffer,1);
+    err->format_message(cinfo, buffer);
+    CPLError(CE_Failure, CPLE_AppDefined, buffer);
+    // return control to the setjmp point
+    longjmp(err->setjmpBuffer, 1);
 }
 
 /**
- *\bried set up the normal JPEG error routines, then override error_exit
- */
+*\bried set up the normal JPEG error routines, then override error_exit
+*/
 ErrorMgr::ErrorMgr()
 {
     jpeg_std_error(this);
-    error_exit=errorExit;
-    emit_message=emitMessage;
+    error_exit = errorExit;
+    emit_message = emitMessage;
 }
 
 /**
- *\Brief Do nothing stub function for JPEG library, called
- */
-void stub_source_dec(j_decompress_ptr cinfo) {};
+*\Brief Do nothing stub function for JPEG library, called
+*/
+static void stub_source_dec(j_decompress_ptr cinfo) {};
 
 /**
- *\Brief: Do nothing stub function for JPEG library, called?
- */
-boolean fill_input_buffer_dec(j_decompress_ptr cinfo) {return TRUE;};
+*\Brief: Do nothing stub function for JPEG library, called?
+*/
+static boolean fill_input_buffer_dec(j_decompress_ptr cinfo) { return TRUE; };
 
 /**
- *\Brief: Do nothing stub function for JPEG library, not called
- */
-void skip_input_data_dec(j_decompress_ptr cinfo, long l) {};
+*\Brief: Do nothing stub function for JPEG library, not called
+*/
+static void skip_input_data_dec(j_decompress_ptr cinfo, long l) {};
 
 // Destination should be already set up
 static void init_or_terminate_destination(j_compress_ptr cinfo) {}
@@ -121,8 +122,11 @@ static boolean empty_output_buffer(j_compress_ptr cinfo) {
  *
  * Returns the compressed size in dest.size
  */
-
+#if defined(JPEG12_ON)
+CPLErr JPEG_Band::CompressJPEG12(buf_mgr &dst, buf_mgr &src)
+#else
 CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
+#endif
 
 {
     // The cinfo should stay open and reside in the DS, since it can be left initialized
@@ -159,7 +163,7 @@ CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     // Override certain settings
     jpeg_set_quality(&cinfo, img.quality, TRUE);
     cinfo.dct_method = JDCT_FLOAT; // Pretty fast and precise
-    cinfo.optimize_coding = optimize; // Set "OPTIMIZE=TRUE" in OPTIONS
+    cinfo.optimize_coding = optimize; // Set "OPTIMIZE=TRUE" in OPTIONS, default for 12bit
 
     // Do we explicitly turn off the YCC color and downsampling?
 
@@ -214,8 +218,11 @@ CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
  * @param png pointer to PNG in memory
  * @param sz if non-zero, test that uncompressed data fits in the buffer.
  */
-
+#if defined(JPEG12_ON)
+CPLErr JPEG_Band::DecompressJPEG12(buf_mgr &dst, buf_mgr &isrc)
+#else
 CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc) 
+#endif
 
 {
     int nbands = img.pagesize.c;
@@ -280,13 +287,25 @@ CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     return CE_None;
 }
 
-CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src) 
-{ 
-    return DecompressJPEG(dst, src); 
+// This part get done only once
+#if !defined(JPEG12_ON)
+
+// Type dependent dispachers
+CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
+{
+#if defined(LIBJPEG_12_H)
+    if (GDT_Byte != img.dt)
+	return DecompressJPEG12(dst, src);
+#endif
+    return DecompressJPEG(dst, src);
 }
 
 CPLErr JPEG_Band::Compress(buf_mgr &dst, buf_mgr &src)
-{ 
+{
+#if defined(LIBJPEG_12_H)
+    if (GDT_Byte != img.dt)
+	return CompressJPEG12(dst, src);
+#endif
     return CompressJPEG(dst, src);
 }
 
@@ -296,12 +315,17 @@ GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE)
 {
     int nbands = image.pagesize.c;
     //  TODO: Add 12bit JPEG support
-    //    if (image.dt != GDT_Byte && image.dt != GDT_Int16 && image.dt != GDT_UInt16) {
-    if (image.dt != GDT_Byte) {
+    // Check behavior on signed 16bit.  Does the libjpeg sign extend?
+#if defined(LIBJPEG_12_H)
+    if (GDT_Byte != image.dt && GDT_UInt16 != image.dt) {
+#else
+    if (GDT_Byte != image.dt) {
+#endif
 	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPEG");
 	return;
     }
-    if (nbands == 3) { // Only the 3 band is tricky
+
+    if (nbands == 3) { // Only the 3 band JPEG has storage flavors
 	CPLString const &pm = pDS->GetPhotometricInterpretation();
 	if (pm == "RGB" || pm == "MULTISPECTRAL") { // Explicit RGB or MS
 	    rgb = TRUE;
@@ -310,5 +334,10 @@ GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE)
 	if (pm == "YCC")
 	    sameres = TRUE;
     }
-    optimize = GetOptlist().FetchBoolean("OPTIMIZE", TRUE);
+
+    if (GDT_Byte == image.dt)
+	optimize = GetOptlist().FetchBoolean("OPTIMIZE", FALSE);
+    else
+	optimize = TRUE; // Required for 12bit
 }
+#endif
