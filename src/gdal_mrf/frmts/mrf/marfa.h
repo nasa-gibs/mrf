@@ -532,6 +532,7 @@ protected:
 
     CPLErr CompressPNG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressPNG(buf_mgr &dst, buf_mgr &src);
+    CPLErr ResetPalette();
     void *PNGColors;
     void *PNGAlpha;
     int PalSize, TransSize;

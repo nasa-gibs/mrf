@@ -958,12 +958,17 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
     // Use the full size
     CPLXMLNode *raster = CPLCreateXMLNode(config, CXT_Element, "Raster");
     XMLSetAttributeVal(raster, "Size", full.size, "%.0f");
+    XMLSetAttributeVal(raster, "PageSize", full.pagesize, "%.0f");
 
     if (full.comp != IL_PNG)
 	CPLCreateXMLElementAndValue(raster, "Compression", CompName(full.comp));
 
     if (full.dt != GDT_Byte)
 	CPLCreateXMLElementAndValue(raster, "DataType", GDALGetDataTypeName(full.dt));
+
+    // special photometric interpretation
+    if (!photometric.empty())
+	CPLCreateXMLElementAndValue(raster, "Photometric", photometric);
 
     if (vNoData.size() || vMin.size() || vMax.size()) {
 	CPLXMLNode *values = CPLCreateXMLNode(raster, CXT_Element, "DataValues");
@@ -974,6 +979,7 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 
     // palette, if we have one
     if (poColorTable != NULL) {
+	char *pfrmt = "%.0f";
 	CPLXMLNode *pal = CPLCreateXMLNode(raster, CXT_Element, "Palette");
 	int sz = poColorTable->GetColorEntryCount();
 	if (sz != 256)
@@ -983,17 +989,13 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 	    CPLXMLNode *entry = CPLCreateXMLNode(pal, CXT_Element, "Entry");
 	    const GDALColorEntry *ent = poColorTable->GetColorEntry(i);
 	    // No need to set the index, it is always from 0 no size-1
-	    XMLSetAttributeVal(entry, "c1", ent->c1);
-	    XMLSetAttributeVal(entry, "c2", ent->c2);
-	    XMLSetAttributeVal(entry, "c3", ent->c3);
+	    XMLSetAttributeVal(entry, "c1", ent->c1, pfrmt);
+	    XMLSetAttributeVal(entry, "c2", ent->c2, pfrmt);
+	    XMLSetAttributeVal(entry, "c3", ent->c3, pfrmt);
 	    if (ent->c4 != 255)
-		XMLSetAttributeVal(entry, "c4", ent->c4);
+		XMLSetAttributeVal(entry, "c4", ent->c4, pfrmt);
 	}
     }
-
-    // special photometric interpretation
-    if (!photometric.empty())
-	CPLCreateXMLElementAndValue(raster, "Photometric", photometric);
 
     if (is_Endianess_Dependent(full.dt, full.comp)) // Need to set the order
 	CPLCreateXMLElementAndValue(raster, "NetByteOrder",
@@ -1001,9 +1003,8 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 
     if (full.quality > 0 && full.quality != 85)
 	CPLCreateXMLElementAndValue(raster, "Quality",
-	CPLString().Printf("%d", full.quality));
+	    CPLString().Printf("%d", full.quality));
 
-    XMLSetAttributeVal(raster, "PageSize", full.pagesize, "%.0f");
     // Done with the raster node
 
     if (scale) {
