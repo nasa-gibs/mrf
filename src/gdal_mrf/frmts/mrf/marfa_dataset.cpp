@@ -427,11 +427,11 @@ const  char theDelimiter = ' ')
 
 // Returns the number following the prefix if it exists in one of the vector strings
 // Otherwise it returns the default
-static int getnum(const vector<string> &theStringVector, const char prefix, int d) {
+static int getnum(const vector<string> &theStringVector, const char prefix, int def) {
     for (int i = 0; i < theStringVector.size(); i++) {
-		if (theStringVector[i][0] == prefix)
-			return atoi(theStringVector[i].c_str() + 1);
-		return d;
+	if (theStringVector[i][0] == prefix)
+	    return atoi(theStringVector[i].c_str() + 1);
+	return def;
     }
 }
 
@@ -1357,6 +1357,10 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
     CSLDestroy(options);
+
+    char **meta = poSrcDS->GetMetadata();
+    if (CSLCount(meta))
+	poDS->SetMetadata(meta);
 
     // If copy is disabled, we're done, we just created an empty MRF
     if (!poDS || on(CSLFetchNameValue(papszOptions, "NOCOPY")))
