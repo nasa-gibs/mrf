@@ -709,8 +709,8 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
 		    }
 		    poColorTable->CreateColorRamp(start_idx, &ce_start,
 			end_idx, &ce_end);
-		    ce_start = ce_end;
-		    start_idx = end_idx;
+ce_start = ce_end;
+start_idx = end_idx;
 		}
 	    }
 
@@ -806,10 +806,20 @@ char      **GDALMRFDataset::GetFileList()
     return papszFileList;
 }
 
+// Try to create all the folders in the path in sequence, ignore errors
+static void mkdir_r(string const &fname) {
+    size_t loc = fname.find_first_of("\\/");
+    while (string::npos != fname.find_first_of("\\/", ++loc)) {
+	loc = fname.find_first_of("\\/", loc);
+	VSIMkdir(fname.substr(0, loc).c_str(), 0);
+    }
+}
+
 // Returns the dataset index file or null
 VSILFILE *GDALMRFDataset::IdxFP() {
     if (ifp.FP != NULL)
 	return ifp.FP;
+
     char *mode = "rb";
     ifp.acc = GF_Read;
 
@@ -823,6 +833,12 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     // need to create the index file
     if (ifp.FP == NULL && !bCrystalized && (eAccess == GA_Update || !source.empty())) {
 	mode = "w+b";
+	ifp.FP = VSIFOpenL(current.idxfname, mode);
+    }
+
+    if (NULL == ifp.FP && !source.empty()) {
+	// caching and cloning, try making the folder and attempt again
+	mkdir_r(current.idxfname);
 	ifp.FP = VSIFOpenL(current.idxfname, mode);
     }
 
@@ -888,7 +904,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	return NULL;
     }
 
-    // Try opening it again in rw mode so we can read and write into it
+    // Try opening it again in rw mode so we can read and write
     mode = "r+b";
     ifp.acc = GF_Write;
     ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
@@ -917,30 +933,39 @@ VSILFILE *GDALMRFDataset::DataFP() {
 	dfp.acc = GF_Write;
     }
 
-    dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
-    if (dfp.FP)
+    dfp.FP = VSIFOpenL(current.datfname, mode);
+    if (dfp.FP) 
 	return dfp.FP;
 
     // It could be a caching MRF
-    if (source.empty()) {
-	CPLError(CE_Failure, CPLE_AppDefined,
-	    "GDAL MRF: Can't open data file %s\n", current.datfname.c_str());
-	return dfp.FP;
-    }
+    if (source.empty()) 
+	goto io_error;
 
-    // Cloud be there but read only, remember it was open that way
+    // Cloud be there but read only, remember that it was open that way
     mode = "rb";
     dfp.acc = GF_Read;
-    dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
+    dfp.FP = VSIFOpenL(current.datfname, mode);
     if (NULL != dfp.FP) {
 	CPLDebug("MRF_IO", "Opened %s RO mode %s\n", current.datfname.c_str(), mode);
 	return dfp.FP;
     }
 
-    // We should have created it above with "a+b"
-    CPLError(CE_Failure, CPLE_AppDefined,
-	"GDAL MRF: Can't open data file %s\n", current.datfname.c_str());
-    return dfp.FP;
+    if (source.empty()) 
+	goto io_error;
+
+    // cacheing, maybe the folder didn't exist
+    mkdir_r(current.datfname);
+    mode = "a+b";
+    dfp.acc = GF_Write;
+    dfp.FP = VSIFOpenL(current.datfname, mode);
+    if (dfp.FP)
+	return dfp.FP;
+
+io_error:
+    dfp.FP = NULL;
+    CPLError(CE_Failure, CPLE_FileIO,
+	"GDAL MRF: %s : %s", strerror(errno), current.datfname.c_str());
+    return NULL;
 };
 
 // Builds an XML tree from the current MRF.  If written to a file it becomes an MRF
