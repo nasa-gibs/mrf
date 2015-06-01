@@ -158,7 +158,7 @@ TIF_Band::TIF_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level):
         GDALMRFRasterBand(pDS,image,b,int(level))
 {
     // Increase the page buffer by 1K in case Tiff expands data
-    pDS->SetPBuffer(image.pageSizeBytes + 1024);
+    pDS->SetPBufferSize(image.pageSizeBytes + 1024);
 
     // Static create options for TIFF tiles
     papszOptions = CSLAddNameValue(NULL, "COMPRESS", "DEFLATE");

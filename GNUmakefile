@@ -1,4 +1,4 @@
-GDAL_VERSION=1.10.1
+GDAL_VERSION=1.11.1
 GDAL_ARTIFACT=gdal-$(GDAL_VERSION).tar.gz
 GDAL_HOME=http://download.osgeo.org/gdal
 GDAL_URL=$(GDAL_HOME)/$(GDAL_VERSION)/$(GDAL_ARTIFACT)
@@ -166,7 +166,8 @@ gdal-mock:
 #-----------------------------------------------------------------------------
 # Clean
 #-----------------------------------------------------------------------------
-clean: rm -rf build
+clean: 
+	rm -rf build
 
 distclean: clean
 	rm -rf dist

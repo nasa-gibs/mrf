@@ -5,9 +5,16 @@ include ../../GDALmake.opt
 FILES	=	marfa_dataset mrf_band JPEG_band PNG_band Raw_band Tif_band mrf_util mrf_overview
 OBJ 	=	$(addsuffix .o, $(FILES))
 LO_O_OBJ	=	$(addsuffix .lo,$(basename $(O_OBJ)))
+DEPENDS	= marfa.h
+
+ifeq ($(JPEG12_ENABLED),yes)
+FILES	:= $(FILES) JPEG12_band
+CPPFLAGS := -DJPEG12_SUPPORTED
+endif
 
 ifneq ("$(wildcard LERC_band.cpp)","")
-FILES	:= LERC_band RLE BitMask BitStuffer CntZImage $(FILES)
+FILES	:= $(FILES) LERC_band BitMask BitStuffer CntZImage Lerc2 BitStuffer2 BitMask2 RLE
+DEPENDS  := $(DEPENDS) BitMask.h BitStuffer.h CntZImage.h Defines.h Image.h TImage.hpp Lerc2.h BitStuffer2.h BitMask2.h RLE.h
 CPPFLAGS := -DLERC
 endif
 
@@ -20,7 +27,7 @@ clean:
 
 install-obj:	$(O_OBJ:.o=.$(OBJ_EXT))
 
-$(OBJ) $(O_OBJ):	marfa.h
+$(OBJ) $(O_OBJ):    $(DEPENDS)
 
 plugin: $(OBJ)
 	g++ -shared -W1,-soname,gdal_mrf.so.1 $(OBJ) -o gdal_mrf.so.1

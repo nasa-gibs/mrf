@@ -30,8 +30,8 @@
 *
 ******************************************************************************
 *
-*
-*
+*   Since the MRF dataset and the band are so closely tied together, they should be
+*   considered a single class, or a class (dataset) with extensions (bands).
 *
 *
 ****************************************************************************/
@@ -49,7 +49,6 @@
 #include <windows.h>
 #define MRF_sleep_ms(t) Sleep(t)
 #else // Assume linux
-// Unfortunately this defines all sorts of garbage
 #include <unistd.h>
 // Usleep is in usec
 #define MRF_sleep_ms(t) usleep(t*1000)
@@ -60,31 +59,35 @@ using std::string;
 
 // Initialize as invalid
 GDALMRFDataset::GDALMRFDataset()
-{
-    //		     X0   Xx   Xy  Y0    Yx   Yy
+{   //		     X0   Xx   Xy  Y0    Yx   Yy
     double gt[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
 
     ILImage img;
 
     memcpy(GeoTransform, gt, sizeof(gt));
-    bGeoTransformValid = FALSE;
+    bGeoTransformValid = TRUE;
     ifp.FP = dfp.FP = 0;
     pbuffer = 0;
     pbsize = 0;
     bdirty = 0;
     scale = 0;
     zslice = 0;
-    hasVersions = false;
+    hasVersions = FALSE;
+    clonedSource = FALSE;
     level = -1;
     tile = ILSize();
     cds = NULL;
     poSrcDS = NULL;
     poColorTable = NULL;
-    bCrystalized = TRUE; // Assume not in create mode
+    bCrystalized = FALSE; // Assume not in create mode
 }
 
 void GDALMRFDataset::SetPBuffer(unsigned int sz)
 {
+    if (sz == 0) {
+	CPLFree(pbuffer);
+	pbsize = 0;
+    }
     pbuffer = CPLRealloc(pbuffer, sz);
     pbsize = (pbuffer == 0) ? 0 : sz;
 }
@@ -265,7 +268,7 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 		continue;
 	    };
 
-	    int srclevel = -0.5 + logb(panOverviewList[i], scale);
+	    int srclevel = int(-0.5 + logb(panOverviewList[i], scale));
 	    GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(GetRasterBand(1));
 
 	    // Warn for requests for invalid levels
@@ -377,7 +380,6 @@ int GDALMRFDataset::Identify(GDALOpenInfo *poOpenInfo)
     return EQUALN(fn.c_str(), "<MRF_META>", 10);
 }
 
-
 /**
 *
 *\Brief Read the XML config tree, from file
@@ -426,11 +428,12 @@ const  char theDelimiter = ' ')
 
 // Returns the number following the prefix if it exists in one of the vector strings
 // Otherwise it returns the default
-static int getnum(const vector<string> &theStringVector, const char prefix, int default) {
-    for (int i = 0; i < theStringVector.size(); i++)
+static int getnum(const vector<string> &theStringVector, const char prefix, int def) {
+    for (unsigned int i = 0; i < theStringVector.size(); i++) {
 	if (theStringVector[i][0] == prefix)
 	    return atoi(theStringVector[i].c_str() + 1);
-    return default;
+	return def;
+    }
 }
 
 /**
@@ -539,7 +542,6 @@ CPLErr GDALMRFDataset::SetVersion(int version) {
 }
 
 CPLErr GDALMRFDataset::LevelInit(const int l) {
-
     // Test that this level does exist
     if (l < 0 || l >= cds->GetRasterBand(1)->GetOverviewCount()) {
 	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Overview not present!");
@@ -556,8 +558,7 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
     SetMetadataItem("INTERLEAVE", OrderName(current.order), "IMAGE_STRUCTURE");
     SetMetadataItem("COMPRESSION", CompName(current.comp), "IMAGE_STRUCTURE");
 
-    for (int i = 0; i < 6; i++)
-	GeoTransform[i] = cds->GeoTransform[i];
+    bGeoTransformValid = (CE_None == cds->GetGeoTransform(GeoTransform));
     for (int i = 0; i < l; i++) {
 	GeoTransform[1] /= scale;
 	GeoTransform[5] /= scale;
@@ -566,18 +567,12 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
     nRasterXSize = current.size.x;
     nRasterYSize = current.size.y;
     nBands = current.size.c;
-    hasVersions = cds->hasVersions;
-    verCount = cds->verCount;
-
-    bGeoTransformValid = TRUE;
 
     // Add the bands, copy constructor so they can be closed independently
     for (int i = 1; i <= nBands; i++) {
 	GDALMRFLRasterBand *band = new GDALMRFLRasterBand((GDALMRFRasterBand *)
 	    cds->GetRasterBand(i)->GetOverview(l));
-
 	SetBand(i, band);
-	band->SetColorInterpretation(band->GetColorInterpretation());
     }
 
     return CE_None;
@@ -715,8 +710,8 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
 		    }
 		    poColorTable->CreateColorRamp(start_idx, &ce_start,
 			end_idx, &ce_end);
-		    ce_start = ce_end;
-		    start_idx = end_idx;
+ce_start = ce_end;
+start_idx = end_idx;
 		}
 	    }
 
@@ -812,10 +807,20 @@ char      **GDALMRFDataset::GetFileList()
     return papszFileList;
 }
 
+// Try to create all the folders in the path in sequence, ignore errors
+static void mkdir_r(string const &fname) {
+    size_t loc = fname.find_first_of("\\/");
+    while (string::npos != fname.find_first_of("\\/", ++loc)) {
+	loc = fname.find_first_of("\\/", loc);
+	VSIMkdir(fname.substr(0, loc).c_str(), 0);
+    }
+}
+
 // Returns the dataset index file or null
 VSILFILE *GDALMRFDataset::IdxFP() {
     if (ifp.FP != NULL)
 	return ifp.FP;
+
     char *mode = "rb";
     ifp.acc = GF_Read;
 
@@ -832,7 +837,13 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	ifp.FP = VSIFOpenL(current.idxfname, mode);
     }
 
-    int expected_size = idxSize;
+    if (NULL == ifp.FP && !source.empty()) {
+	// caching and cloning, try making the folder and attempt again
+	mkdir_r(current.idxfname);
+	ifp.FP = VSIFOpenL(current.idxfname, mode);
+    }
+
+    GIntBig expected_size = idxSize;
     if (clonedSource) expected_size *= 2;
 
     if (NULL != ifp.FP) {
@@ -894,7 +905,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 	return NULL;
     }
 
-    // Try opening it again in rw mode so we can read and write into it
+    // Try opening it again in rw mode so we can read and write
     mode = "r+b";
     ifp.acc = GF_Write;
     ifp.FP = VSIFOpenL(current.idxfname.c_str(), mode);
@@ -923,30 +934,39 @@ VSILFILE *GDALMRFDataset::DataFP() {
 	dfp.acc = GF_Write;
     }
 
-    dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
-    if (dfp.FP)
+    dfp.FP = VSIFOpenL(current.datfname, mode);
+    if (dfp.FP) 
 	return dfp.FP;
 
     // It could be a caching MRF
-    if (source.empty()) {
-	CPLError(CE_Failure, CPLE_AppDefined,
-	    "GDAL MRF: Can't open data file %s\n", current.datfname.c_str());
-	return dfp.FP;
-    }
+    if (source.empty()) 
+	goto io_error;
 
-    // Cloud be there but read only, remember it was open that way
+    // Cloud be there but read only, remember that it was open that way
     mode = "rb";
     dfp.acc = GF_Read;
-    dfp.FP = VSIFOpenL(current.datfname.c_str(), mode);
+    dfp.FP = VSIFOpenL(current.datfname, mode);
     if (NULL != dfp.FP) {
 	CPLDebug("MRF_IO", "Opened %s RO mode %s\n", current.datfname.c_str(), mode);
 	return dfp.FP;
     }
 
-    // We should have created it above with "a+b"
-    CPLError(CE_Failure, CPLE_AppDefined,
-	"GDAL MRF: Can't open data file %s\n", current.datfname.c_str());
-    return dfp.FP;
+    if (source.empty()) 
+	goto io_error;
+
+    // cacheing, maybe the folder didn't exist
+    mkdir_r(current.datfname);
+    mode = "a+b";
+    dfp.acc = GF_Write;
+    dfp.FP = VSIFOpenL(current.datfname, mode);
+    if (dfp.FP)
+	return dfp.FP;
+
+io_error:
+    dfp.FP = NULL;
+    CPLError(CE_Failure, CPLE_FileIO,
+	"GDAL MRF: %s : %s", strerror(errno), current.datfname.c_str());
+    return NULL;
 };
 
 // Builds an XML tree from the current MRF.  If written to a file it becomes an MRF
@@ -965,12 +985,17 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
     // Use the full size
     CPLXMLNode *raster = CPLCreateXMLNode(config, CXT_Element, "Raster");
     XMLSetAttributeVal(raster, "Size", full.size, "%.0f");
+    XMLSetAttributeVal(raster, "PageSize", full.pagesize, "%.0f");
 
     if (full.comp != IL_PNG)
 	CPLCreateXMLElementAndValue(raster, "Compression", CompName(full.comp));
 
     if (full.dt != GDT_Byte)
 	CPLCreateXMLElementAndValue(raster, "DataType", GDALGetDataTypeName(full.dt));
+
+    // special photometric interpretation
+    if (!photometric.empty())
+	CPLCreateXMLElementAndValue(raster, "Photometric", photometric);
 
     if (vNoData.size() || vMin.size() || vMax.size()) {
 	CPLXMLNode *values = CPLCreateXMLNode(raster, CXT_Element, "DataValues");
@@ -981,6 +1006,7 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 
     // palette, if we have one
     if (poColorTable != NULL) {
+	char *pfrmt = "%.0f";
 	CPLXMLNode *pal = CPLCreateXMLNode(raster, CXT_Element, "Palette");
 	int sz = poColorTable->GetColorEntryCount();
 	if (sz != 256)
@@ -990,17 +1016,13 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 	    CPLXMLNode *entry = CPLCreateXMLNode(pal, CXT_Element, "Entry");
 	    const GDALColorEntry *ent = poColorTable->GetColorEntry(i);
 	    // No need to set the index, it is always from 0 no size-1
-	    XMLSetAttributeVal(entry, "c1", ent->c1);
-	    XMLSetAttributeVal(entry, "c2", ent->c2);
-	    XMLSetAttributeVal(entry, "c3", ent->c3);
+	    XMLSetAttributeVal(entry, "c1", ent->c1, pfrmt);
+	    XMLSetAttributeVal(entry, "c2", ent->c2, pfrmt);
+	    XMLSetAttributeVal(entry, "c3", ent->c3, pfrmt);
 	    if (ent->c4 != 255)
-		XMLSetAttributeVal(entry, "c4", ent->c4);
+		XMLSetAttributeVal(entry, "c4", ent->c4, pfrmt);
 	}
     }
-
-    // special photometric interpretation
-    if (!photometric.empty())
-	CPLCreateXMLElementAndValue(raster, "Photometric", photometric);
 
     if (is_Endianess_Dependent(full.dt, full.comp)) // Need to set the order
 	CPLCreateXMLElementAndValue(raster, "NetByteOrder",
@@ -1008,9 +1030,8 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 
     if (full.quality > 0 && full.quality != 85)
 	CPLCreateXMLElementAndValue(raster, "Quality",
-	CPLString().Printf("%d", full.quality));
+	    CPLString().Printf("%d", full.quality));
 
-    XMLSetAttributeVal(raster, "PageSize", full.pagesize, "%.0f");
     // Done with the raster node
 
     if (scale) {
@@ -1203,7 +1224,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 
     }
 
-    idxSize = IdxSize(full, scale);
+    idxSize = IdxSize(full, int(scale));
 
     // If not set by the bands, get a pageSizeBytes buffer
     if (GetPBufferSize() == 0)
@@ -1323,23 +1344,16 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
 	img = poDS->current; // Deal with the current one here
 
-
 	// Copy data values from source
-	int bHas;
-	double dfData;
 	for (int i = 0; i < poDS->nBands; i++) {
+	    int bHas;
+	    double dfData;
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetNoDataValue(&bHas);
 	    if (bHas)
 		poDS->vNoData.push_back(dfData);
-	}
-
-	for (int i = 0; i < poDS->nBands; i++) {
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMinimum(&bHas);
 	    if (bHas)
 		poDS->vMin.push_back(dfData);
-	}
-
-	for (int i = 0; i < poDS->nBands; i++) {
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMaximum(&bHas);
 	    if (bHas)
 		poDS->vMax.push_back(dfData);
@@ -1369,6 +1383,10 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     }
 
     CSLDestroy(options);
+
+    char **meta = poSrcDS->GetMetadata();
+    if (CSLCount(meta))
+	poDS->SetMetadata(meta);
 
     // If copy is disabled, we're done, we just created an empty MRF
     if (!poDS || on(CSLFetchNameValue(papszOptions, "NOCOPY")))
@@ -1464,8 +1482,8 @@ void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
 
 GDALDataset *
 GDALMRFDataset::Create(const char * pszName,
-int nXSize, int nYSize, int nBands,
-GDALDataType eType, char ** papszOptions)
+    int nXSize, int nYSize, int nBands,
+    GDALDataType eType, char ** papszOptions)
 
 {   // Pending create
     GDALMRFDataset *poDS = new GDALMRFDataset();

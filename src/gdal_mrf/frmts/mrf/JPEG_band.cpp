@@ -28,82 +28,83 @@
 /*
  * $Id$
  * JPEG band
- * JPEG page compression and decompression functions
- *
+ * JPEG page compression and decompression functions, gets compiled twice
+ * LIBJPEG_12_H is defined if both 8 and 12 bit JPEG will be supported
+ * JPEG12_ON    is defined for the 12 bit versions
  */
 
 #include "marfa.h"
 #include <setjmp.h>
 
 CPL_C_START
-#include "../jpeg/libjpeg/jpeglib.h"
+#include <jpeglib.h>
 CPL_C_END
 
 /**
- *\Brief Helper class for jpeg error management
- */
+*\Brief Helper class for jpeg error management
+*/
 
-struct ErrorMgr: public jpeg_error_mgr {
+struct ErrorMgr : public jpeg_error_mgr {
     inline ErrorMgr();
     int signaled() { return setjmp(setjmpBuffer); };
     jmp_buf setjmpBuffer;
 };
 
 /**
- *\brief Called when jpeg wants to report a warning
- * msgLevel can be:
- * -1 Corrupt data
- * 0 always display
- * 1... Trace level
- */
+*\brief Called when jpeg wants to report a warning
+* msgLevel can be:
+* -1 Corrupt data
+* 0 always display
+* 1... Trace level
+*/
 
-static void emitMessage (j_common_ptr cinfo, int msgLevel) 
+static void emitMessage(j_common_ptr cinfo, int msgLevel)
 {
-    jpeg_error_mgr* err=cinfo->err;
+    jpeg_error_mgr* err = cinfo->err;
     if (msgLevel > 0) return; // No trace msgs
     // There can be many warnings, just print the first one
     if (err->num_warnings++ >1) return;
     char buffer[JMSG_LENGTH_MAX];
-    err->format_message(cinfo,buffer);
-    CPLError(CE_Failure,CPLE_AppDefined,buffer);
+    err->format_message(cinfo, buffer);
+    CPLError(CE_Failure, CPLE_AppDefined, buffer);
 }
 
 static void errorExit(j_common_ptr cinfo)
 {
-  ErrorMgr* err = (ErrorMgr*)cinfo->err;
-  // format the warning message
-  char buffer[JMSG_LENGTH_MAX];
+    ErrorMgr* err = (ErrorMgr*)cinfo->err;
+    // format the warning message
+    char buffer[JMSG_LENGTH_MAX];
 
-  err->format_message(cinfo, buffer);
-  CPLError(CE_Failure,CPLE_AppDefined,buffer);
-  // return control to the setjmp point
-  longjmp(err->setjmpBuffer,1);
+    err->format_message(cinfo, buffer);
+    CPLError(CE_Failure, CPLE_AppDefined, buffer);
+    // return control to the setjmp point
+    longjmp(err->setjmpBuffer, 1);
 }
 
 /**
- *\bried set up the normal JPEG error routines, then override error_exit
- */
+*\bried set up the normal JPEG error routines, then override error_exit
+*/
 ErrorMgr::ErrorMgr()
 {
     jpeg_std_error(this);
-    error_exit=errorExit;
-    emit_message=emitMessage;
+    error_exit = errorExit;
+    emit_message = emitMessage;
 }
 
 /**
- *\Brief Do nothing stub function for JPEG library, called
- */
-void stub_source_dec(j_decompress_ptr cinfo) {};
+*\Brief Do nothing stub function for JPEG library, called
+*/
+static void stub_source_dec(j_decompress_ptr cinfo) {};
 
 /**
- *\Brief: Do nothing stub function for JPEG library, called?
- */
-boolean fill_input_buffer_dec(j_decompress_ptr cinfo) {return TRUE;};
+*\Brief: Do nothing stub function for JPEG library, called?
+*/
+static boolean fill_input_buffer_dec(j_decompress_ptr cinfo) { return TRUE; };
 
 /**
- *\Brief: Do nothing stub function for JPEG library, not called
- */
-void skip_input_data_dec(j_decompress_ptr cinfo, long l) {};
+*\Brief: Do nothing stub function for JPEG library, not called
+*/
+static void skip_input_data_dec(j_decompress_ptr cinfo, long l) {};
 
 // Destination should be already set up
 static void init_or_terminate_destination(j_compress_ptr cinfo) {}
@@ -121,8 +122,11 @@ static boolean empty_output_buffer(j_compress_ptr cinfo) {
  *
  * Returns the compressed size in dest.size
  */
-
-CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img) 
+#if defined(JPEG12_ON)
+CPLErr JPEG_Band::CompressJPEG12(buf_mgr &dst, buf_mgr &src)
+#else
+CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
+#endif
 
 {
     // The cinfo should stay open and reside in the DS, since it can be left initialized
@@ -138,47 +142,71 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
     jmgr.term_destination = init_or_terminate_destination;
 
     // Look at the source of this, some interesting tidbits
+    cinfo.err = &jerr;
     jpeg_create_compress(&cinfo);
-    cinfo.dest=&jmgr;
-    cinfo.err=&jerr;
+    cinfo.dest = &jmgr;
 
     // The page specific info, size and color spaces
     cinfo.image_width = img.pagesize.x;
     cinfo.image_height = img.pagesize.y;
     cinfo.input_components = img.pagesize.c;
     switch (cinfo.input_components) {
-    case 1:cinfo.in_color_space=JCS_GRAYSCALE; break;
-    case 4:cinfo.in_color_space=JCS_CMYK; break;
-    default:cinfo.in_color_space=JCS_RGB;
+    case 1:cinfo.in_color_space = JCS_GRAYSCALE; break;
+    case 3:cinfo.in_color_space = JCS_RGB; break;  // Stored as YCbCr 4:2:0 by default
+    default:
+	cinfo.in_color_space = JCS_UNKNOWN; // 2, 4-10 bands
     }
 
     // Set all required fields and overwrite the ones we want to change
     jpeg_set_defaults(&cinfo);
 
+    // Override certain settings
     jpeg_set_quality(&cinfo, img.quality, TRUE);
-    cinfo.dct_method=JDCT_FLOAT;
+    cinfo.dct_method = JDCT_FLOAT; // Pretty fast and precise
+    cinfo.optimize_coding = optimize; // Set "OPTIMIZE=TRUE" in OPTIONS, default for 12bit
 
-    int linesize=cinfo.image_width*cinfo.num_components*((cinfo.data_precision==8)?1:2);
-    JSAMPROW *rowp=(JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*img.pagesize.y);
-    for (int i=0;i<img.pagesize.y;i++)
-        rowp[i]=(JSAMPROW)(src.buffer+i*linesize);
+    // Do we explicitly turn off the YCC color and downsampling?
+
+    if (cinfo.in_color_space == JCS_RGB) {
+	if (rgb) {  // Stored as RGB
+	    jpeg_set_colorspace(&cinfo, JCS_RGB);  // Huge files
+	} else if (sameres) { // YCC, somewhat larger files with improved color spatial detail
+	    cinfo.comp_info[0].h_samp_factor = 1;
+	    cinfo.comp_info[0].v_samp_factor = 1;
+
+	    // Enabling these lines will make the color components use the same tables as Y, even larger file with slightly better color depth detail
+	    // cinfo.comp_info[1].quant_tbl_no = 0;
+	    // cinfo.comp_info[2].quant_tbl_no = 0;
+
+	    // cinfo.comp_info[1].dc_tbl_no = 0;
+	    // cinfo.comp_info[2].dc_tbl_no = 0;
+
+	    // cinfo.comp_info[1].ac_tbl_no = 0;
+	    // cinfo.comp_info[2].ac_tbl_no = 0;
+	}
+    }
+
+    int linesize = cinfo.image_width*cinfo.num_components*((cinfo.data_precision == 8) ? 1 : 2);
+    JSAMPROW *rowp = (JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*img.pagesize.y);
+    for (int i = 0; i < img.pagesize.y; i++)
+	rowp[i] = (JSAMPROW)(src.buffer + i*linesize);
 
     if (jerr.signaled()) {
-        CPLError(CE_Failure,CPLE_AppDefined,"MRF: JPEG compression error");
-        jpeg_destroy_compress(&cinfo);
-        CPLFree(rowp);
-        return CE_Failure;
+	CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG compression error");
+	jpeg_destroy_compress(&cinfo);
+	CPLFree(rowp);
+	return CE_Failure;
     }
-    
-    jpeg_start_compress(&cinfo,TRUE);
-    jpeg_write_scanlines(&cinfo,rowp,img.pagesize.y);
+
+    jpeg_start_compress(&cinfo, TRUE);
+    jpeg_write_scanlines(&cinfo, rowp, img.pagesize.y);
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
 
     CPLFree(rowp);
 
     // Figure out the size
-    dst.size-=jmgr.free_in_buffer;
+    dst.size -= jmgr.free_in_buffer;
 
     return CE_None;
 }
@@ -190,10 +218,14 @@ CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src, const ILImage &img)
  * @param png pointer to PNG in memory
  * @param sz if non-zero, test that uncompressed data fits in the buffer.
  */
-
-CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands) 
+#if defined(JPEG12_ON)
+CPLErr JPEG_Band::DecompressJPEG12(buf_mgr &dst, buf_mgr &isrc)
+#else
+CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc) 
+#endif
 
 {
+    int nbands = img.pagesize.c;
     // Locals, clean up after themselves
     jpeg_decompress_struct cinfo={0};
     ErrorMgr jerr;
@@ -207,7 +239,7 @@ CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands)
     src.resync_to_restart = jpeg_resync_to_restart;
 
     if (jerr.signaled()) {
-        CPLError(CE_Failure,CPLE_AppDefined,"MRF: Error reading JPEG page");
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error reading JPEG page");
         return CE_Failure;
     }
     jpeg_create_decompress(&cinfo);
@@ -215,9 +247,19 @@ CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands)
     jpeg_read_header(&cinfo, TRUE);
     // Use float, it is actually faster than the ISLOW method by a tiny bit
     cinfo.dct_method = JDCT_FLOAT;
+
+    //
+    // Tolerate different input if we can do the conversion
+    // Gray and RGB for example
+    // This also means that a RGB MRF can be read as grayscale and vice versa
+    // If libJPEG can't convert it will throw an error
+    // 
     if (nbands == 3 && cinfo.num_components != nbands)
 	cinfo.out_color_space = JCS_RGB;
-    int linesize = cinfo.image_width * nbands * ((cinfo.data_precision==8)?1:2);
+    if (nbands == 1 && cinfo.num_components != nbands)
+	cinfo.out_color_space = JCS_GRAYSCALE;
+
+    int linesize = cinfo.image_width * nbands * ((cinfo.data_precision == 8) ? 1 : 2);
 
     jpeg_start_decompress(&cinfo);
 
@@ -245,13 +287,57 @@ CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &isrc, int nbands)
     return CE_None;
 }
 
-CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src) 
-{ 
-    return DecompressJPEG(dst, src, img.pagesize.c); 
+// This part get done only once
+#if !defined(JPEG12_ON)
+
+// Type dependent dispachers
+CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
+{
+#if defined(LIBJPEG_12_H)
+    if (GDT_Byte != img.dt)
+	return DecompressJPEG12(dst, src);
+#endif
+    return DecompressJPEG(dst, src);
 }
 
 CPLErr JPEG_Band::Compress(buf_mgr &dst, buf_mgr &src)
-{ 
-    return CompressJPEG(dst, src, img);
+{
+#if defined(LIBJPEG_12_H)
+    if (GDT_Byte != img.dt)
+	return CompressJPEG12(dst, src);
+#endif
+    return CompressJPEG(dst, src);
 }
 
+// PHOTOMETRIC == MULTISPECTRAL turns off YCbCr conversion and downsampling
+JPEG_Band::JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
+GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE)
+{
+    int nbands = image.pagesize.c;
+    //  TODO: Add 12bit JPEG support
+    // Check behavior on signed 16bit.  Does the libjpeg sign extend?
+#if defined(LIBJPEG_12_H)
+    if (GDT_Byte != image.dt && GDT_UInt16 != image.dt) {
+#else
+    if (GDT_Byte != image.dt) {
+#endif
+	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPEG");
+	return;
+    }
+
+    if (nbands == 3) { // Only the 3 band JPEG has storage flavors
+	CPLString const &pm = pDS->GetPhotometricInterpretation();
+	if (pm == "RGB" || pm == "MULTISPECTRAL") { // Explicit RGB or MS
+	    rgb = TRUE;
+	    sameres = TRUE;
+	}
+	if (pm == "YCC")
+	    sameres = TRUE;
+    }
+
+    if (GDT_Byte == image.dt)
+	optimize = GetOptlist().FetchBoolean("OPTIMIZE", FALSE);
+    else
+	optimize = TRUE; // Required for 12bit
+}
+#endif

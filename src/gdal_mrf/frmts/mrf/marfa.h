@@ -53,6 +53,8 @@ enum ILCompression {
 #endif
     IL_ERR_COMP
 };
+
+// Sequential is not supported by GDAL
 enum ILOrder { IL_Interleaved = 0, IL_Separate, IL_Sequential, IL_ERR_ORD };
 extern char const **ILComp_Name;
 extern char const **ILComp_Ext;
@@ -66,7 +68,7 @@ typedef struct {
     size_t size;
 } buf_mgr;
 
-// A tile index record
+// A tile index record, 16 bytes, big endian
 typedef struct {
     GIntBig offset;
     GIntBig size;
@@ -95,6 +97,7 @@ std::ostream& operator<<(std::ostream &out, const ILIdx& t);
 
 bool is_Endianess_Dependent(GDALDataType dt, ILCompression comp);
 
+// Debugging support
 // #define PPMW
 #ifdef PPMW
 void ppmWrite(const char *fname, const char *data, const ILSize &sz);
@@ -130,7 +133,7 @@ typedef struct ILImage {
 
 /**
  *
- *\brief  Converters beween endianess, if needed.
+ *\brief  Converters beween endianess
  *  Call netXX() to guarantee big endian
  *
  */
@@ -256,13 +259,18 @@ public:
 	int nXSize, int nYSize, int nBands,
 	GDALDataType eType, char ** papszOptions);
 
+    // Stub for delete, GDAL should only overwrite the XML
+    static CPLErr Delete(const char * pszName) {
+	return CE_None;
+    }
+
     virtual const char *GetProjectionRef() { return projection; }
     virtual CPLErr SetProjection(const char *proj) {
 	projection = proj;
 	return CE_None;
     }
 
-    virtual const char *GetPhotometricInterpretation() { return photometric; }
+    virtual CPLString const &GetPhotometricInterpretation() { return photometric; }
     virtual CPLErr SetPhotometricInterpretation(const char *photo) {
 	photometric = photo;
 	return CE_None;
@@ -284,8 +292,6 @@ public:
     void SetNoDataValue(const char*);
     void SetMinValue(const char*);
     void SetMaxValue(const char*);
-    void SetPBuffer(unsigned int sz);
-    unsigned int GetPBufferSize() { return pbsize; };
     CPLErr SetVersion(int version);
 
     const CPLString GetFname() { return fname; };
@@ -295,6 +301,13 @@ public:
 
     // Creates an XML tree from the current MRF.  If written to a file it becomes an MRF
     CPLXMLNode *BuildConfig();
+
+    void SetPBufferSize(unsigned int sz) {
+	pbsize = sz;
+    }
+    unsigned int GetPBufferSize() {
+	return pbsize;
+    }
 
 protected:
     CPLErr LevelInit(const int l);
@@ -316,6 +329,14 @@ protected:
 
     // Add uniform scale overlays, returns the new size of the index file
     GIntBig AddOverviews(int scale);
+
+    // Late allocation buffer
+    void SetPBuffer(unsigned int sz);
+    void *GetPBuffer() {
+	if (!pbuffer && pbsize)
+	    SetPBuffer(pbsize);
+	return pbuffer;
+    }
 
     virtual CPLErr IRasterIO(GDALRWFlag, int, int, int, int,
 	void *, int, int, GDALDataType,
@@ -373,7 +394,7 @@ protected:
     GIntBig idxSize; // The size of each version index, or the size of the cloned index
     int bCrystalized; // Unset only during the create process
 
-    // Freeform sticky dataset options
+    // Freeform sticky dataset options, as a list of key-value pairs
     CPLStringList optlist;
 
     // If caching data, the parent dataset
@@ -390,10 +411,8 @@ protected:
     // A place to keep an uncompressed block, to keep from allocating it all the time
     void *pbuffer;
     unsigned int pbsize;
-
     ILSize tile; // ID of tile present in buffer
-    // Holds bits, to be used in pixel interleaved (up to 64 bands)
-    GIntBig bdirty;
+    GIntBig bdirty;    // Holds bits, to be used in pixel interleaved (up to 64 bands)
 
     // GeoTransform support
     double GeoTransform[6];
@@ -408,9 +427,10 @@ protected:
     GDALColorTable *poColorTable;
     int Quality;
 
-    VF dfp;
-    VF ifp;
+    VF dfp;  // Data file handle
+    VF ifp;  // Index file handle
 
+    // statistical values
     std::vector<double> vNoData, vMin, vMax;
 };
 
@@ -423,11 +443,18 @@ public:
     virtual CPLErr IWriteBlock(int xblk, int yblk, void *buffer);
 
     virtual GDALColorTable *GetColorTable() { return poDS->poColorTable; }
-    virtual GDALColorInterp GetColorInterpretation() { return img.ci; }
+
     CPLErr SetColorInterpretation(GDALColorInterp ci) { img.ci = ci; return CE_None; }
-    virtual double  GetNoDataValue(int * pbSuccess);
+    virtual GDALColorInterp GetColorInterpretation() { return img.ci; }
+
+    // Get works within MRF or with PAM
+    virtual double  GetNoDataValue(int *);
+    virtual CPLErr  SetNoDataValue(double);
+
+    // These get set with SetStatistics.  Let PAM handle it
     virtual double  GetMinimum(int *);
     virtual double  GetMaximum(int *);
+
 
     // MRF specific, fetch is from a remote source
     CPLErr FetchBlock(int xblk, int yblk, void *buffer = NULL);
@@ -512,6 +539,7 @@ protected:
 
     CPLErr CompressPNG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressPNG(buf_mgr &dst, buf_mgr &src);
+    CPLErr ResetPalette();
     void *PNGColors;
     void *PNGAlpha;
     int PalSize, TransSize;
@@ -520,12 +548,25 @@ protected:
 class JPEG_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
-    JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-	GDALMRFRasterBand(pDS, image, b, int(level)) {};
+    JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
     virtual ~JPEG_Band() {};
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
+
+    CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src);
+    CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &src);
+
+#if defined(JPEG12_SUPPORTED) // Internal only
+#define LIBJPEG_12_H "../jpeg/libjpeg12/jpeglib.h"
+    CPLErr CompressJPEG12(buf_mgr &dst, buf_mgr &src);
+    CPLErr DecompressJPEG12(buf_mgr &dst, buf_mgr &src);
+#endif
+
+    // Stored format flags, significant only for 3 band data
+    bool sameres;
+    bool rgb;
+    bool optimize;
 };
 
 class Raw_Band : public GDALMRFRasterBand {
@@ -562,6 +603,7 @@ protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
     double precision;
+    int version;
 };
 #endif
 

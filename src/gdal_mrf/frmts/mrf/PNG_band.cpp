@@ -33,6 +33,7 @@
  */
 
 #include "marfa.h"
+#include <cassert>
 
 CPL_C_START
 #include "../png/libpng/png.h"
@@ -73,20 +74,11 @@ static void read_png(png_structp pngp, png_bytep data, png_size_t length)
 
 static void write_png(png_structp pngp, png_bytep data, png_size_t length) {
     buf_mgr *mgr = (buf_mgr *)png_get_io_ptr(pngp);
-
-    if (length <= mgr->size) {
-	memcpy(mgr->buffer, data, length);
-	mgr->buffer += length;
-	mgr->size -= length;
-    }
-    else {
-	// This is a bad error actually, but we can't report errors
-	CPLError(CE_Warning, CPLE_AppDefined,
-	    "MRF: PNG Write buffer too small!!");
-	memcpy(mgr->buffer, data, mgr->size);
-	mgr->buffer += mgr->size;
-	mgr->size = 0;
-    }
+    // Buffer could be too small, trigger an error on debug mode
+    assert(length <= mgr->size);
+    memcpy(mgr->buffer, data, length);
+    mgr->buffer += length;
+    mgr->size -= length;
 }
 
 /**
@@ -285,41 +277,22 @@ CPLErr PNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     return DecompressPNG(dst, src);
 }
 
+// The PNG internal palette is set on first band write
 CPLErr PNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
-{
+{   // Late set palette
+    if (img.comp == IL_PPNG && !PNGColors && ResetPalette() != CE_None)
+	return CE_Failure;
     return CompressPNG(dst, src);
 }
 
 
-/**
- * \Brief For PPNG, builds the data structures needed to write the palette
- * The presence of the PNGColors and PNGAlpha is used as a flag for PPNG only
- * The palette must be defined when creating the band
- */
-
-PNG_Band::PNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
-
-{
-    // Check error conditions
-    if (image.dt != GDT_Byte && image.dt != GDT_Int16 && image.dt != GDT_UInt16) {
-	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF PNG");
-	return;
-    }
-    if (image.pagesize.c > 4) {
-	CPLError(CE_Failure, CPLE_NotSupported, "MRF PNG can only handle up to 4 bands per page");
-	return;
-    }
-
-    if (image.comp != IL_PPNG)
-	return; // The rest is only for PPNG
-
-    // Convert the GDAL LUT to PNG style
+CPLErr PNG_Band::ResetPalette()
+{   // Convert the GDAL LUT to PNG style
     GDALColorTable *poCT = GetColorTable();
 
     if (!poCT) {
 	CPLError(CE_Failure, CPLE_NotSupported, "MRF PPNG needs a color table");
-	return;
+	return CE_Failure;
     }
 
     TransSize = PalSize = poCT->GetColorEntryCount();
@@ -345,6 +318,27 @@ GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
 	    NoTranspYet = false;
 	    pabyAlpha[iColor] = (unsigned char)sEntry.c4;
 	}
+    }
+
+    return CE_None;
+}
+
+/**
+ * \Brief For PPNG, builds the data structures needed to write the palette
+ * The presence of the PNGColors and PNGAlpha is used as a flag for PPNG only
+ */
+
+PNG_Band::PNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
+GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
+
+{   // Check error conditions
+    if (image.dt != GDT_Byte && image.dt != GDT_Int16 && image.dt != GDT_UInt16) {
+	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF PNG");
+	return;
+    }
+    if (image.pagesize.c > 4) {
+	CPLError(CE_Failure, CPLE_NotSupported, "MRF PNG can only handle up to 4 bands per page");
+	return;
     }
 }
 

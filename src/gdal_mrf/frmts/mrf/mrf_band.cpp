@@ -120,25 +120,26 @@ static int isAllVal(GDALDataType gt, void *b, size_t bytecount, double ndv)
 // Swap bytes in place, unconditional
 static void swab_buff(buf_mgr &src, const ILImage &img)
 {
+    size_t i;
     switch (GDALGetDataTypeSize(img.dt)) {
     case 16: {
-	short int *b=(short int*)src.buffer;
-	for (int i=src.size/2;i;b++,i--) 
-	    *b=swab16(*b);
+	short int *b = (short int*)src.buffer;
+	for (i = src.size / 2; i; b++, i--)
+	    *b = swab16(*b);
 	break;
-	     }
+    }
     case 32: {
-	int *b=(int*)src.buffer;
-	for (int i=src.size/4;i;b++,i--) 
-	    *b=swab32(*b);
+	int *b = (int*)src.buffer;
+	for (i = src.size / 4; i; b++, i--)
+	    *b = swab32(*b);
 	break;
-	     }
+    }
     case 64: {
-	long long *b=(long long*)src.buffer;
-	for (int i=src.size/8;i;b++,i--)
-	    *b=swab64(*b);
+	long long *b = (long long*)src.buffer;
+	for (i = src.size / 8; i; b++, i--)
+	    *b = swab64(*b);
 	break;
-	     }
+    }
     }
 }
 
@@ -255,6 +256,17 @@ static double getBandValue(std::vector<double> &v,int idx)
     return v[0];
 }
 
+// Maybe we should check against the type range?
+// It is not keeping track of how many values have been set,
+// so the application should set none or all the bands
+CPLErr  GDALMRFRasterBand::SetNoDataValue(double val)
+{
+    if (poDS->vNoData.size() < m_band)
+	poDS->vNoData.resize(nBand);
+    poDS->vNoData[m_band] = val;
+    return CE_None;
+}
+
 double GDALMRFRasterBand::GetNoDataValue(int *pbSuccess)
 {
     std::vector<double> &v=poDS->vNoData;
@@ -300,13 +312,13 @@ CPLErr GDALMRFRasterBand::FillBlock(void *buffer)
 {
     int success;
     double ndv = GetNoDataValue(&success);
-    if (!success) ndv = 0.0L;
+    if (!success) ndv = 0.0;
 
     size_t bsb = blockSizeBytes();
 
     // use memset for speed for bytes, or if nodata is zeros
     if (eDataType == GDT_Byte || 0.0L == ndv ) {
-	memset(buffer, ndv, bsb);
+	memset(buffer, int(ndv), bsb);
 	return CE_None;
     }
 
@@ -349,7 +361,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 	} 
 
 // Just the right mix of templates and macros make deinterleaving tidy
-#define CpySI(T) cpy_stride_in<T> (ob, (T *)poDS->pbuffer + i,\
+#define CpySI(T) cpy_stride_in<T> (ob, (T *)poDS->GetPBuffer() + i,\
     blockSizeBytes()/sizeof(T), img.pagesize.c)
 
 	// Page is already in poDS->pbuffer, not empty
@@ -431,7 +443,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     // This is where the whole page fits
     void *ob = buffer;
     if (cstride != 1) 
-	ob = poDS->pbuffer;
+	ob = poDS->GetPBuffer();
 
     // Fill buffer with NoData if clipping
     if (clip)
@@ -660,7 +672,7 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 
     // If pages are interleaved, use the dataset page buffer instead
     if (1!=cstride)
-	dst.buffer = (char *)poDS->pbuffer;
+	dst.buffer = (char *)poDS->GetPBuffer();
 
     CPLErr ret = Decompress(dst, src);
     dst.size = img.pageSizeBytes; // In case the decompress failed, force it back
@@ -712,7 +724,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	poDS->tile = ILSize(); // Mark it corrupt
 
 	buf_mgr src = {(char *)buffer, img.pageSizeBytes};
-	buf_mgr dst = {(char *)poDS->pbuffer, poDS->pbsize};
+	buf_mgr dst = {(char *)poDS->GetPBuffer(), poDS->GetPBufferSize()};
 
 	// Swab the source before encoding if we need to 
 	if (is_Endianess_Dependent(img.dt, img.comp) && (img.nbo != NET_ORDER)) 
@@ -774,7 +786,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	double val = GetNoDataValue(&success);
 	if (!success) val = 0.0;
 	if (isAllVal(eDataType, buffer, img.pageSizeBytes, val))
-	    empties != bandbit(iBand);
+	    empties |= bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
 	// Just the right mix of templates and macros make this real tidy

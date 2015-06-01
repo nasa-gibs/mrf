@@ -208,7 +208,7 @@ CPLString getFname(CPLXMLNode *node, const char *token, const CPLString &in, con
     CPLString fn = CPLGetXMLValue(node, token, "");
     if (fn.size() == 0) // Not provided
 	return getFname(in, def);
-    int slashPos = fn.find_first_of("\\/");
+    size_t slashPos = fn.find_first_of("\\/");
 
     // Does it look like an absolute path or we wont't find the basename of in
     if (slashPos == 0				    // Starts with slash
@@ -293,14 +293,16 @@ void GDALRegister_mrf(void)
 	    "   <Option name='QUALITY' type='int' description='best=99, bad=0, default=85'/>\n"
 	    "	<Option name='OPTIONS' type='string' description='Freeform dataset parameters'/>\n"
 	    "   <Option name='BLOCKSIZE' type='int' description='Block size, both x and y, default 512'/>\n"
-	    "   <Option name='BLOCKXSIZE' type='int' description='Page x size, default=512'/>\n"
-	    "   <Option name='BLOCKYSIZE' type='int' description='Page y size, default=512'/>\n"
+	    "   <Option name='BLOCKXSIZE' type='int' description='Block x size, default=512'/>\n"
+	    "   <Option name='BLOCKYSIZE' type='int' description='Block y size, default=512'/>\n"
 	    "   <Option name='NETBYTEORDER' type='boolean' description='Force endian for certain compress options, default is host order'/>\n"
 	    "	<Option name='CACHEDSOURCE' type='string' description='The source raster, if this is a cache'/>\n"
 	    "	<Option name='UNIFORM_SCALE' type='int' description='Scale of overlays in MRF, usually 2'/>\n"
 	    "	<Option name='NOCOPY' type='boolean' description='Leave created MRF empty, default=no'/>\n"
-	    "   <Option name='PHOTOMETRIC' type='string-select' default='DEFAULT' description='Band interpretation, may affect encoding'>\n"
+	    "   <Option name='PHOTOMETRIC' type='string-select' default='DEFAULT' description='Band interpretation, may affect block encoding'>\n"
 	    "	    <Value>MULTISPECTRAL</Value>"
+	    "	    <Value>RGB</Value>"
+	    "	    <Value>YCC</Value>"
 	    "   </Option>\n"
 	    "</CreationOptionList>\n"
 	    );
@@ -310,6 +312,7 @@ void GDALRegister_mrf(void)
 	driver->pfnUnloadDriver = GDALDeregister_mrf;
 	driver->pfnCreateCopy = GDALMRFDataset::CreateCopy;
 	driver->pfnCreate = GDALMRFDataset::Create;
+	driver->pfnDelete = GDALMRFDataset::Delete;
 	GetGDALDriverManager()->RegisterDriver(driver);
     }
 }
@@ -417,7 +420,6 @@ char **CSLAddIfMissing(char **papszList,
 //
 CPLString PrintDouble(double d, char *frmt)
 {
-
     CPLString res;
     res.FormatC(d, 0);
     double v = CPLStrtod(res.c_str(), NULL);
