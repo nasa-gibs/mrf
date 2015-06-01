@@ -443,11 +443,18 @@ public:
     virtual CPLErr IWriteBlock(int xblk, int yblk, void *buffer);
 
     virtual GDALColorTable *GetColorTable() { return poDS->poColorTable; }
-    virtual GDALColorInterp GetColorInterpretation() { return img.ci; }
+
     CPLErr SetColorInterpretation(GDALColorInterp ci) { img.ci = ci; return CE_None; }
-    virtual double  GetNoDataValue(int * pbSuccess);
+    virtual GDALColorInterp GetColorInterpretation() { return img.ci; }
+
+    // Get works within MRF or with PAM
+    virtual double  GetNoDataValue(int *);
+    virtual CPLErr  SetNoDataValue(double);
+
+    // These get set with SetStatistics.  Let PAM handle it
     virtual double  GetMinimum(int *);
     virtual double  GetMaximum(int *);
+
 
     // MRF specific, fetch is from a remote source
     CPLErr FetchBlock(int xblk, int yblk, void *buffer = NULL);
@@ -596,6 +603,7 @@ protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
     double precision;
+    int version;
 };
 #endif
 

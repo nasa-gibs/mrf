@@ -256,6 +256,17 @@ static double getBandValue(std::vector<double> &v,int idx)
     return v[0];
 }
 
+// Maybe we should check against the type range?
+// It is not keeping track of how many values have been set,
+// so the application should set none or all the bands
+CPLErr  GDALMRFRasterBand::SetNoDataValue(double val)
+{
+    if (poDS->vNoData.size() < m_band)
+	poDS->vNoData.resize(nBand);
+    poDS->vNoData[m_band] = val;
+    return CE_None;
+}
+
 double GDALMRFRasterBand::GetNoDataValue(int *pbSuccess)
 {
     std::vector<double> &v=poDS->vNoData;
