@@ -429,7 +429,7 @@ const  char theDelimiter = ' ')
 // Returns the number following the prefix if it exists in one of the vector strings
 // Otherwise it returns the default
 static int getnum(const vector<string> &theStringVector, const char prefix, int def) {
-    for (int i = 0; i < theStringVector.size(); i++) {
+    for (unsigned int i = 0; i < theStringVector.size(); i++) {
 	if (theStringVector[i][0] == prefix)
 	    return atoi(theStringVector[i].c_str() + 1);
 	return def;
