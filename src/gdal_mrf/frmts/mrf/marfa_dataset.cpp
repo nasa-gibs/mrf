@@ -65,20 +65,21 @@ GDALMRFDataset::GDALMRFDataset()
     ILImage img;
 
     memcpy(GeoTransform, gt, sizeof(gt));
-    bGeoTransformValid = FALSE;
+    bGeoTransformValid = TRUE;
     ifp.FP = dfp.FP = 0;
     pbuffer = 0;
     pbsize = 0;
     bdirty = 0;
     scale = 0;
     zslice = 0;
-    hasVersions = false;
+    hasVersions = FALSE;
+    clonedSource = FALSE;
     level = -1;
     tile = ILSize();
     cds = NULL;
     poSrcDS = NULL;
     poColorTable = NULL;
-    bCrystalized = TRUE; // Assume not in create mode
+    bCrystalized = FALSE; // Assume not in create mode
 }
 
 void GDALMRFDataset::SetPBuffer(unsigned int sz)
@@ -1481,8 +1482,8 @@ void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
 
 GDALDataset *
 GDALMRFDataset::Create(const char * pszName,
-int nXSize, int nYSize, int nBands,
-GDALDataType eType, char ** papszOptions)
+    int nXSize, int nYSize, int nBands,
+    GDALDataType eType, char ** papszOptions)
 
 {   // Pending create
     GDALMRFDataset *poDS = new GDALMRFDataset();
