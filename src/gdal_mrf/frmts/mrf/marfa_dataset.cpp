@@ -1246,16 +1246,17 @@ static inline bool has_path(const CPLString &name)
     return name.find_first_of("/\\") != string::npos;
 }
 
-// Is the name a relative file name?
-static inline bool is_relative(const CPLString &name)
+static inline bool is_absolute(const CPLString &name)
 {
-    return (!has_path(name) || name[0] == '.' || (name[1] == ':' && isalpha(name[0])));
+    return (name.find_first_of("/\\") == 0) ||
+	(name[1] == ':' && isalpha(name[0])) ||
+	name.find("<MRF_META>") != string::npos;
 }
 
 // Add the folder part of path to the begining of the source, if it is relative
-static inline void addpath(CPLString &name, const CPLString &path)
+static inline void make_absolute(CPLString &name, const CPLString &path)
 {
-    if (is_relative(name))
+    if (!is_absolute(path) && (path.find_first_of("/\\") != string::npos))
 	name = path.substr(0, path.find_last_of("/\\") + 1) + name;
 }
 
@@ -1265,15 +1266,14 @@ static inline void addpath(CPLString &name, const CPLString &path)
 GDALDataset *GDALMRFDataset::GetSrcDS() {
     if (poSrcDS) return poSrcDS;
     if (source.empty())	return 0;
-    // add the path from the current MRF if the source doesn't have one
-    if (is_relative(source) && has_path(fname))
-	addpath(source, fname);
+    // Make the source absolute path
+    if (has_path(fname)) make_absolute(source, fname);
     poSrcDS = (GDALDataset *)GDALOpenShared(source.c_str(), GA_ReadOnly);
     if (0 == source.find("<MRF_META>") && has_path(fname))
-    {// XML MRF source, might need to patch the file names
+    {// XML MRF source, might need to patch the file names with the current one
 	GDALMRFDataset *psDS = reinterpret_cast<GDALMRFDataset *>(poSrcDS);
-	addpath(psDS->current.datfname, fname);
-	addpath(psDS->current.idxfname, fname);
+	make_absolute(psDS->current.datfname, fname);
+	make_absolute(psDS->current.idxfname, fname);
     }
     return poSrcDS;
 }
