@@ -1348,8 +1348,10 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	    int bHas;
 	    double dfData;
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetNoDataValue(&bHas);
-	    if (bHas)
+	    if (bHas) {
 		poDS->vNoData.push_back(dfData);
+		poDS->GetRasterBand(i + 1)->SetNoDataValue(dfData);
+	    }
 	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMinimum(&bHas);
 	    if (bHas)
 		poDS->vMin.push_back(dfData);
