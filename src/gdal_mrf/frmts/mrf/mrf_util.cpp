@@ -199,7 +199,7 @@ CPLString getFname(const CPLString &in, const char *ext)
  * it returns the token with the extension changed to defext.  
  * Otherwise it retuns the token itself
  * It is pretty hard to separate local vs remote due to the gdal file name ornaments
- * Absolute file names are: ?:/* or /*
+ * Absolute file names start with: ?:/ or /
  * 
  */
 
@@ -418,7 +418,7 @@ char **CSLAddIfMissing(char **papszList,
 //
 // Print a double in way when read with strtod
 //
-CPLString PrintDouble(double d, char *frmt)
+CPLString PrintDouble(double d, const char *frmt)
 {
     CPLString res;
     res.FormatC(d, 0);
@@ -473,7 +473,7 @@ void XMLSetAttributeVal(CPLXMLNode *parent,
     CPLString value;
     double val = values[0];
     int single_val = true;
-    for (int i = 0; i < values.size(); i++) {
+    for (int i = 0; i < int(values.size()); i++) {
 	if (val != values[i])
 	    single_val = false;
 	value.append(PrintDouble(values[i]) + " ");

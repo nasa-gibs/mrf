@@ -84,7 +84,7 @@ CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszO
         return CE_Failure;
     }
 
-    if (statb.st_size > dst.size)
+    if (size_t(statb.st_size) > dst.size)
     {
 	CPLError(CE_Failure,CPLE_AppDefined,
 	    CPLString().Printf("MRF: TIFF, Tiff generated is too large"));

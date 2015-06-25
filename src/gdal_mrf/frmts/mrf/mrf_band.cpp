@@ -261,7 +261,7 @@ static double getBandValue(std::vector<double> &v,int idx)
 // so the application should set none or all the bands
 CPLErr  GDALMRFRasterBand::SetNoDataValue(double val)
 {
-    if (poDS->vNoData.size() < m_band)
+    if (GInt32(poDS->vNoData.size()) < m_band)
 	poDS->vNoData.resize(nBand);
     poDS->vNoData[m_band] = val;
     return CE_None;
@@ -378,7 +378,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 #undef CpySI
 
     // Drop the locks we acquired
-    for (int i=0; i<blocks.size(); i++)
+    for (int i=0; i < int(blocks.size()); i++)
 	blocks[i]->DropLock();
 
     return CE_None;
@@ -570,7 +570,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
     char *buf = static_cast<char *>(CPLMalloc(tinfo.size));
 
     VSIFSeekL(srcfd, tinfo.offset, SEEK_SET);
-    if (tinfo.size != VSIFReadL( buf, 1, tinfo.size, srcfd) ) {
+    if (tinfo.size != GIntBig(VSIFReadL( buf, 1, tinfo.size, srcfd))) {
 	CPLFree(buf);
 	CPLError( CE_Failure, CPLE_AppDefined, "MRF: Can't read data from source %s",
 	    poSrc->current.datfname.c_str() );
@@ -639,8 +639,8 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     VSIFSeekL(dfp, tinfo.offset, SEEK_SET);
     if (1 != VSIFReadL(data, tinfo.size, 1, dfp)) {
 	CPLFree(data);
-	CPLError(CE_Failure, CPLE_AppDefined, "Unable to read data page, %ld@%lx",
-	    tinfo.size, tinfo.offset);
+	CPLError(CE_Failure, CPLE_AppDefined, "Unable to read data page, %d@%x",
+	    int(tinfo.size), int(tinfo.offset));
 	return CE_Failure;
     }
 
@@ -813,7 +813,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	}
     }
 
-    if (empties == AllBandMask()) {
+    if (GIntBig(empties) == AllBandMask()) {
 	CPLFree(tbuffer);
 	return poDS->WriteTile(0, infooffset, 0);
     }
