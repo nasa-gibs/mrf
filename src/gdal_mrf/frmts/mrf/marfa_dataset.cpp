@@ -429,11 +429,10 @@ const  char theDelimiter = ' ')
 // Returns the number following the prefix if it exists in one of the vector strings
 // Otherwise it returns the default
 static int getnum(const vector<string> &theStringVector, const char prefix, int def) {
-    for (unsigned int i = 0; i < theStringVector.size(); i++) {
+    for (unsigned int i = 0; i < theStringVector.size(); i++)
 	if (theStringVector[i][0] == prefix)
 	    return atoi(theStringVector[i].c_str() + 1);
-	return def;
-    }
+    return def;
 }
 
 /**
@@ -821,7 +820,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     if (ifp.FP != NULL)
 	return ifp.FP;
 
-    char *mode = "rb";
+    const char *mode = "rb";
     ifp.acc = GF_Read;
 
     if (eAccess == GA_Update || !source.empty()) {
@@ -925,7 +924,7 @@ VSILFILE *GDALMRFDataset::IdxFP() {
 VSILFILE *GDALMRFDataset::DataFP() {
     if (dfp.FP != NULL)
 	return dfp.FP;
-    char *mode = "rb";
+    const char *mode = "rb";
     dfp.acc = GF_Read;
 
     // Open it for writing if updating or if caching
@@ -1006,7 +1005,7 @@ CPLXMLNode * GDALMRFDataset::BuildConfig()
 
     // palette, if we have one
     if (poColorTable != NULL) {
-	char *pfrmt = "%.0f";
+	const char *pfrmt = "%.0f";
 	CPLXMLNode *pal = CPLCreateXMLNode(raster, CXT_Element, "Palette");
 	int sz = poColorTable->GetColorEntryCount();
 	if (sz != 256)
@@ -1647,7 +1646,7 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
 	    new_version = true; // No previous, might create version
 
 	// tinfo contains the current info or 0,0
-	if (tinfo.size == net64(size)) { // Might be the same, read and compare
+	if (tinfo.size == GIntBig(net64(size))) { // Might be the same, read and compare
 	    if (size != 0) {
 		tbuff = CPLMalloc(size);
 		// Use the temporary buffer, we can't have a versioned cache !!
@@ -1659,7 +1658,7 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
 	    }
 	    else {
 		// Writing a null tile on top of a null tile, does it count?
-		if (tinfo.offset != net64(GUIntBig(buff)))
+		if (tinfo.offset != GIntBig(net64(GUIntBig(buff))))
 		    new_tile = true;
 	    }
 	}
@@ -1811,7 +1810,7 @@ CPLErr GDALMRFDataset::ReadTileIdx(ILIdx &tinfo, const ILSize &pos, const ILImag
 
     VSIFSeekL(srcidx, offset, SEEK_SET);
     size = VSIFReadL(buffer, sizeof(ILIdx), size, srcidx);
-    if (size != buf.size()) {
+    if (size != GIntBig(buf.size())) {
 	CPLError(CE_Failure, CPLE_FileIO, "Can't read cloned source index");
 	return CE_Failure; // Source reported the error
     }
@@ -1825,7 +1824,7 @@ CPLErr GDALMRFDataset::ReadTileIdx(ILIdx &tinfo, const ILSize &pos, const ILImag
     // Write it in the right place in the local index file
     VSIFSeekL(ifp, bias + offset, SEEK_SET);
     size = VSIFWriteL(&buf[0], sizeof(ILIdx), size, ifp);
-    if (size != buf.size()) {
+    if (size != GIntBig(buf.size())) {
 	CPLError(CE_Failure, CPLE_FileIO, "Can't write to cloning MRF index");
 	return CE_Failure; // Source reported the error
     }
