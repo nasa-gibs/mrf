@@ -3,7 +3,7 @@
 
 // For C++ interface
 #include <gdal_priv.h>
-#include <marfa.h>
+#include <mrf/marfa.h>
 
 #include <vector>
 #include <string>

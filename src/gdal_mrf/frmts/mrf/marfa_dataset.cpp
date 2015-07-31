@@ -573,7 +573,6 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
 	    cds->GetRasterBand(i)->GetOverview(l));
 	SetBand(i, band);
     }
-
     return CE_None;
 }
 
@@ -1347,17 +1346,28 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	for (int i = 0; i < poDS->nBands; i++) {
 	    int bHas;
 	    double dfData;
-	    dfData = poSrcDS->GetRasterBand(i + 1)->GetNoDataValue(&bHas);
+	    GDALRasterBand *srcBand = poSrcDS->GetRasterBand(i + 1);
+	    GDALRasterBand *mBand = poDS->GetRasterBand(i + 1);
+	    dfData = srcBand->GetNoDataValue(&bHas);
 	    if (bHas) {
 		poDS->vNoData.push_back(dfData);
-		poDS->GetRasterBand(i + 1)->SetNoDataValue(dfData);
+		mBand->SetNoDataValue(dfData);
 	    }
-	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMinimum(&bHas);
+	    dfData = srcBand->GetMinimum(&bHas);
 	    if (bHas)
 		poDS->vMin.push_back(dfData);
-	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMaximum(&bHas);
+	    dfData = srcBand->GetMaximum(&bHas);
 	    if (bHas)
 		poDS->vMax.push_back(dfData);
+
+	    // Copy the band metadata, PAM will handle it
+	    char **meta = srcBand->GetMetadata("IMAGE_STRUCTURE");
+	    if (CSLCount(meta))
+		mBand->SetMetadata(meta,"IMAGE_STRUCTURE");
+
+	    meta = srcBand->GetMetadata();
+	    if (CSLCount(meta))
+		mBand->SetMetadata(meta);
 	}
 
 	// Geotags
