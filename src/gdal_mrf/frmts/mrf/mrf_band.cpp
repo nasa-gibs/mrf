@@ -259,11 +259,19 @@ static double getBandValue(std::vector<double> &v,int idx)
 // Maybe we should check against the type range?
 // It is not keeping track of how many values have been set,
 // so the application should set none or all the bands
+// This call is only valid during Create
 CPLErr  GDALMRFRasterBand::SetNoDataValue(double val)
 {
+    if (poDS->bCrystalized) {
+	CPLError(CE_Failure, CPLE_AssertionFailed, "MRF: NoData can be set only during file create");
+	return CE_Failure;
+    }
     if (GInt32(poDS->vNoData.size()) < m_band)
 	poDS->vNoData.resize(nBand);
     poDS->vNoData[m_band] = val;
+    // We also need to set it for this band
+    img.NoDataValue = val;
+    img.hasNoData = true;
     return CE_None;
 }
 
