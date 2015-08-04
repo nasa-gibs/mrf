@@ -404,13 +404,8 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr src, void *buffer) {
 CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 
 {
-    CPLDebug("MRF_IB","FetchBlock %d,%d,0,%d, level  %d\n", xblk, yblk, m_band, m_l);
-
-    // Paranoid checks, should never happen
-    if (poDS->source.empty()) {
-	CPLError( CE_Failure, CPLE_AppDefined, "MRF: No cached source image to fetch from");
-	return CE_Failure;
-    }
+    assert(!poDS->source.empty());
+    CPLDebug("MRF_IB", "FetchBlock %d,%d,0,%d, level  %d\n", xblk, yblk, m_band, m_l);
 
     if (poDS->clonedSource)  // This is a clone
 	return FetchClonedBlock(xblk, yblk, buffer);
@@ -465,19 +460,29 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	vsz * cstride * img.pagesize.x,
 	(cstride != 1) ? vsz : vsz * img.pagesize.x * img.pagesize.y );
 
-    if (ret != CE_None)	return ret;
-    // Might have the block in the pbuffer, mark it
+    if (ret != CE_None) return ret;
+
+    // Might have the block in the pbuffer, mark it anyhow
     poDS->tile = req;
+    buf_mgr filesrc = { (char *)ob, img.pageSizeBytes };
+
+    if (poDS->bypass_cache) { // No local caching, just return the data
+	if (1 == cstride)
+	    return CE_None;
+	return RB(xblk, yblk, filesrc, buffer);
+    }
 
     // Test to see if it need to be written, or just marked
     int success;
     double val = GetNoDataValue(&success);
     if (!success) val = 0.0;
-    if (isAllVal(eDataType, ob, img.pageSizeBytes, val))
-	return poDS->WriteTile((void *)1, infooffset, 0);
+    if (isAllVal(eDataType, ob, img.pageSizeBytes, val)) {
+	// Mark it empty and checked, ignore the possible write error
+	poDS->WriteTile((void *)1, infooffset, 0);
+	return CE_None;
+    }
 
     // Write the page in the local cache
-    buf_mgr filesrc={(char *)ob, img.pageSizeBytes};
 
     // Have to use a separate buffer for compression output.
     void *outbuff = CPLMalloc(poDS->pbsize);
@@ -538,7 +543,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
 	return CE_Failure;
     }
 
-    if (DataMode() == GF_Read) {
+    if (poDS->bypass_cache || GF_Read == DataMode()) {
 	// Can't store, so just fetch from source, which is an MRF with identical structure
 	GDALMRFRasterBand *b = static_cast<GDALMRFRasterBand *>(poSrc->GetRasterBand(nBand));
 	if (b->GetOverviewCount() && m_l)
@@ -611,6 +616,10 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
     ILSize req(xblk, yblk, 0, m_band / cstride, m_l);
     CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset %lld\n", 
 	xblk, yblk, m_band, m_l, IdxOffset(req,img));
+
+    // If this is a caching file and bypass is on, just do the fetch
+    if (poDS->bypass_cache && !poDS->source.empty())
+	return FetchBlock(xblk, yblk, buffer);
 
     if (CE_None != poDS->ReadTileIdx(tinfo, req, img)) {
 	CPLError( CE_Failure, CPLE_AppDefined,

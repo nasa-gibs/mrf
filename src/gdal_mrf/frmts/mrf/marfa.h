@@ -387,11 +387,13 @@ protected:
 
     // The source to be cached in this MRF
     CPLString source;
-    int clonedSource; // Is it a cloned source
-
-    int hasVersions; // Does it support versions
-    int verCount; // The last version
     GIntBig idxSize; // The size of each version index, or the size of the cloned index
+
+    int clonedSource; // Is it a cloned source
+    int bypass_cache; // Do we alter disk cache
+    int mp_safe;      // Not thread safe, only multiple writers
+    int hasVersions;  // Does it support versions
+    int verCount;     // The last version
     int bCrystalized; // Unset only during the create process
 
     // Freeform sticky dataset options, as a list of key-value pairs
