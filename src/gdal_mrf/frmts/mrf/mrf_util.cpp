@@ -31,6 +31,7 @@
 
 #include "marfa.h"
 #include <zlib.h>
+#include <algorithm>
 
 static const char *ILC_N[]={ "PNG", "PPNG", "JPEG", "NONE", "DEFLATE", "TIF", 
 #if defined(LERC)

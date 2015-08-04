@@ -1,38 +1,38 @@
 #!/usr/bin/env python
 #
 # Copyright (c) 2002-2014, California Institute of Technology.
-# All rights reserved.  Based on Government Sponsored Research under 
+# All rights reserved.  Based on Government Sponsored Research under
 # contracts NAS7-1407 and/or NAS7-03001.
 #
-# Redistribution and use in source and binary forms, with or without 
+# Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-#   1. Redistributions of source code must retain the above copyright notice, 
+#   1. Redistributions of source code must retain the above copyright notice,
 #      this list of conditions and the following disclaimer.
-#   2. Redistributions in binary form must reproduce the above copyright 
-#      notice, this list of conditions and the following disclaimer in the 
+#   2. Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
 #      documentation and/or other materials provided with the distribution.
-#   3. Neither the name of the California Institute of Technology (Caltech), 
-#      its operating division the Jet Propulsion Laboratory (JPL), the 
-#      National Aeronautics and Space Administration (NASA), nor the names of 
-#      its contributors may be used to endorse or promote products derived 
+#   3. Neither the name of the California Institute of Technology (Caltech),
+#      its operating division the Jet Propulsion Laboratory (JPL), the
+#      National Aeronautics and Space Administration (NASA), nor the names of
+#      its contributors may be used to endorse or promote products derived
 #      from this software without specific prior written permission.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-# ARE DISCLAIMED. IN NO EVENT SHALL THE CALIFORNIA INSTITUTE OF TECHNOLOGY BE 
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE CALIFORNIA INSTITUTE OF TECHNOLOGY BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
 import errno
 import hashlib
-import math
+import struct
 from optparse import OptionParser
 import os
 import sys
@@ -43,7 +43,7 @@ def help(parser):
     parser.print_help()
     print("""
 Arguments:
-  path_template   Path to the image tiles using {x}, {y}, and {z} to 
+  path_template   Path to the image tiles using {x}, {y}, and {z} to
                   denote the column, row, and zoom level number. Example:
                        tiles/{z}/{x}/{y}.png
   output_base     Base name of the output MRF files without the file
@@ -54,18 +54,10 @@ def option_error(parser, msg):
     print("{0}: ERROR: {1}\n".format(prog, msg), file=sys.stderr)
     help(parser)
     sys.exit(1)
-        
-def byte8(val):
-    return bytearray([
-        (val >> (8 * 7)) & 0xff,
-        (val >> (8 * 6)) & 0xff,
-        (val >> (8 * 5)) & 0xff,
-        (val >> (8 * 4)) & 0xff,
-        (val >> (8 * 3)) & 0xff,
-        (val >> (8 * 2)) & 0xff,
-        (val >> (8 * 1)) & 0xff,
-        (val >> (8 * 0)) & 0xff,
-    ])
+
+def half(val):
+    'Divide by two with roundup, returns at least 1'
+    return 1 + (val - 1 )/2
 
 def hash_tile(tile):
     h = hashlib.sha256()
@@ -92,13 +84,15 @@ def process_tiles(options, args, fout, fidx):
     last_status = 0
     blank = 0
 
-    w = options.width
-    h = options.height
+    notile = struct.pack('!QQ', 0, 0)
+    sz = [ options.width, options.height]
     sizes = []
-    for level in xrange(0, options.levels):
-        sizes += [[w, h]]
-        w = int(math.ceil(w / 2.0))
-        h = int(math.ceil(h / 2.0))
+    for level in range(options.levels):
+        sizes += [sz]
+        sz = [half(v) for v in sz]
+
+#   Reverse because level 0 is the lowest resolution
+
     sizes.reverse()
     tiles = reduce(lambda total, s: total + s[0] * s[1], sizes, 0)
     print("Input tile count: {0}".format(tiles))
@@ -107,46 +101,40 @@ def process_tiles(options, args, fout, fidx):
         with open(options.blank_tile, "rb") as fblank:
             blank_tile = fblank.read()
         blank_hash = hash_tile(blank_tile)
-            
+
     for z in xrange(options.levels -1, -1, -1):
-        w = sizes[z][0]
-        h = sizes[z][1]
+        w,h = sizes[z]
         for y in xrange(0, h):
             for x in xrange(0, w):
-                tile_file = template.format(x=x, y=y, z=z)
-                with open(tile_file, "rb") as fin:
-                    bytes = fin.read()
-                write = True
+                tile_name = template.format(x=x, y=y, z=z)
+                bytes = open(tile_name, "rb").read()
+                to_write = True
                 if options.blank_tile:
                     hash_value = hash_tile(bytes)
                     if hash_value == blank_hash:
-                        fidx.write(byte8(0))
-                        fidx.write(byte8(0))
-                        write = False
+                        fidx.write(notile)
+                        to_write = False
                         blank += 1
-                if write:
+                if to_write:
                     fout.write(bytes)
                     tile_length = len(bytes)
-                    fidx.write(byte8(offset))
-                    fidx.write(byte8(tile_length))
+                    fidx.write(struct.pack('!QQ', offset, tile_length))
                     offset += tile_length
                 count += 1
                 status = (float(count) / tiles) * 100
                 last_status = update_status(last_status, status)
 
     # If the final level isn't exactly 1x1, pad until there
-    w = sizes[0][0]
-    h = sizes[0][1]
+    sz = sizes[0]
     pads = 0
-    while w > 1 or h > 1:
-        fidx.write(byte8(0))
-        fidx.write(byte8(0))        
-        pads += 1
-        w = int(math.ceil(w / 2.0))
-        h = int(math.ceil(h / 2.0))
+    while sz[0]*sz[1] != 1:
+        pads += sz[0]*sz[1]
+        sz = [half(v) for v in sz]
+    for i in range(pads):
+        fidx.write(notile)
 
     print(" - done.")
-    
+
     if blank > 0:
         print("{0} blank tile(s)".format(blank))
     if pads > 0:
@@ -161,16 +149,16 @@ def main():
                       "will be omitted and marked as a blank tile")
     parser.add_option("-d", "--debug", default=False, action="store_true",
                       help="Rethrow exceptions to see backtraces")
-    parser.add_option("-l", "--levels", default=1, 
+    parser.add_option("-l", "--levels", default=1,
                       type="int", metavar="count",
                       help="Number of zoom levels. Default is one.")
     parser.add_option("-f", "--format", default="ppg", metavar="{ppg,pjg}",
                       help="Output format. Default is ppg.")
-    parser.add_option("-h", "--height", default=1, 
+    parser.add_option("-h", "--height", default=1,
                       type="int", metavar="tile_count",
                       help="Number of tiles in the y direction at the "
                       "highest resolution. Default is one.")
-    parser.add_option("-w", "--width", default=1, 
+    parser.add_option("-w", "--width", default=1,
                       type="int", metavar="tile_count",
                       help="Number of tiles in the x direction at the "
                       "highest resolution. Default is one.")

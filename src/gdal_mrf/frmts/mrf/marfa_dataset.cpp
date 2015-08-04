@@ -74,12 +74,14 @@ GDALMRFDataset::GDALMRFDataset()
     zslice = 0;
     hasVersions = FALSE;
     clonedSource = FALSE;
+    mp_safe = FALSE;
     level = -1;
     tile = ILSize();
     cds = NULL;
     poSrcDS = NULL;
     poColorTable = NULL;
     bCrystalized = FALSE; // Assume not in create mode
+    bypass_cache = CSLTestBoolean(CPLGetConfigOption("MRF_BYPASSCACHING", "FALSE"));
 }
 
 void GDALMRFDataset::SetPBuffer(unsigned int sz)
@@ -573,7 +575,6 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
 	    cds->GetRasterBand(i)->GetOverview(l));
 	SetBand(i, band);
     }
-
     return CE_None;
 }
 
@@ -1092,6 +1093,7 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     CPLErr ret = Init_Raster(full, this, CPLGetXMLNode(config, "Raster"));
 
     hasVersions = on(CPLGetXMLValue(config, "Raster.versioned", "no"));
+    mp_safe = on(CPLGetXMLValue(config, "Raster.mp_safe", "no"));
 
     Quality = full.quality;
     if (CE_None != ret)
@@ -1274,6 +1276,7 @@ GDALDataset *GDALMRFDataset::GetSrcDS() {
 	make_absolute(psDS->current.datfname, fname);
 	make_absolute(psDS->current.idxfname, fname);
     }
+    mp_safe = true; // Turn on MP safety
     return poSrcDS;
 }
 
@@ -1347,17 +1350,28 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	for (int i = 0; i < poDS->nBands; i++) {
 	    int bHas;
 	    double dfData;
-	    dfData = poSrcDS->GetRasterBand(i + 1)->GetNoDataValue(&bHas);
+	    GDALRasterBand *srcBand = poSrcDS->GetRasterBand(i + 1);
+	    GDALRasterBand *mBand = poDS->GetRasterBand(i + 1);
+	    dfData = srcBand->GetNoDataValue(&bHas);
 	    if (bHas) {
 		poDS->vNoData.push_back(dfData);
-		poDS->GetRasterBand(i + 1)->SetNoDataValue(dfData);
+		mBand->SetNoDataValue(dfData);
 	    }
-	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMinimum(&bHas);
+	    dfData = srcBand->GetMinimum(&bHas);
 	    if (bHas)
 		poDS->vMin.push_back(dfData);
-	    dfData = poSrcDS->GetRasterBand(i + 1)->GetMaximum(&bHas);
+	    dfData = srcBand->GetMaximum(&bHas);
 	    if (bHas)
 		poDS->vMax.push_back(dfData);
+
+	    // Copy the band metadata, PAM will handle it
+	    char **meta = srcBand->GetMetadata("IMAGE_STRUCTURE");
+	    if (CSLCount(meta))
+		mBand->SetMetadata(meta,"IMAGE_STRUCTURE");
+
+	    meta = srcBand->GetMetadata();
+	    if (CSLCount(meta))
+		mBand->SetMetadata(meta);
 	}
 
 	// Geotags
@@ -1682,7 +1696,7 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
     tinfo.size = net64(size);
 
     if (size) do {
-	// Theese statements are the critical MP section
+	// Theese statements are the critical MP section for the data file
 	VSIFSeekL(dfp, 0, SEEK_END);
 	GUIntBig offset = VSIFTellL(dfp);
 	if (size != VSIFWriteL(buff, 1, size, dfp))
@@ -1690,13 +1704,11 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
 
 	tinfo.offset = net64(offset);
 	//
-	// If caching, check that we can read it back, otherwise we're done
-	// This makes the caching MRF MP safe, without using locks
+	// For MP ops, check that we can read it back properly, otherwise we're done
+	// This makes the caching MRF MP safe, without using explicit locks
 	//
-	if (GetSrcDS() != NULL) {
-	    // Assume we failed
+	if (mp_safe) {
 	    // Allocate the temp buffer if we haven't done so already
-	    // This marks the check as failed
 	    if (!tbuff)
 		tbuff = CPLMalloc(size);
 	    VSIFSeekL(dfp, offset, SEEK_SET);
@@ -1707,7 +1719,7 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
 		tbuff = NULL; // Triggers the loop termination
 	    }
 	    // Otherwise the tbuf stays allocated and try to write again
-	    // This works best if the file is opened in append mode
+	    // This works only if the file is opened in append mode
 	}
     } while (tbuff);
 
@@ -1721,6 +1733,10 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
     VSIFSeekL(ifp, infooffset, SEEK_SET);
     if (sizeof(tinfo) != VSIFWriteL(&tinfo, 1, sizeof(tinfo), ifp))
 	ret = CE_Failure;
+
+    // Flush the index update, not sure this is fully safe
+    if (mp_safe)
+	VSIFFlushL(ifp);
 
     return ret;
 }
