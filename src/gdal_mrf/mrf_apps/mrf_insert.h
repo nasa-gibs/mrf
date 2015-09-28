@@ -3,7 +3,7 @@
 
 // For C++ interface
 #include <gdal_priv.h>
-#include <mrf/marfa.h>
+#include <../frmts/mrf/marfa.h>
 
 #include <vector>
 #include <string>
@@ -36,7 +36,7 @@ class state {
 
 public:
     state():Progress(GDALTermProgress),
-        Resampling("average"),
+        Resampling(SAMPLING_Avg),
         verbose(false),
         overlays(false)
     {};
@@ -48,8 +48,12 @@ public:
         {TargetName=Target;}
     void setSource(const std::string &Source)
         {SourceName=Source;}
-    void setResampling(const std::string &Resamp)
-        {Resampling=Resamp;}
+    void setResampling(const std::string &Resamp) {
+	if (EQUALN(Resamp.c_str(), "Avg", 3))
+	    Resampling = SAMPLING_Avg;
+	else if (EQUALN(Resamp.c_str(), "NearNb", 6))
+	    Resampling = SAMPLING_Near;
+    }
     void setOverlays()
         {overlays=true; }
     void setProgress(GDALProgressFunc pfnProgress)
@@ -62,6 +66,6 @@ private:
     int overlays;
     std::string TargetName;
     std::string SourceName;
-    std::string Resampling;
+    int Resampling;
     GDALProgressFunc Progress;
 };

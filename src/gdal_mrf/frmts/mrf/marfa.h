@@ -239,7 +239,11 @@ typedef struct {
 // Offset of index, pos is in pages
 GIntBig IdxOffset(const ILSize &pos, const ILImage &img);
 
+enum { SAMPLING_ERR, SAMPLING_Avg, SAMPLING_Near };
+
 class GDALMRFDataset : public GDALPamDataset {
+
+
     friend class GDALMRFRasterBand;
     friend GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *, const ILImage &, int, int level = 0);
 
@@ -297,7 +301,7 @@ public:
     const CPLString GetFname() { return fname; };
     // Patches a region of all the next overview, argument counts are in blocks
     virtual CPLErr PatchOverview(int BlockX, int BlockY, int Width, int Height,
-	int srcLevel = 0, int recursive = false);
+	int srcLevel = 0, int recursive = false, int sampling_mode = SAMPLING_Avg);
 
     // Creates an XML tree from the current MRF.  If written to a file it becomes an MRF
     CPLXMLNode *BuildConfig();

@@ -25,13 +25,55 @@ template<typename T> int MatchCount(T *buff, int sz, T val) {
     return ncount;
 }
 
+//
+// Scales by 2x2 a buffer in place, using Nearest resampling
+// Always pick the top-left corner
+//
+template<typename T> void NearByFour(T *buff, int xsz, int ysz) {
+    T *obuff = buff;
+    for (int line = 0; line < ysz; line++) {
+	// Copy every other pixel
+	for (int col = 0; col < xsz; col++, buff++)
+	    *obuff++ = *buff++;
+	// Skip every other line
+	buff += xsz;
+    }
+}
+
+//
+// If the NoData value exists, pick a valid pixel if possible
+//
+template<typename T> void NearByFour(T *buff, int xsz, int ysz, T ndv) {
+    T *obuff = buff;
+    T *evenline = buff;
+
+    for (int line = 0; line<ysz; line++) {
+	T *oddline = evenline + xsz * 2;
+	for (int col = 0; col<xsz; col++) {
+
+	    if (evenline[0] != ndv)
+		*obuff++ = evenline[0];
+	    else if (evenline[1] != ndv)
+		*obuff++ = evenline[1];
+	    else if (oddline[0] != ndv)
+		*obuff++ = oddline[0];
+	    else
+		*obuff++ = oddline[1];
+
+	    evenline += 2; oddline += 2;
+	}
+	evenline += xsz * 2;  // Skips the other input line
+    }
+}
+
+// Scales by 2x2 using averaging
 // There are lots of these AverageByFour templates, because some types have to be treated
 // slightly different than others.  Some could be folded by using is_integral(), 
 // but support is not universal
-// There are two classes, depending on NoData handling
+// There are two categories, depending on NoData presence
 //
 
-// Data types shorter than 32 bit can safely use an int 
+// Integer data types shorter than 32 bit use integer math safely
 template<typename T> void AverageByFour(T *buff, int xsz, int ysz) {
     T *obuff=buff;
     T *evenline=buff;
@@ -61,7 +103,7 @@ template<> void AverageByFour<GInt32>(GInt32 *buff, int xsz, int ysz) {
     }
 }
 
-// 32bit unsigned int specialization, avoiding overflow using 64 bit int
+// Same for 32bit unsigned int specialization
 template<> void AverageByFour<GUInt32>(GUInt32 *buff, int xsz, int ysz) {
     GUInt32 *obuff=buff;
     GUInt32 *evenline=buff;
@@ -189,7 +231,8 @@ template<> void AverageByFour<double>(double *buff, int xsz, int ysz, double ndv
 
 CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 				      int Width,int Height, 
-				      int srcLevel, int recursive) 
+				      int srcLevel, int recursive,
+				      int sampling_mode)
 {
     GDALRasterBand *b0=GetRasterBand(1);
     if ( b0->GetOverviewCount() <= srcLevel)
@@ -280,33 +323,60 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 
 		// Count the NoData values
 		int count = 0; // Assume all points are data
+		if (sampling_mode == SAMPLING_Avg) {
 
 // Dispatch based on data type
 // Use an ugly temporary macro to make it look easy
 // Runs the optimized version if the page is full with data
-#define average(T)\
-		if (hasNoData) {\
-		    count = MatchCount((T *)buffer, 4*tsz_x*tsz_y, T(ndv));\
-		    if ( 4*tsz_x*tsz_y == count)\
-			bdst->FillBlock(buffer);\
-		    else if (0 != count)\
-			AverageByFour((T *)buffer, tsz_x, tsz_y, T(ndv));\
-		}\
-		if (0 == count)\
-		    AverageByFour((T *)buffer,tsz_x,tsz_y);\
-		break;
+#define resample(T)\
+    if (hasNoData) {\
+	count = MatchCount((T *)buffer, 4 * tsz_x * tsz_y, T(ndv));\
+	if (4 * tsz_x * tsz_y == count)\
+	    bdst->FillBlock(buffer);\
+	else if (0 != count)\
+	    AverageByFour((T *)buffer, tsz_x, tsz_y, T(ndv));\
+	}\
+    if (0 == count)\
+	AverageByFour((T *)buffer, tsz_x, tsz_y);\
+    break;
 
-		switch(eDataType) {
-		case GDT_Byte:	    average(GByte);
-		case GDT_UInt16:    average(GUInt16);
-		case GDT_Int16:     average(GInt16);
-		case GDT_UInt32:    average(GUInt32);
-		case GDT_Int32:     average(GInt32);
-		case GDT_Float32:   average(float);
-		case GDT_Float64:   average(double);
-		default: break;
+		    switch (eDataType) {
+		    case GDT_Byte:	resample(GByte);
+		    case GDT_UInt16:    resample(GUInt16);
+		    case GDT_Int16:     resample(GInt16);
+		    case GDT_UInt32:    resample(GUInt32);
+		    case GDT_Int32:     resample(GInt32);
+		    case GDT_Float32:   resample(float);
+		    case GDT_Float64:   resample(double);
+		    }
+#undef resample
+
 		}
-#undef average
+		else if (sampling_mode == SAMPLING_Near) {
+
+#define resample(T)\
+    if (hasNoData) {\
+	count = MatchCount((T *)buffer, 4 * tsz_x * tsz_y, T(ndv));\
+	if (4 * tsz_x * tsz_y == count)\
+	    bdst->FillBlock(buffer);\
+	else if (0 != count)\
+	    NearByFour((T *)buffer, tsz_x, tsz_y, T(ndv));\
+    	}\
+    if (0 == count)\
+	NearByFour((T *)buffer, tsz_x, tsz_y);\
+    break;
+		    switch (eDataType) {
+		    case GDT_Byte:	resample(GByte);
+		    case GDT_UInt16:    resample(GUInt16);
+		    case GDT_Int16:     resample(GInt16);
+		    case GDT_UInt32:    resample(GUInt32);
+		    case GDT_Int32:     resample(GInt32);
+		    case GDT_Float32:   resample(float);
+		    case GDT_Float64:   resample(double);
+		    }
+#undef resample
+
+		}
 
 		// Done filling the buffer
 		// Argh, still need to clip the output to the band size on the right and bottom
