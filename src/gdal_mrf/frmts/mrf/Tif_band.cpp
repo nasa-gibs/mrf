@@ -32,7 +32,7 @@
 #include "marfa.h"
 
 // Returns a string in /vsimem/ + prefix + count that doesn't exist when this function gets called
-// It is not completely safe, open the result as soon as possible
+// It is not thread safe, open the result as soon as possible
 CPLString uniq_memfname(const char *prefix)
 {
 

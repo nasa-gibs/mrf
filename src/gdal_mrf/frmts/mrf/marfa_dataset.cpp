@@ -284,13 +284,15 @@ CPLErr GDALMRFDataset::IBuildOverviews(
 	    // Generate the overview using the previous level as the source
 
 	    // Use "avg" flag to trigger the internal average sampling
-	    if (EQUAL("avg", pszResampling)) {
+	    if (EQUALN("Avg", pszResampling, 3) || EQUALN("NearNb", pszResampling, 4)) {
 
+		int sampling = EQUALN("Avg", pszResampling, 3) ? SAMPLING_Avg : SAMPLING_Near;
 		// Internal, using PatchOverview
 		if (srclevel > 0)
 		    b = static_cast<GDALMRFRasterBand *>(b->GetOverview(srclevel - 1));
 
-		eErr = PatchOverview(0, 0, b->nBlocksPerRow, b->nBlocksPerColumn, srclevel, 0);
+		eErr = PatchOverview(0, 0, b->nBlocksPerRow, b->nBlocksPerColumn, srclevel, 
+		    0, sampling);
 		if (eErr == CE_Failure)
 		    throw eErr;
 
@@ -1400,7 +1402,7 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     CSLDestroy(options);
 
     char **meta = poSrcDS->GetMetadata();
-    if (CSLCount(meta))
+    if (poDS && CSLCount(meta))
 	poDS->SetMetadata(meta);
 
     // If copy is disabled, we're done, we just created an empty MRF
@@ -1477,13 +1479,8 @@ void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
 
     // Compression dependent fixups
 #if defined(LERC)
-    if (IL_LERC == img.comp) {
-	if (img.pagesize.c != 1) {
-	    if (img.order == IL_Interleaved && img.size.c > 1)
-		img.order = IL_Separate;
-	    img.pagesize.c = 1;
-	}
-    }
+    if (IL_LERC == img.comp)
+	img.pagesize.c = 1;
 #endif
 
 }
@@ -1733,10 +1730,6 @@ CPLErr GDALMRFDataset::WriteTile(void *buff, GUIntBig infooffset, GUIntBig size)
     VSIFSeekL(ifp, infooffset, SEEK_SET);
     if (sizeof(tinfo) != VSIFWriteL(&tinfo, 1, sizeof(tinfo), ifp))
 	ret = CE_Failure;
-
-    // Flush the index update, not sure this is fully safe
-    if (mp_safe)
-	VSIFFlushL(ifp);
 
     return ret;
 }
