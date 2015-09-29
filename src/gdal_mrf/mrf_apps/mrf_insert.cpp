@@ -211,6 +211,7 @@ bool state::patch() {
 	// However, the input coverage still has to be exactly on 
 	// ouput block boundaries
 	//
+	if (start_level == 0) // Skip if start level is not zero
 	for (int y = blocks_bbox.uy; y < blocks_bbox.ly; y++) {
 	    int src_offset_y = tsz_y * (y - blocks_bbox.uy) * factor.y + 0.5;
 	    for (int x = blocks_bbox.lx; x < blocks_bbox.ux; x++) {
@@ -219,7 +220,7 @@ bool state::patch() {
 		    // cerr << " Y block " << y << " X block " << x << endl;
 		    // READ
 
-		    // If input needs trimming, initialize the buffer with destination content
+		    // If input needs padding, initialize the buffer with destination content
 		    if (src_offset_x < 0 || src_offset_x + tsz_x > src_b[band]->GetXSize()
 			&& src_offset_y < 0 || src_offset_y + tsz_y > src_b[band]->GetYSize()) {
 
@@ -229,7 +230,6 @@ bool state::patch() {
 			    buffer, tsz_x, tsz_y, // Buffer and size in buffer
 			    eDataType, // Requested type
 			    pixel_size, line_size); // Pixel and line space
-
 		    }
 
 		    // Works just like RasterIO, except that it only reads the 
@@ -264,12 +264,39 @@ bool state::patch() {
     GDALClose(hPatch);
     GDALFlushCache(hDataset);
 
-    // Call the patchOverview for the MRF, this recursively
-    // patches the overlays
-    if (overlays)
-	pTarg->PatchOverview(blocks_bbox.lx, blocks_bbox.uy,
-	blocks_bbox.ux - blocks_bbox.lx,
-	blocks_bbox.ly - blocks_bbox.uy, 0, true);
+    // Call the patchOverview for the MRF
+    if (overlays) {
+	
+	int BlockXOut, BlockYOut, WidthOut, HeightOut, srcLevel;
+	BlockXOut = blocks_bbox.lx;
+	BlockYOut = blocks_bbox.uy;
+	WidthOut = blocks_bbox.ux - blocks_bbox.lx;
+	HeightOut = blocks_bbox.ly - blocks_bbox.uy;
+
+	// If stop level is not set, do all levels
+	if (stop_level == -1)
+	    stop_level = overview_count;
+
+	// convert level limits to source levels
+	start_level--;
+
+	// Loop by source level
+	for (int sl = 0; sl < overview_count; sl++) {
+	    if (sl >= start_level && sl < stop_level) {
+		pTarg->PatchOverview(BlockXOut, BlockYOut, WidthOut, HeightOut,
+		    sl, false, Resampling);
+		GDALFlushCache(hDataset);
+	    }
+
+	    // Scale down by two, rouding up height and width and add the block rounding
+	    WidthOut  = WidthOut / 2 + (WidthOut & 1) + (BlockXOut & 1);    // Round up
+	    HeightOut = HeightOut / 2 + (HeightOut & 1) + (BlockYOut & 1);  // Round up
+
+	    // Start block always rounds down
+	    BlockXOut = BlockXOut / 2; // Round down
+	    BlockYOut = BlockYOut / 2; // Round down
+	}
+    }
 
     // Now for the upper levels
     GDALFlushCache(hDataset);
@@ -287,6 +314,8 @@ static int Usage()
     printf("Usage: mrf_insert [-r {Avg, Near}]\n"
 	"                  [-q] [--help-general] source_file(s) target_file\n"
 	"\n"
+	"  -start_level <N> : first level to insert into (0)"
+	"  -end_level <N> : last level to insert into (last)"
 	"  -r : choice of resampling method (default: average)\n"
 	"  -q : turn off progress display\n");
     return 1;
@@ -339,14 +368,25 @@ int main(int nArgc, char **papszArgv) {
 		papszArgv[0], GDAL_RELEASE_NAME, GDALVersionInfo("RELEASE_NAME"));
 	    return 0;
 	}
+
+	else if (EQUAL(papszArgv[iArg], "-start_level") && iArg < nArgc - 1)
+	    State.setStart(strtol(papszArgv[++iArg], 0, 0));
+
+	else if (EQUAL(papszArgv[iArg], "-stop_level") && iArg < nArgc - 1)
+	    State.setStop(strtol(papszArgv[++iArg], 0, 0));
+
 	else if (EQUAL(papszArgv[iArg], "-r") && iArg < nArgc - 1) {
+	    // R is required for building overviews
 	    State.setResampling(papszArgv[++iArg]);
 	    State.setOverlays();
 	}
+
 	else if (EQUAL(papszArgv[iArg], "-q") || EQUAL(papszArgv[iArg], "-quiet"))
 	    State.setProgress(GDALDummyProgress);
+
 	else if (EQUAL(papszArgv[iArg], "-v"))
 	    State.setDebug(1);
+
 	else fnames.push_back(papszArgv[iArg]);
     }
 
@@ -360,7 +400,6 @@ int main(int nArgc, char **papszArgv) {
     if (fnames.empty()) return Usage();
 
     try {
-
 	// Each input file in sequence, as they were passed as arguments
 	for (int i = 0; i < fnames.size(); i++) {
 	    State.setSource(fnames[i]);
@@ -370,7 +409,6 @@ int main(int nArgc, char **papszArgv) {
 		throw 2;
 
 	}
-
     } // Try, all execution
     catch (int err_ret) {
 	ret = err_ret;
