@@ -38,49 +38,38 @@ static bool outside_bounds(const Bounds &inside, const Bounds &outside) {
 CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
     int nXOff, int nYOff,
     int nXSize, int nYSize,
-    void * pData, int nBufXSize, int nBufYSize,
+    void * pData,
     GDALDataType eBufType,
     int nPixelSpace,
     int nLineSpace)
 {
-    if (eRWFlag != GF_Read) {
-	CPLError(CE_Failure, CPLE_AppDefined,
-	    "ClippedRasterIO only implemented for read, called for write");
-	return CE_Failure;
-    }
-
-    // If no need to clip, just call RAsterIO
-    if (nXOff >= 0 && nXOff + nXSize <= band->GetXSize()
-	&& nYOff >= 0 && nYOff + nYSize <= band->GetYSize())
-	return band->RasterIO(GF_Read, nXOff, nYOff, nXSize, nYSize,
-	pData, nBufXSize, nBufYSize, eBufType, nPixelSpace, nLineSpace);
+    CPLAssert(GF_Read == eRWFlag);
 
     if (nXOff < 0 || nXOff + nXSize > band->GetXSize()) { // Clip needed on X
 	if (nXOff < 0) { // Adjust the start of the line
-	    pData = (void *)((char *)pData + nXOff * nPixelSpace);
+	    // nXoff is negative, so this is addition
+	    pData = (void *)((char *)pData - nXOff * nPixelSpace);
 	    nXSize += nXOff; // XOff is negative, so this is a subtraction
 	    nXOff = 0;
 	}
-
 	if (nXOff + nXSize > band->GetXSize()) // Clip end of line
 	    nXSize = band->GetXSize() - nXOff;
     }
 
     if (nYOff < 0 || nYOff + nYSize > band->GetYSize()) { // Clip needed on X
 	if (nYOff < 0) { // Adjust the start of the column
-	    pData = (void *)((char *)pData + nLineSpace);
+	    // nYoff is negative, so this is addition
+	    pData = (void *)((char *)pData - nYOff * nLineSpace);
 	    nYSize += nYOff; // YOff is negative, so this is a subtraction
 	    nYOff = 0;
 	}
-
 	if (nYOff + nYSize > band->GetYSize()) // Clip end of line
 	    nYSize = band->GetYSize() - nYOff;
     }
 
-    // It was trimmed, call the raster band read
+    // Call the raster band read with the trimmed values
     return band->RasterIO(GF_Read, nXOff, nYOff, nXSize, nYSize,
-	pData, nBufXSize, nBufYSize, eBufType, nPixelSpace, nLineSpace);
-
+	pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace);
 }
 
 // Insert the target in the base level
@@ -185,10 +174,13 @@ bool state::patch() {
 	    cerr << "Pixel location " << pix_bbox << endl
 	    << "Factor " << factor.x << "," << factor.y << endl;
 
-	blocks_bbox.lx = int(pix_bbox.lx / tsz_x + 0.5);
-	blocks_bbox.ly = int(pix_bbox.ly / tsz_y + 0.5);
-	blocks_bbox.ux = int(pix_bbox.ux / tsz_x + 0.5);
-	blocks_bbox.uy = int(pix_bbox.uy / tsz_y + 0.5);
+	// First blocks to consider
+	blocks_bbox.lx = int(pix_bbox.lx / tsz_x);
+	blocks_bbox.ly = int(pix_bbox.ly / tsz_y);
+
+	// Last block to consider
+	blocks_bbox.ux = int(pix_bbox.ux / tsz_x);
+	blocks_bbox.uy = int(pix_bbox.uy / tsz_y);
 
 	if (verbose != 0)
 	    cerr << "Blocks location " << blocks_bbox << endl;
@@ -212,10 +204,13 @@ bool state::patch() {
 	// ouput block boundaries
 	//
 	if (start_level == 0) // Skip if start level is not zero
-	for (int y = blocks_bbox.uy; y < blocks_bbox.ly; y++) {
-	    int src_offset_y = tsz_y * (y - blocks_bbox.uy) * factor.y + 0.5;
-	    for (int x = blocks_bbox.lx; x < blocks_bbox.ux; x++) {
-		int src_offset_x = tsz_x * (x - blocks_bbox.lx) * factor.x + 0.5;
+	for (int y = blocks_bbox.uy; y <= blocks_bbox.ly; y++) {
+	    // Source offset relative to this block on y
+	    int src_offset_y = tsz_y * y * factor.y - pix_bbox.uy + 0.5;
+
+	    for (int x = blocks_bbox.lx; x <= blocks_bbox.ux; x++) {
+		// Source offset relative to this block on x
+		int src_offset_x = tsz_x * x * factor.x - pix_bbox.lx + 0.5;
 		for (int band = 0; band < bands; band++) { // Counting from zero in a vector
 		    // cerr << " Y block " << y << " X block " << x << endl;
 		    // READ
@@ -233,11 +228,11 @@ bool state::patch() {
 		    }
 
 		    // Works just like RasterIO, except that it only reads the 
-		    // valid parts of the input band
+		    // valid parts of the input band and has no scaling
 		    ClippedRasterIO(src_b[band], GF_Read,
 			src_offset_x, src_offset_y, // offset in input image
 			tsz_x, tsz_y, // Size in input image
-			buffer, tsz_x, tsz_y, // Buffer and size in buffer
+			buffer, // buffer
 			eDataType, // Requested type
 			pixel_size, line_size); // Pixel and line space
 
