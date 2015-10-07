@@ -306,7 +306,7 @@ bool state::patch() {
 static int Usage()
 
 {
-    printf("Usage: mrf_insert [-r {Avg, Near}]\n"
+    printf("Usage: mrf_insert [-r {Avg, NearNb}]\n"
 	"                  [-q] [--help-general] source_file(s) target_file\n"
 	"\n"
 	"  -start_level <N> : first level to insert into (0)"
