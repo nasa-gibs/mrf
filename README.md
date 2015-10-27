@@ -113,7 +113,9 @@ Format Details:
   Short Name: MRF
   Long Name: Meta Raster Format
   Help Topic: frmt_marfa.html
+  Supports: Create() - Create writeable dataset.
   Supports: CreateCopy() - Create dataset by copying another.
+  Supports: Virtual IO - eg. /vsimem/
   Creation Datatypes: Byte UInt16 Int16 Int32 UInt32 Float32 Float64
 
 <CreationOptionList>
@@ -129,15 +131,21 @@ Format Details:
     <Value>PIXEL</Value>
     <Value>BAND</Value>
   </Option>
+  <Option name="ZSIZE" type="int" description="Third dimension size" default="1" />
   <Option name="QUALITY" type="int" description="best=99, bad=0, default=85" />
   <Option name="OPTIONS" type="string" description="Freeform dataset parameters" />
   <Option name="BLOCKSIZE" type="int" description="Block size, both x and y, default 512" />
-  <Option name="BLOCKXSIZE" type="int" description="Page x size, default=512" />
-  <Option name="BLOCKYSIZE" type="int" description="Page y size, default=512" />
+  <Option name="BLOCKXSIZE" type="int" description="Block x size, default=512" />
+  <Option name="BLOCKYSIZE" type="int" description="Block y size, default=512" />
   <Option name="NETBYTEORDER" type="boolean" description="Force endian for certain compress options, default is host order" />
   <Option name="CACHEDSOURCE" type="string" description="The source raster, if this is a cache" />
-  <Option name="UNIFORM_SCALE" type="int" description="Uniform overlays in MRF, only 2 is tested" />
+  <Option name="UNIFORM_SCALE" type="int" description="Scale of overlays in MRF, usually 2" />
   <Option name="NOCOPY" type="boolean" description="Leave created MRF empty, default=no" />
+  <Option name="PHOTOMETRIC" type="string-select" default="DEFAULT" description="Band interpretation, may affect block encoding">
+    <Value>MULTISPECTRAL</Value>
+    <Value>RGB</Value>
+    <Value>YCC</Value>
+  </Option>
 </CreationOptionList>
 ```
 
