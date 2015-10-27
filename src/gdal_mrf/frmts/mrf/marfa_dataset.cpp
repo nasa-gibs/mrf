@@ -21,7 +21,6 @@
 */
 
 /******************************************************************************
-* $Id$
 *
 * Project:  Meta Raster File Format Driver Implementation, Dataset
 * Purpose:  Implementation of GDAL dataset
