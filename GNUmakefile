@@ -3,8 +3,6 @@ GDAL_ARTIFACT=gdal-$(GDAL_VERSION).tar.gz
 GDAL_HOME=http://download.osgeo.org/gdal
 GDAL_URL=$(GDAL_HOME)/$(GDAL_VERSION)/$(GDAL_ARTIFACT)
 
-POSTGRES_VERSION=9.2
-
 PREFIX=/usr/local
 SMP_FLAGS=-j $(shell cat /proc/cpuinfo | grep processor | wc -l)
 LIB_DIR=$(shell \
@@ -97,7 +95,6 @@ gdal-compile:
 		--enable-shared \
 		--with-gdal-ver=$(GDAL_VERSION) \
 		--disable-rpath \
-		--with-pg=/usr/pgsql-$(POSTGRES_VERSION)/bin/pg_config \
 		--with-expat \
 	)
 	$(MAKE) -C build/gdal $(SMP_FLAGS) all man
