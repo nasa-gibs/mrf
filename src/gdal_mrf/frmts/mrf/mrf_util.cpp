@@ -180,18 +180,22 @@ ILImage::ILImage()
  *\brief Get a file name by replacing the extension.
  * pass the data file name and the default extension starting with .
  * If name length is not sufficient, it returns the extension
+ * If the input name is curl with parameters, the base file extension gets changed and
+ * parameters are preserved.
  */
 
 CPLString getFname(const CPLString &in, const char *ext) 
 {
+    if (strlen(in) < strlen(ext))
+	return CPLString(ext);
+
     CPLString ret(in);
-
-    if ((strlen(ext)==4) && (strlen(in)>4)) {
-	ret.replace(ret.size()-4,4,ext);
-	return ret;
-    }
-
-    return CPLString(ext);
+    // Is it a web file with parameters?
+    size_t extlen = strlen(ext);
+    size_t qmark = ret.find_first_of('?');
+    if (!(qmark != std::string::npos && 0 == in.find("/vsicurl/http") && qmark >= extlen))
+	qmark = ret.size();
+    return ret.replace(qmark - extlen, extlen, ext);
 }
 
 /**
