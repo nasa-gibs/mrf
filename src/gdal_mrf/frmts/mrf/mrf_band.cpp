@@ -84,9 +84,15 @@ template<typename T> inline int isAllVal(const T *b, size_t bytecount, double nd
 {
     T val = (T)(ndv);
     size_t count = bytecount / sizeof(T);
-    while (count--)
-	if (*(b++) != val)
-	    return FALSE;
+    while (count--) {
+    	if (*b) {
+			if (*(b++)!=val) {
+				return FALSE;
+			}
+    	} else {
+    		return FALSE;
+    	}
+	}
     return TRUE;
 }
 
