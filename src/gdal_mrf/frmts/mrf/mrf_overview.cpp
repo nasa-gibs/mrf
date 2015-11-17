@@ -32,11 +32,12 @@ template<typename T> int MatchCount(T *buff, int sz, T val) {
 template<typename T> void NearByFour(T *buff, int xsz, int ysz) {
     T *obuff = buff;
     for (int line = 0; line < ysz; line++) {
-	// Copy every other pixel
-	for (int col = 0; col < xsz; col++, buff++)
-	    *obuff++ = *buff++;
-	// Skip every other line
-	buff += xsz;
+		// Copy every other pixel
+		for (int col = 0; col < xsz; col++, buff++) {
+			*obuff++ = *buff++;
+		}
+		// Skip every other line
+		buff += xsz * 2;
     }
 }
 
