@@ -46,25 +46,27 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
     CPLAssert(GF_Read == eRWFlag);
 
     if (nXOff < 0 || nXOff + nXSize > band->GetXSize()) { // Clip needed on X
-	if (nXOff < 0) { // Adjust the start of the line
-	    // nXoff is negative, so this is addition
-	    pData = (void *)((char *)pData - nXOff * nPixelSpace);
-	    nXSize += nXOff; // XOff is negative, so this is a subtraction
-	    nXOff = 0;
-	}
-	if (nXOff + nXSize > band->GetXSize()) // Clip end of line
-	    nXSize = band->GetXSize() - nXOff;
+		if (nXOff < 0) { // Adjust the start of the line
+			// nXoff is negative, so this is addition
+			pData = (void *)((char *)pData - nXOff * nPixelSpace);
+			nXSize += nXOff; // XOff is negative, so this is a subtraction
+			nXOff = 0;
+		}
+		if (nXOff + nXSize > band->GetXSize()) {// Clip end of line
+			nXSize = band->GetXSize() - nXOff;
+		}
     }
 
     if (nYOff < 0 || nYOff + nYSize > band->GetYSize()) { // Clip needed on X
-	if (nYOff < 0) { // Adjust the start of the column
-	    // nYoff is negative, so this is addition
-	    pData = (void *)((char *)pData - nYOff * nLineSpace);
-	    nYSize += nYOff; // YOff is negative, so this is a subtraction
-	    nYOff = 0;
-	}
-	if (nYOff + nYSize > band->GetYSize()) // Clip end of line
-	    nYSize = band->GetYSize() - nYOff;
+		if (nYOff < 0) { // Adjust the start of the column
+			// nYoff is negative, so this is addition
+			pData = (void *)((char *)pData - nYOff * nLineSpace);
+			nYSize += nYOff; // YOff is negative, so this is a subtraction
+			nYOff = 0;
+		}
+		if (nYOff + nYSize > band->GetYSize()) {// Clip end of line
+			nYSize = band->GetYSize() - nYOff;
+		}
     }
 
     // Call the raster band read with the trimmed values
@@ -204,11 +206,11 @@ bool state::patch() {
 	// ouput block boundaries
 	//
 	if (start_level == 0) // Skip if start level is not zero
-	for (int y = blocks_bbox.uy; y <= blocks_bbox.ly; y++) {
+	for (int y = blocks_bbox.uy; y < blocks_bbox.ly; y++) {
 	    // Source offset relative to this block on y
 	    int src_offset_y = tsz_y * y * factor.y - pix_bbox.uy + 0.5;
 
-	    for (int x = blocks_bbox.lx; x <= blocks_bbox.ux; x++) {
+	    for (int x = blocks_bbox.lx; x < blocks_bbox.ux; x++) {
 		// Source offset relative to this block on x
 		int src_offset_x = tsz_x * x * factor.x - pix_bbox.lx + 0.5;
 		for (int band = 0; band < bands; band++) { // Counting from zero in a vector
