@@ -113,7 +113,6 @@ rm -rf %{buildroot}
 %doc build/gdal/PROVENANCE.TXT
 %doc build/gdal/VERSION
 %{_bindir}/*
-%exclude %{_bindir}/mrf_insert
 %exclude %{_bindir}/gdal-config
 %{_libdir}/*.so.*
 %{_datadir}/gdal
