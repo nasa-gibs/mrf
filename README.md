@@ -10,6 +10,9 @@ The source code contains the Meta Raster Format (MRF) specification and plugin f
 
 For more information, visit https://earthdata.nasa.gov/gibs
 
+### OnEarth-Boxes
+[OnEarth-Boxes](https://github.com/nasa-gibs/onearth-boxes) is a tool that can build a virtual machine with demo imagery and pre-configured endpoints for demos, development, and getting started with MRF and OnEarth. Multiple VM image formats are supported. For more information visit https://github.com/nasa-gibs/onearth-boxes.
+
 ## Preconditions
 
 The MRF driver for GDAL requires the use of GDAL (version 1.11.1 recommended).  GDAL is included with the RPM release.
