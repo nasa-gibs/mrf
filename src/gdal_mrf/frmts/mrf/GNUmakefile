@@ -16,8 +16,8 @@ GDAL_INCLUDE := -I../jpeg/libjpeg $(GDAL_INCLUDE)
 endif
 
 ifneq ("$(wildcard LERC_band.cpp)","")
-FILES	:= $(FILES) LERC_band BitMask BitStuffer CntZImage Lerc2 BitStuffer2 BitMask2 RLE
-DEPENDS  := $(DEPENDS) BitMask.h BitStuffer.h CntZImage.h Defines.h Image.h TImage.hpp Lerc2.h BitStuffer2.h BitMask2.h RLE.h
+FILES	:= $(FILES) LERC_band BitMask BitStuffer CntZImage Lerc2 BitStuffer2 BitMask2 RLE Huffman
+DEPENDS  := $(DEPENDS) BitMask.h BitStuffer.h CntZImage.h Defines.h Image.h TImage.hpp Lerc2.h BitStuffer2.h BitMask2.h RLE.h Huffman.h
 CPPFLAGS := -DLERC
 endif
 

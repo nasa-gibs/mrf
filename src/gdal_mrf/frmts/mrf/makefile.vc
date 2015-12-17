@@ -1,13 +1,15 @@
 GDAL_ROOT	=	..\..
 !INCLUDE $(GDAL_ROOT)\nmake.opt
 
-OBJ	=	Tif_band.obj Raw_band.obj PNG_band.obj JPEG_band.obj mrf_band.obj mrf_overview.obj mrf_util.obj marfa_dataset.obj
+OBJ	=	Tif_band.obj Raw_band.obj PNG_band.obj JPEG_band.obj \
+    mrf_band.obj mrf_overview.obj mrf_util.obj marfa_dataset.obj
 
 # Use the LERC_Band.cpp presence as a signal to use LERC
 !IF EXIST(LERC_Band.cpp)
 LERC	=	1
 EXTRAFLAGS	=	/DLERC
-OBJ	=	$(OBJ) BitStuffer.obj CntZImage.obj BitMask.obj LERC_Band.obj Lerc2.obj Bitstuffer2.obj BitMask2.obj RLE.obj
+OBJ	=	$(OBJ) Huffman.obj BitStuffer.obj CntZImage.obj BitMask.obj LERC_Band.obj\
+    Lerc2.obj Bitstuffer2.obj BitMask2.obj RLE.obj
 !ENDIF
 
 !IFDEF JPEG12_SUPPORTED
@@ -33,7 +35,8 @@ default:	$(OBJ)
 	xcopy /D  /Y *.obj ..\o
 
 !IFDEF LERC
-$(OBJ):	marfa.h BitMask.h BitStuffer.h CntZImage.h Defines.h Image.h TImage.hpp Lerc2.h Bitstuffer2.h BitMask2.h RLE.h
+$(OBJ):	marfa.h BitMask.h Huffman.h BitStuffer.h CntZImage.h Defines.h Image.h\
+    TImage.hpp Lerc2.h Bitstuffer2.h BitMask2.h RLE.h
 !ELSE
 $(OBJ): marfa.h
 !ENDIF
