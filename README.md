@@ -6,7 +6,9 @@
 
 The source code contains the Meta Raster Format (MRF) specification and plugin for GDAL, which is a part of the OnEarth software package.  OnEarth consists of image formatting and serving modules which facilitate the deployment of a web service capable of efficiently serving standards-based requests for georeferenced raster imagery at multiple spatial resolutions including, but not limited to, full spatial resolution.  The Meta Raster Format and OnEarth software were originally developed at the Jet Propulsion Laboratory (JPL) to serve global daily composites of MODIS imagery.  Since then, it has been deployed and repurposed in other installations, including at the Physical Oceanography Distributed Active Archive Center (PO.DAAC) in support of the State of the Oceans (SOTO) visualization tool, the Lunar Mapping and Modeling Project (LMMP), and GIBS.
 
-### [Meta Raster Format Specification] (spec/mrf_spec.md)
+[Meta Raster Format User Guide] (src/gdal_mrf/frmts/mrf/docs/MUG.docx)
+
+[Meta Raster Format Specification] (spec/mrf_spec.md)
 
 For more information, visit https://earthdata.nasa.gov/gibs
 
@@ -15,7 +17,7 @@ For more information, visit https://earthdata.nasa.gov/gibs
 
 ## Preconditions
 
-The MRF driver for GDAL requires the use of GDAL (version 1.11.1 recommended).  GDAL is included with the RPM release.
+The MRF driver for GDAL requires the use of GDAL (version 1.11.2 recommended).  GDAL is included with the RPM release.
 
 ## RPM Installation
 
@@ -42,20 +44,20 @@ The MRF driver links with the rest of GDAL and has to be compiled with the same 
 
 Download GDAL source:
 ```
-wget http://download.osgeo.org/gdal/1.11.1/gdal1111.zip
+wget http://download.osgeo.org/gdal/1.11.2/gdal1112.zip
 ```
 
 Unpack GDAL source:
 ```
 mkdir src
-mv gdal1111.zip src/
+mv gdal1112.zip src/
 cd src/
-unzip gdal1111.zip
+unzip gdal1112.zip
 ```
  
 Go to the GDAL source directory:
 ```
-cd gdal-1.11.1/
+cd gdal-1.11.2/
 ``` 
 
 Configure GDAL source install:
@@ -129,6 +131,7 @@ Format Details:
     <Value>TIF</Value>
     <Value>DEFLATE</Value>
     <Value>NONE</Value>
+    <Value>LERC</Value>
   </Option>
   <Option name="INTERLEAVE" type="string-select" default="PIXEL">
     <Value>PIXEL</Value>
@@ -166,6 +169,12 @@ gdaladdo output.mrf -r nearest 2 4 8 16
 ```
 
 See the [Meta Raster Format Specification](spec/mrf_spec.md) for more information.
+
+## Acknowledgments
+
+The Meta Raster Format was originally developed at the Jet Propulsion Laboratory by Lucian Plesea (now at Esri) as part of Tiled WMS. The MRF driver software (NTR#48307) was released as open source using the Apache 2.0 License on GitHub in October 2013.
+
+[Limited Error Raster Compression](https://github.com/Esri/lerc) (LERC) within the MRF driver was added by Esri.
 
 ## Contact
 
