@@ -20,6 +20,7 @@ Contributors:
 #pragma once
 // For std::pair
 #include <utility>
+#include <cstddef>
 typedef unsigned char Byte;
 
 // unsigned long pair sortable by first
