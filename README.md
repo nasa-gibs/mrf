@@ -84,7 +84,7 @@ git clone https://github.com/nasa-gibs/mrf.git
 
 Copy the MRF GDAL driver to the GDAL source tree (the plugin must be compiled here):
 ```
-cp -R mrf/src/gdal-mrf/frmts/mrf <gdal source directory>/frmts/
+cp -R mrf/src/gdal_mrf/frmts/mrf <gdal source directory>/frmts/
 ```
 
 Go to the mrf driver source directory:
