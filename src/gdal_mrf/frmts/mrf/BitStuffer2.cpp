@@ -296,17 +296,11 @@ void BitStuffer2::BitUnStuff(const Byte** ppByte, vector<unsigned int>& dataVec,
 
   // needed to save the 0-3 bytes not used in the last UInt
   srcPtr--;
-  unsigned int lastUInt;
-  memcpy(&lastUInt, srcPtr, sizeof(unsigned int));
+  unsigned int lastUInt = *srcPtr;
   unsigned int numBytesNotNeeded = NumTailBytesNotNeeded(numElements, numBits);
   unsigned int n = numBytesNotNeeded;
   while (n--)
-  {
-    unsigned int srcValue;
-    memcpy(&srcValue, srcPtr, sizeof(unsigned int));
-    srcValue <<= 8;
-    memcpy(srcPtr, &srcValue, sizeof(unsigned int));
-  }
+    *srcPtr <<= 8;
 
   // do the un-stuffing
   srcPtr = arr;
@@ -317,9 +311,7 @@ void BitStuffer2::BitUnStuff(const Byte** ppByte, vector<unsigned int>& dataVec,
   {
     if (32 - bitPos >= numBits)
     {
-      unsigned int srcValue;
-      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
-      unsigned int n2 = srcValue << bitPos;
+      unsigned int n2 = (*srcPtr) << bitPos;
       *dstPtr++ = n2 >> (32 - numBits);
       bitPos += numBits;
       if (bitPos == 32)    // shift >= 32 is undefined
@@ -330,21 +322,15 @@ void BitStuffer2::BitUnStuff(const Byte** ppByte, vector<unsigned int>& dataVec,
     }
     else
     {
-      unsigned int srcValue;
-      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
-      srcPtr ++;
-      unsigned int n2 = srcValue << bitPos;
+      unsigned int n2 = (*srcPtr++) << bitPos;
       *dstPtr = n2 >> (32 - numBits);
       bitPos -= (32 - numBits);
-      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
-      *dstPtr++ |= srcValue >> (32 - bitPos);
+      *dstPtr++ |= (*srcPtr) >> (32 - bitPos);
     }
   }
 
   if (numBytesNotNeeded > 0)
-  {
-    memcpy(srcPtr, &lastUInt, sizeof(unsigned int));  // restore the last UInt
-  }
+    *srcPtr = lastUInt;    // restore the last UInt
 
   *ppByte += numBytes - numBytesNotNeeded;
 }
