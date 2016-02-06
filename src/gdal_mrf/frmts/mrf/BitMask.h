@@ -19,6 +19,7 @@ Contributors:  Thomas Maurer
 #pragma once
 #include "Defines.h"
 
+NAMESPACE_MRF_START
 
 /** BitMask - Convenient and fast access to binary mask bits
 * includes RLE compression and decompression, in BitMask.cpp
@@ -28,7 +29,7 @@ Contributors:  Thomas Maurer
 class BitMask
 {
 public:
-  BitMask(long nCols, long nRows) : m_pBits(0), m_nRows(nRows), m_nCols(nCols)
+  BitMask(long nCols, long nRows) : m_pBits(NULL), m_nRows(nRows), m_nCols(nCols)
   {
       m_pBits = new Byte[Size()];
       if (!m_pBits)
@@ -63,3 +64,5 @@ private:
   BitMask(const BitMask& copy);
   BitMask& operator=(const BitMask& m);
 };
+
+NAMESPACE_MRF_END

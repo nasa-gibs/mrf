@@ -30,6 +30,8 @@ In the encoded stream there are two types of sequences and an end marker
 #include <cassert>
 // #include <algorithm>
 
+NAMESPACE_MRF_START
+
 #define MAX_RUN 32767
 #define MIN_RUN 5
 // End of Transmission
@@ -98,7 +100,7 @@ long BitMask::RLEcompress(Byte *dst) const {
     long oddrun = 0;
 
     // Store a two byte count in low endian
-#define WRITE_COUNT(val) if (true) { *pCnt++ = Byte(val); *pCnt++ = Byte(val >> 8); }
+#define WRITE_COUNT(val) if (true) { *pCnt++ = Byte(val & 0xff); *pCnt++ = Byte(val >> 8); }
     // Flush an existing odd run
 #define FLUSH if (oddrun) { WRITE_COUNT(oddrun); pCnt += oddrun; dst = pCnt + 2; oddrun = 0; }
 
@@ -112,7 +114,7 @@ long BitMask::RLEcompress(Byte *dst) const {
 		FLUSH;
 	} else { // Found a run
 	    FLUSH;
-	    WRITE_COUNT(-run);
+	    WRITE_COUNT(-static_cast<int>(run));
 	    *pCnt++ = *src;
 	    src += run;
 	    sz -= run;
@@ -154,3 +156,5 @@ long BitMask::RLEsize() const {
     SIMFLUSH;
     return osz;
 }
+
+NAMESPACE_MRF_END

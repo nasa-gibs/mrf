@@ -47,29 +47,29 @@
 #include <cassert>
 
 CPL_C_START
+#ifdef INTERNAL_PNG
 #include "../png/libpng/png.h"
+#else
+#include <png.h>
+#endif
 CPL_C_END
 
-//Lucian recommended to change the following three lines to above as
-// it is causing trouble compiling for AMNH folks.
-//CPL_C_START
-//#include <png.h>
-//CPL_C_END
+NAMESPACE_MRF_START
 
 // Do Nothing
-void flush_png(png_structp) {}
+static void flush_png(png_structp) {}
 
 // Warning Emit
-void pngWH(png_struct *png, png_const_charp message)
+static void pngWH(png_struct * /*png*/, png_const_charp message)
 {
     CPLError(CE_Warning, CPLE_AppDefined, "MRF: PNG warning %s", message);
 }
 
 // Fatal Warning
-void pngEH(png_struct *png, png_const_charp message)
+static void pngEH(png_struct *png, png_const_charp message)
 {
     CPLError(CE_Failure, CPLE_AppDefined, "MRF: PNG Failure %s", message);
-    longjmp(png->jmpbuf, 1);
+    longjmp(png_jmpbuf(png), 1);
 }
 
 // Read memory handlers for PNG
@@ -102,14 +102,14 @@ CPLErr PNG_Band::DecompressPNG(buf_mgr &dst, buf_mgr &src)
 
     // pngp=png_create_read_struct(PNG_LIBPNG_VER_STRING,0,pngEH,pngWH);
     png_structp pngp = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (0 == pngp) {
+    if (NULL == pngp) {
 	CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error creating PNG decompress");
 	return CE_Failure;
     }
 
     png_infop infop = png_create_info_struct(pngp);
-    if (0 == infop) {
-	if (pngp) png_destroy_read_struct(&pngp, &infop, 0);
+    if (NULL == infop) {
+	if (pngp) png_destroy_read_struct(&pngp, &infop, NULL);
 	CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error creating PNG info");
 	return CE_Failure;
     }
@@ -123,25 +123,25 @@ CPLErr PNG_Band::DecompressPNG(buf_mgr &dst, buf_mgr &src)
     png_set_read_fn(pngp, &src, read_png);
     // Ready to read
     png_read_info(pngp, infop);
-    GInt32 height = png_get_image_height(pngp, infop);
+    GInt32 height = static_cast<GInt32>(png_get_image_height(pngp, infop));
     GInt32 byte_count = png_get_bit_depth(pngp, infop) / 8;
     // Check the size
     if (dst.size < (png_get_rowbytes(pngp, infop)*height)) {
 	CPLError(CE_Failure, CPLE_AppDefined,
 	    "MRF: PNG Page data bigger than the buffer provided");
-	png_destroy_read_struct(&pngp, &infop, 0);
+	png_destroy_read_struct(&pngp, &infop, NULL);
 	return CE_Failure;
     }
 
     png_rowp = (png_bytep *)CPLMalloc(sizeof(png_bytep)*height);
 
-    int rowbytes = png_get_rowbytes(pngp, infop);
+    int rowbytes = static_cast<int>(png_get_rowbytes(pngp, infop));
     for (int i = 0; i < height; i++)
 	png_rowp[i] = (png_bytep)dst.buffer + i*rowbytes;
 
     // Finally, the read
     // This is the lower level, the png_read_end allows some transforms
-    // Like pallete to RGBA
+    // Like palette to RGBA
     png_read_image(pngp, png_rowp);
 
     if (byte_count != 1) { // Swap from net order if data is short
@@ -160,12 +160,12 @@ CPLErr PNG_Band::DecompressPNG(buf_mgr &dst, buf_mgr &src)
     // png_read_png(pngp,infop,PNG_TRANSFORM_IDENTITY,0);
 
     CPLFree(png_rowp);
-    png_destroy_read_struct(&pngp, &infop, 0);
+    png_destroy_read_struct(&pngp, &infop, NULL);
     return CE_None;
 }
 
 /**
- *\Brief Compres a page in PNG format
+ *\Brief Compress a page in PNG format
  * Returns the compressed size in dst.size
  *
  */
@@ -220,7 +220,7 @@ CPLErr PNG_Band::CompressPNG(buf_mgr &dst, buf_mgr &src)
     // Optional, force certain filters only.  Makes it somewhat faster but worse compression
     // png_set_filter(pngp, PNG_FILTER_TYPE_BASE, PNG_FILTER_SUB);
 
-#if defined(PNG_LIBPNG_VER) && (PNG_LIBPNG_VER > 10200)
+#if defined(PNG_LIBPNG_VER) && (PNG_LIBPNG_VER > 10200) && defined(PNG_SELECT_READ)
     png_uint_32 mask, flags;
 
     flags = png_get_asm_flags(pngp);
@@ -240,7 +240,7 @@ CPLErr PNG_Band::CompressPNG(buf_mgr &dst, buf_mgr &src)
     if (deflate_flags & ZFLAG_SMASK)
 	png_set_compression_strategy(pngp, (deflate_flags & ZFLAG_SMASK) >> 6);
 
-    // Write the palete and the transparencies if they exist
+    // Write the palette and the transparencies if they exist
     if (PNGColors != NULL)
     {
 	png_set_PLTE(pngp, infop, (png_colorp)PNGColors, PalSize);
@@ -259,7 +259,7 @@ CPLErr PNG_Band::CompressPNG(buf_mgr &dst, buf_mgr &src)
 	return CE_Failure;
     }
 
-    int rowbytes = png_get_rowbytes(pngp, infop);
+    int rowbytes = static_cast<int>(png_get_rowbytes(pngp, infop));
     for (int i = 0; i < img.pagesize.y; i++) {
 	png_rowp[i] = (png_bytep)(src.buffer + i*rowbytes);
 	if (img.dt != GDT_Byte) { // Swap to net order if data is short
@@ -340,7 +340,7 @@ CPLErr PNG_Band::ResetPalette()
  */
 
 PNG_Band::PNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL)
+GDALMRFRasterBand(pDS, image, b, level), PNGColors(NULL), PNGAlpha(NULL), PalSize(0), TransSize(0)
 
 {   // Check error conditions
     if (image.dt != GDT_Byte && image.dt != GDT_Int16 && image.dt != GDT_UInt16) {
@@ -357,3 +357,5 @@ PNG_Band::~PNG_Band() {
     CPLFree(PNGColors);
     CPLFree(PNGAlpha);
 }
+
+NAMESPACE_MRF_END

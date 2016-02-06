@@ -22,6 +22,8 @@ Contributors:  Thomas Maurer
 
 using namespace std;
 
+NAMESPACE_MRF_START
+
 // -------------------------------------------------------------------------- ;
 
 // see the old stream IO functions below on how to call.
@@ -70,7 +72,10 @@ bool BitStuffer::write(Byte** ppByte, const vector<unsigned int>& dataVec) const
     {
       if (32 - bitPos >= numBits)
       {
-        *dstPtr |= (*srcPtr++) << (32 - bitPos - numBits);
+        unsigned int dstValue;
+        memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+        dstValue |= (*srcPtr++) << (32 - bitPos - numBits);
+        memcpy(dstPtr, &dstValue, sizeof(unsigned int));
         bitPos += numBits;
         if (bitPos == 32)    // shift >= 32 is undefined
         {
@@ -80,18 +85,29 @@ bool BitStuffer::write(Byte** ppByte, const vector<unsigned int>& dataVec) const
       }
       else
       {
-        int n = numBits - (32 - bitPos);
-        *dstPtr++ |= (*srcPtr  ) >> n;
-        *dstPtr   |= (*srcPtr++) << (32 - n);
-        bitPos = n;
+        int n2 = numBits - (32 - bitPos);
+        unsigned int dstValue;
+        memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+        dstValue |= (*srcPtr  ) >> n2;
+        memcpy(dstPtr, &dstValue, sizeof(unsigned int));
+        dstPtr++;
+        memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+        dstValue |= (*srcPtr++) << (32 - n2);
+        memcpy(dstPtr, &dstValue, sizeof(unsigned int));
+        bitPos = n2;
       }
     }
 
     // save the 0-3 bytes not used in the last ULong
     unsigned int numBytesNotNeeded = numTailBytesNotNeeded(numElements, numBits);
-    unsigned int n = numBytesNotNeeded;
-    while (n--)
-      *dstPtr >>= 8;
+    unsigned int n2 = numBytesNotNeeded;
+    while (n2--)
+    {
+      unsigned int dstValue;
+      memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+      dstValue >>= 8;
+      memcpy(dstPtr, &dstValue, sizeof(unsigned int));
+    }
 
     dstPtr = arr;
     for (unsigned int i = 0; i < numULongs; i++)
@@ -148,11 +164,17 @@ bool BitStuffer::read(Byte** ppByte, vector<unsigned int>& dataVec) const
 
     // needed to save the 0-3 bytes not used in the last ULong
     srcPtr--;
-    unsigned int lastULong = *srcPtr;
+    unsigned int lastULong;
+    memcpy(&lastULong, srcPtr, sizeof(unsigned int));
     unsigned int numBytesNotNeeded = numTailBytesNotNeeded(numElements, numBits);
-    unsigned int n = numBytesNotNeeded;
-    while (n--)
-      *srcPtr <<= 8;
+    unsigned int n2 = numBytesNotNeeded;
+    while (n2--)
+    {
+      unsigned int srcValue;
+      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+      srcValue <<= 8;
+      memcpy(srcPtr, &srcValue, sizeof(unsigned int));
+    }
 
     // do the un-stuffing
     srcPtr = arr;
@@ -163,8 +185,10 @@ bool BitStuffer::read(Byte** ppByte, vector<unsigned int>& dataVec) const
     {
       if (32 - bitPos >= numBits)
       {
-        unsigned int n = (*srcPtr) << bitPos;
-        *dstPtr++ = n >> (32 - numBits);
+        unsigned int srcValue;
+        memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+        unsigned int n3 = srcValue << bitPos;
+        *dstPtr++ = n3 >> (32 - numBits);
         bitPos += numBits;
         if (bitPos == 32)    // shift >= 32 is undefined
         {
@@ -174,15 +198,19 @@ bool BitStuffer::read(Byte** ppByte, vector<unsigned int>& dataVec) const
       }
       else
       {
-        unsigned int n = (*srcPtr++) << bitPos;
-        *dstPtr = n >> (32 - numBits);
+        unsigned int srcValue;
+        memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+        srcPtr ++;
+        unsigned int n3 = srcValue << bitPos;
+        *dstPtr = n3 >> (32 - numBits);
         bitPos -= (32 - numBits);
-        *dstPtr++ |= (*srcPtr) >> (32 - bitPos);
+        memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+        *dstPtr++ |= srcValue >> (32 - bitPos);
       }
     }
 
     if (numBytesNotNeeded > 0)
-      *srcPtr = lastULong;    // restore the last ULong
+      memcpy(srcPtr, &lastULong, sizeof(unsigned int)); // restore the last ULong
 
     *ppByte += numBytes - numBytesNotNeeded;
   }
@@ -226,12 +254,12 @@ bool BitStuffer::writeULong(Byte** ppByte, unsigned int k, int numBytes) const
   {
     unsigned short s = (unsigned short)k;
     SWAP_2(s);
-    *((unsigned short*)ptr) = s;
+    memcpy(ptr, &s, sizeof(unsigned short));
   }
   else if (numBytes == 4)
   {
     SWAP_4(k);
-    *((unsigned int*)ptr) = k;
+    memcpy(ptr, &k, sizeof(unsigned int));
   }
   else
     return false;
@@ -252,13 +280,14 @@ bool BitStuffer::readULong(Byte** ppByte, unsigned int& k, int numBytes) const
   }
   else if (numBytes == 2)
   {
-    unsigned short s = *((unsigned short*)ptr);
+    unsigned short s;
+    memcpy(&s, ptr, sizeof(unsigned short));
     SWAP_2(s);
     k = s;
   }
   else if (numBytes == 4)
   {
-    k = *((unsigned int*)ptr);
+    memcpy(&k, ptr, sizeof(unsigned int));
     SWAP_4(k);
   }
   else
@@ -278,3 +307,5 @@ unsigned int BitStuffer::numTailBytesNotNeeded(unsigned int numElem, int numBits
 }
 
 // -------------------------------------------------------------------------- ;
+
+NAMESPACE_MRF_END

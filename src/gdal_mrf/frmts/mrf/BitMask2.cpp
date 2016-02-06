@@ -25,25 +25,27 @@ Contributors:  Thomas Maurer
 #include <iostream>
 #include <cassert>
 
+NAMESPACE_MRF_START
+
 // -------------------------------------------------------------------------- ;
 
-BitMask2::BitMask2() : m_pBits(0), m_nCols(0), m_nRows(0)
+BitMask2::BitMask2() : m_pBits(NULL), m_nCols(0), m_nRows(0)
 {
 }
 
 // -------------------------------------------------------------------------- ;
 
-BitMask2::BitMask2(int nCols, int nRows) : m_pBits(0)
+BitMask2::BitMask2(int nCols, int nRows) : m_pBits(NULL), m_nCols(0), m_nRows(0)
 {
   SetSize(nCols, nRows);
 }
 
 // -------------------------------------------------------------------------- ;
 
-BitMask2::BitMask2(const BitMask2& src) : m_pBits(0)
+BitMask2::BitMask2(const BitMask2& src) : m_pBits(NULL), m_nCols(0), m_nRows(0)
 {
   SetSize(src.m_nCols, src.m_nRows);
-  if (src.m_pBits)
+  if (m_pBits && src.m_pBits)
     memcpy(m_pBits, src.m_pBits, Size());
 }
 
@@ -71,7 +73,7 @@ bool BitMask2::SetSize(int nCols, int nRows)
     m_nRows = nRows;
     m_pBits = new Byte[Size()];
   }
-  return m_pBits != 0;
+  return m_pBits != NULL;
 }
 
 // -------------------------------------------------------------------------- ;
@@ -86,7 +88,7 @@ static inline int csb(unsigned int v) {
 }
 
 // Number of bits set.
-// We really only need to know if full, empty or inbetween
+// We really only need to know if full, empty or in between
 int BitMask2::CountValidBits() const
 {
   assert(Size());
@@ -113,10 +115,11 @@ int BitMask2::CountValidBits() const
 void BitMask2::Clear()
 {
   delete[] m_pBits;
-  m_pBits = 0;
+  m_pBits = NULL;
   m_nCols = 0;
   m_nRows = 0;
 }
 
 // -------------------------------------------------------------------------- ;
 
+NAMESPACE_MRF_END

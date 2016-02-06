@@ -24,8 +24,9 @@ Contributors:  Thomas Maurer
 #include <cstdlib>
 #include "Image.h"
 
+NAMESPACE_MRF_START
 // -------------------------------------------------------------------------- ;
-
+// -------------------------------------------------------------------------- ;
 // ---- related classes ----------------------------------------------------- ;
 
 class CntZ
@@ -47,14 +48,14 @@ template< class Element >
 class TImage : public Image
 {
 public:
-  TImage() : data_(0) {}
-  TImage(const TImage& tImg) : data_(0) { *this = tImg;  }
+  TImage() : data_(NULL) {}
+  TImage(const TImage& tImg) : data_(NULL) { *this = tImg;  }
   virtual ~TImage() {
       clear();
   };
 
   /// assignment
-  virtual TImage& operator=(const TImage& tImg);
+  TImage& operator=(const TImage& tImg);
 
   bool resize(long width, long height);
   virtual void clear();
@@ -151,7 +152,7 @@ template< class Element >
 void TImage< Element >::clear()
 {
   free(data_);
-  data_ = 0;
+  data_ = NULL;
   width_ = 0;
   height_ = 0;
 }
@@ -194,3 +195,6 @@ bool TImage< Element >::operator == (const Image& img) const
 
   return true;
 }
+
+NAMESPACE_MRF_END
+

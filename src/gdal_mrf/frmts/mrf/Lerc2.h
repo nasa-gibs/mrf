@@ -29,6 +29,8 @@ Contributors:  Thomas Maurer
 #include <cfloat>
 #include <cmath>
 
+NAMESPACE_MRF_START
+
 #define TryHuffman
 
 /**   Lerc2
@@ -48,10 +50,10 @@ class Lerc2
 {
 public:
   Lerc2();
-  Lerc2(int nCols, int nRows, const Byte* pMaskBits = 0);    // valid / invalid bits as byte array
+  Lerc2(int nCols, int nRows, const Byte* pMaskBits = NULL);    // valid / invalid bits as byte array
   virtual ~Lerc2()  {}
 
-  bool Set(int nCols, int nRows, const Byte* pMaskBits = 0);
+  bool Set(int nCols, int nRows, const Byte* pMaskBits = NULL);
 
   template<class T>
   unsigned int ComputeNumBytesNeededToWrite(const T* arr, double maxZError, bool encodeMask);
@@ -227,7 +229,7 @@ unsigned int Lerc2::ComputeNumBytesNeededToWrite(const T* arr, double maxZError,
   // data
   m_writeDataOneSweep = false;
   int nBytes = 0;
-  Byte* ptr = 0;    // only emulate the writing and just count the bytes needed
+  Byte* ptr = NULL;    // only emulate the writing and just count the bytes needed
 
   if (!WriteTiles(arr, &ptr, nBytes, m_headerInfo.zMin, m_headerInfo.zMax))
     return 0;
@@ -639,7 +641,7 @@ bool Lerc2::ComputeStats(const T* data, int i0, int i1, int j0, int j1,
 
   tryLutA = false;
 
-  T zMin, zMax, prevVal = 0;
+  T zMin = 0, zMax = 0, prevVal = 0;
   int numValidPixel = 0;
   int cntSameVal = 0;
 
@@ -796,7 +798,7 @@ int Lerc2::NumBytesTile(int numValidPixel, T zMin, T zMax, bool& tryLut,  // can
     //enum DataType {DT_Char, DT_Byte, DT_Short, DT_UShort, DT_Int, DT_UInt, DT_Float, DT_Double};
     static const Byte sizeArr[] = {1, 1, 2, 2, 4, 4, 4, 8};
     DataType dtUsed;
-    int bits67 = TypeCode(zMin, dtUsed);
+    TypeCode(zMin, dtUsed); // Called to set dtUsed, return value is ignored
     int nBytesForMin = sizeArr[dtUsed];
     int nBytes = 1 + nBytesForMin;
 
@@ -1092,12 +1094,27 @@ bool Lerc2::WriteVariableDataType(Byte** ppByte, double z, DataType dtUsed) cons
   {
     case DT_Char:    *((char*)ptr)           = (char)z;            ptr++;     break;
     case DT_Byte:    *((Byte*)ptr)           = (Byte)z;            ptr++;     break;
-    case DT_Short:   *((short*)ptr)          = (short)z;           ptr += 2;  break;
-    case DT_UShort:  *((unsigned short*)ptr) = (unsigned short)z;  ptr += 2;  break;
-    case DT_Int:     *((int*)ptr)            = (int)z;             ptr += 4;  break;
-    case DT_UInt:    *((unsigned int*)ptr)   = (unsigned int)z;    ptr += 4;  break;
-    case DT_Float:   *((float*)ptr)          = (float)z;           ptr += 4;  break;
-    case DT_Double:  *((double*)ptr)         = (double)z;          ptr += 8;  break;
+    case DT_Short: { short s = (short)z;
+                     memcpy(ptr, &s, sizeof(short));
+                     ptr += 2;
+                     break; }
+    case DT_UShort:{ unsigned short us = (unsigned short)z;
+                     memcpy(ptr, &us, sizeof(unsigned short));
+                     ptr += 2;
+                     break; }
+    case DT_Int:   { int i = (int)z;
+                     memcpy(ptr, &i, sizeof(int));
+                     ptr += 4;
+                     break; }
+    case DT_UInt:  { unsigned int n = (unsigned int)z;
+                     memcpy(ptr, &n, sizeof(unsigned int));
+                     ptr += 4;
+                     break; }
+    case DT_Float: { float f = (float)z;
+                     memcpy(ptr, &f, sizeof(float));
+                     ptr += 4;
+                     break; }
+    case DT_Double:  memcpy(ptr, &z, sizeof(double)); ptr += 8;  break;
     default:
       return false;
   }
@@ -1129,37 +1146,43 @@ double Lerc2::ReadVariableDataType(const Byte** ppByte, DataType dtUsed) const
     }
     case DT_Short:
     {
-      short s = *((short*)ptr);
+      short s;
+      memcpy(&s, ptr, sizeof(short));
       *ppByte = ptr + 2;
       return s;
     }
     case DT_UShort:
     {
-      unsigned short us = *((unsigned short*)ptr);
+      unsigned short us;
+      memcpy(&us, ptr, sizeof(unsigned short));
       *ppByte = ptr + 2;
       return us;
     }
     case DT_Int:
     {
-      int i = *((int*)ptr);
+      int i;
+      memcpy(&i, ptr, sizeof(int));
       *ppByte = ptr + 4;
       return i;
     }
     case DT_UInt:
     {
-      unsigned int n = *((unsigned int*)ptr);
+      unsigned int n;
+      memcpy(&n, ptr, sizeof(unsigned int));
       *ppByte = ptr + 4;
       return n;
     }
     case DT_Float:
     {
-      float f = *((float*)ptr);
+      float f;
+      memcpy(&f, ptr, sizeof(float));
       *ppByte = ptr + 4;
       return f;
     }
     case DT_Double:
     {
-      double d = *((double*)ptr);
+      double d;
+      memcpy(&d, ptr, sizeof(double));
       *ppByte = ptr + 8;
       return d;
     }
@@ -1434,3 +1457,5 @@ bool Lerc2::DecodeHuffman(const Byte** ppByte, T* data) const
 
 // -------------------------------------------------------------------------- ;
 
+
+NAMESPACE_MRF_END

@@ -50,15 +50,26 @@ CPL_C_START
 #include <jpeglib.h>
 CPL_C_END
 
+NAMESPACE_MRF_START
+
 /**
 *\Brief Helper class for jpeg error management
 */
+
+#ifdef _MSC_VER
+#pragma warning( push )
+#pragma warning( disable : 4324 ) /* warning C4324: 'GDAL_MRF::ErrorMgr' : structure was padded due to __declspec(align()) at line where jmp_buf setjmpBuffer is defined */
+#endif
 
 struct ErrorMgr : public jpeg_error_mgr {
     inline ErrorMgr();
     int signaled() { return setjmp(setjmpBuffer); };
     jmp_buf setjmpBuffer;
 };
+
+#ifdef _MSC_VER
+#pragma warning( pop )
+#endif
 
 /**
 *\brief Called when jpeg wants to report a warning
@@ -76,7 +87,7 @@ static void emitMessage(j_common_ptr cinfo, int msgLevel)
     if (err->num_warnings++ >1) return;
     char buffer[JMSG_LENGTH_MAX];
     err->format_message(cinfo, buffer);
-    CPLError(CE_Failure, CPLE_AppDefined, buffer);
+    CPLError(CE_Failure, CPLE_AppDefined, "%s", buffer);
 }
 
 static void errorExit(j_common_ptr cinfo)
@@ -86,7 +97,7 @@ static void errorExit(j_common_ptr cinfo)
     char buffer[JMSG_LENGTH_MAX];
 
     err->format_message(cinfo, buffer);
-    CPLError(CE_Failure, CPLE_AppDefined, buffer);
+    CPLError(CE_Failure, CPLE_AppDefined, "%s", buffer);
     // return control to the setjmp point
     longjmp(err->setjmpBuffer, 1);
 }
@@ -96,6 +107,7 @@ static void errorExit(j_common_ptr cinfo)
 */
 ErrorMgr::ErrorMgr()
 {
+    memset(&setjmpBuffer, 0, sizeof(setjmpBuffer));
     jpeg_std_error(this);
     error_exit = errorExit;
     emit_message = emitMessage;
@@ -104,23 +116,23 @@ ErrorMgr::ErrorMgr()
 /**
 *\Brief Do nothing stub function for JPEG library, called
 */
-static void stub_source_dec(j_decompress_ptr cinfo) {};
+static void stub_source_dec(j_decompress_ptr /*cinfo*/) {};
 
 /**
 *\Brief: Do nothing stub function for JPEG library, called?
 */
-static boolean fill_input_buffer_dec(j_decompress_ptr cinfo) { return TRUE; };
+static boolean fill_input_buffer_dec(j_decompress_ptr /*cinfo*/) { return TRUE; };
 
 /**
 *\Brief: Do nothing stub function for JPEG library, not called
 */
-static void skip_input_data_dec(j_decompress_ptr cinfo, long l) {};
+static void skip_input_data_dec(j_decompress_ptr /*cinfo*/, long /*l*/) {};
 
 // Destination should be already set up
-static void init_or_terminate_destination(j_compress_ptr cinfo) {}
+static void init_or_terminate_destination(j_compress_ptr /*cinfo*/) {}
 
 // Called if the buffer provided is too small
-static boolean empty_output_buffer(j_compress_ptr cinfo) {
+static boolean empty_output_buffer(j_compress_ptr /*cinfo*/) {
     std::cerr << "JPEG Output buffer empty called\n";
     return FALSE;
 }
@@ -153,6 +165,7 @@ CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
 
     // Look at the source of this, some interesting tidbits
     cinfo.err = &jerr;
+    cinfo.client_data = NULL;
     jpeg_create_compress(&cinfo);
     cinfo.dest = &jmgr;
 
@@ -237,12 +250,16 @@ CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 {
     int nbands = img.pagesize.c;
     // Locals, clean up after themselves
-    jpeg_decompress_struct cinfo={0};
+    jpeg_decompress_struct cinfo;
     ErrorMgr jerr;
+    
+    memset(&cinfo, 0, sizeof(cinfo));
 
-    struct jpeg_source_mgr src={(JOCTET *)isrc.buffer, isrc.size};
+    struct jpeg_source_mgr src;
 
     cinfo.err=&jerr;
+    src.next_input_byte = (JOCTET *)isrc.buffer;
+    src.bytes_in_buffer = isrc.size;
     src.term_source = src.init_source = stub_source_dec;
     src.skip_input_data = skip_input_data_dec;
     src.fill_input_buffer = fill_input_buffer_dec;
@@ -273,7 +290,7 @@ CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 
     jpeg_start_decompress(&cinfo);
 
-    // We have a missmatch between the real and the declared data format
+    // We have a mismatch between the real and the declared data format
     // warn and fail if output buffer is too small
     if (linesize*cinfo.image_height!=dst.size) {
         CPLError(CE_Warning,CPLE_AppDefined,"MRF: read JPEG size is wrong");
@@ -321,7 +338,7 @@ CPLErr JPEG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 
 // PHOTOMETRIC == MULTISPECTRAL turns off YCbCr conversion and downsampling
 JPEG_Band::JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE)
+GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE), optimize(false)
 {
     int nbands = image.pagesize.c;
     //  TODO: Add 12bit JPEG support
@@ -346,8 +363,10 @@ GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE)
     }
 
     if (GDT_Byte == image.dt)
-	optimize = GetOptlist().FetchBoolean("OPTIMIZE", FALSE);
+	optimize = GetOptlist().FetchBoolean("OPTIMIZE", FALSE) != FALSE;
     else
-	optimize = TRUE; // Required for 12bit
+	optimize = true; // Required for 12bit
 }
 #endif
+
+NAMESPACE_MRF_END

@@ -24,6 +24,9 @@ Contributors:  Lucian Plesea
 #include "Lerc2.h"
 #include <algorithm>
 
+NAMESPACE_MRF_START
+
+
 // Load a buffer into a zImg
 template <typename T> void CntZImgFill(CntZImage &zImg, T *src, const ILImage &img)
 {
@@ -48,8 +51,8 @@ template <typename T> void CntZImgFill(CntZImage &zImg, T *src, const ILImage &i
 // Unload a zImg into a buffer
 template <typename T> void CntZImgUFill(CntZImage &zImg, T *dst, const ILImage &img)
 {
-    int h = zImg.getHeight();
-    int w = zImg.getWidth();
+    int h = static_cast<int>(zImg.getHeight());
+    int w = static_cast<int>(zImg.getWidth());
     T *ptr = dst;
     T ndv = (T)(img.NoDataValue);
     // Use 0 if nodata is not defined
@@ -163,16 +166,17 @@ static CPLErr CompressLERC2(buf_mgr &dst, buf_mgr &src, const ILImage &img, doub
 	case GDT_UInt32:	MASK(GUInt32);	break;
 	case GDT_Float32:	MASK(float);	break;
 	case GDT_Float64:	MASK(double);	break;
+        default:                CPLAssert(FALSE); break;
 
 #undef MASK
 	}
     }
     // Set bitmask if it has some ndvs
     Lerc2 lerc2(w, h, (ndv_count == 0) ? NULL : bitMask.Bits());
-    bool success;
+    bool success = false;
     Byte *ptr = (Byte *)dst.buffer;
 
-    long sz;
+    long sz = 0;
     switch (img.dt) {
 
 #define ENCODE(T) if (true) { \
@@ -187,13 +191,14 @@ static CPLErr CompressLERC2(buf_mgr &dst, buf_mgr &src, const ILImage &img, doub
     case GDT_UInt32:	ENCODE(GUInt32);    break;
     case GDT_Float32:	ENCODE(float);	    break;
     case GDT_Float64:	ENCODE(double);	    break;
+    default:            CPLAssert(FALSE); break;
 
 #undef ENCODE
     }
 
     // write changes the value of the pointer, we can find the size by testing how far it moved
     dst.size = (char *)ptr - dst.buffer;
-    if (!success || sz != dst.size) {
+    if (!success || sz != static_cast<long>(dst.size)) {
 	CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error during LERC2 compression");
 	return CE_Failure;
     }
@@ -226,7 +231,7 @@ CPLErr LERC_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     if (!lerc2.GetHeaderInfo(ptr, hdInfo))
 	return DecompressLERC(dst, src, img);
     // It is lerc2 here
-    bool success;
+    bool success = false;
     BitMask2 bitMask(img.pagesize.x, img.pagesize.y);
     switch (img.dt) {
 #define DECODE(T) success = lerc2.Decode(&ptr, reinterpret_cast<T *>(dst.buffer), bitMask.Bits())
@@ -237,6 +242,7 @@ CPLErr LERC_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     case GDT_UInt32:	DECODE(GUInt32);    break;
     case GDT_Float32:	DECODE(float);	    break;
     case GDT_Float64:	DECODE(double);	    break;
+    default:            CPLAssert(FALSE);   break;
 #undef DECODE
     }
     if (!success) {
@@ -256,6 +262,7 @@ CPLErr LERC_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     case GDT_UInt32:	UNMASK(GUInt32);    break;
     case GDT_Float32:	UNMASK(float);	    break;
     case GDT_Float64:	UNMASK(double);	    break;
+    default:            CPLAssert(FALSE);   break;
 #undef DECODE
     }
     return CE_None;
@@ -274,9 +281,9 @@ LERC_Band::LERC_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level
 {
     // Pick 1/1000 for floats and 0.5 losless for integers
     if (eDataType == GDT_Float32 || eDataType == GDT_Float64 )
-	precision = strtod(GetOptionValue( "LERC_PREC" , ".001" ),0);
+	precision = strtod(GetOptionValue( "LERC_PREC" , ".001" ),NULL);
     else
-	precision = std::max(0.5, strtod(GetOptionValue("LERC_PREC", ".5"), 0));
+	precision = std::max(0.5, strtod(GetOptionValue("LERC_PREC", ".5"), NULL));
 
     // Encode in V2 by default
     version = GetOptlist().FetchBoolean("V1", FALSE) ? 1:2;
@@ -288,3 +295,6 @@ LERC_Band::LERC_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level
 LERC_Band::~LERC_Band()
 {
 }
+
+
+NAMESPACE_MRF_END

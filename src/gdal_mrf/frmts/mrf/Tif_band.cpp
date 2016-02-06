@@ -45,9 +45,11 @@
 
 #include "marfa.h"
 
+NAMESPACE_MRF_START
+
 // Returns a string in /vsimem/ + prefix + count that doesn't exist when this function gets called
 // It is not thread safe, open the result as soon as possible
-CPLString uniq_memfname(const char *prefix)
+static CPLString uniq_memfname(const char *prefix)
 {
 
 // Define MRF_LOCAL_TMP to use local files instead of RAM
@@ -68,7 +70,7 @@ CPLString uniq_memfname(const char *prefix)
 // Uses GDAL to create a temporary TIF file, using the band create options
 // copies the content to the destination buffer then erases the temp TIF
 //
-CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszOptions)
+static CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszOptions)
 {
     CPLErr ret;
     GDALDriver *poTiffDriver = GetGDALDriverManager()->GetDriverByName("GTiff");
@@ -85,7 +87,11 @@ CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszO
     } else {
 	ret = poTiff->RasterIO(GF_Write, 0,0,img.pagesize.x,img.pagesize.y, 
 	    src.buffer, img.pagesize.x, img.pagesize.y, img.dt, img.pagesize.c, 
-	    NULL, 0,0,0);
+	    NULL, 0,0,0
+#if GDAL_VERSION_MAJOR >= 2
+            ,NULL
+#endif
+	    );
     }
     if (CE_None != ret)	return ret;
     GDALClose(poTiff);
@@ -94,14 +100,14 @@ CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszO
     if (VSIStatL(fname, &statb))
     {
 	CPLError(CE_Failure,CPLE_AppDefined,
-	    CPLString().Printf("MRF: TIFF, can't stat %s", fname.c_str()));
+	    "MRF: TIFF, can't stat %s", fname.c_str());
         return CE_Failure;
     }
 
     if (size_t(statb.st_size) > dst.size)
     {
 	CPLError(CE_Failure,CPLE_AppDefined,
-	    CPLString().Printf("MRF: TIFF, Tiff generated is too large"));
+	    "MRF: TIFF, Tiff generated is too large");
         return CE_Failure;
     }
 
@@ -109,12 +115,12 @@ CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszO
     if (pf == NULL)
     {
 	CPLError(CE_Failure,CPLE_AppDefined,
-	    CPLString().Printf("MRF: TIFF, can't open %s", fname.c_str()));
+	    "MRF: TIFF, can't open %s", fname.c_str());
         return CE_Failure;
     }
     
-    VSIFReadL(dst.buffer, statb.st_size, 1, pf);
-    dst.size = statb.st_size;
+    VSIFReadL(dst.buffer, static_cast<size_t>(statb.st_size), 1, pf);
+    dst.size = static_cast<size_t>(statb.st_size);
     VSIFCloseL(pf);
     VSIUnlink(fname);
 
@@ -122,7 +128,7 @@ CPLErr CompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img, char **papszO
 }
 
 // Read from a RAM Tiff. This is rather generic
-CPLErr DecompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img)
+static CPLErr DecompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img)
 {
     CPLString fname = uniq_memfname("mrf_tif_read");
     VSILFILE *fp = VSIFileFromMemBuffer(fname, (GByte *)(src.buffer), src.size, false);
@@ -131,13 +137,13 @@ CPLErr DecompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img)
 	VSIFCloseL(fp);
     else {
 	CPLError(CE_Failure,CPLE_AppDefined,
-	    CPLString().Printf("MRF: TIFF, can't open %s as a temp file", fname.c_str()));
+	    "MRF: TIFF, can't open %s as a temp file", fname.c_str());
         return CE_Failure;
     }
     GDALDataset *poTiff = reinterpret_cast<GDALDataset*>(GDALOpen(fname, GA_ReadOnly));
-    if (!fp) {
+    if (poTiff == NULL) {
 	CPLError(CE_Failure,CPLE_AppDefined,
-	    CPLString().Printf("MRF: TIFF, can't open page as a Tiff"));
+	    "MRF: TIFF, can't open page as a Tiff");
         return CE_Failure;
     }
 
@@ -148,7 +154,11 @@ CPLErr DecompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img)
     } else {
 	ret = poTiff->RasterIO(GF_Read,0,0,img.pagesize.x,img.pagesize.y, 
 	    dst.buffer, img.pagesize.x, img.pagesize.y, img.dt, img.pagesize.c, 
-	    NULL, 0,0,0);
+	    NULL, 0,0,0
+#if GDAL_VERSION_MAJOR >= 2
+            ,NULL
+#endif
+	    );
     }
     GDALClose(poTiff);
     if (CE_None != ret)
@@ -190,3 +200,4 @@ TIF_Band::~TIF_Band()
     CSLDestroy(papszOptions);
 };
 
+NAMESPACE_MRF_END

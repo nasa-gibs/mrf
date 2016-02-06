@@ -20,6 +20,8 @@ Contributors:  Thomas Maurer
 #include <queue>
 #include <cstring>
 
+NAMESPACE_MRF_START
+
 using namespace std;
 
 // -------------------------------------------------------------------------- ;
@@ -85,6 +87,10 @@ bool Huffman::ComputeCompressedSize(const std::vector<int>& histo, int& numBytes
       numBits += histo[i] * m_codeTable[i].first;
       numElem += histo[i];
     }
+
+  /* to please Coverity about potential divide by zero below */
+  if( numElem == 0 )
+    return false;
 
   int numUInts = ((((numBits + 7) >> 3) + 3) >> 2) + 1;    // add one more as the decode LUT can read ahead
   numBytes += 4 * numUInts;    // data huffman coded
@@ -364,7 +370,7 @@ bool Huffman::GetRange(int& i0, int& i1, int& maxCodeLength) const
     return false;
 
   int maxLen = 0;
-  for (int i = i0; i < i1; i++)
+  for (i = i0; i < i1; i++)
   {
     int k = GetIndexWrapAround(i, size);
     int len = m_codeTable[k].first;
@@ -469,3 +475,5 @@ bool Huffman::BitUnStuffCodes(const Byte** ppByte, int i0, int i1)
 
 // -------------------------------------------------------------------------- ;
 
+
+NAMESPACE_MRF_END

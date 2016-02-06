@@ -31,6 +31,8 @@
 
 using std::vector;
 
+NAMESPACE_MRF_START
+
 // Count the values in a buffer that match a specific value
 template<typename T> int MatchCount(T *buff, int sz, T val) {
     int ncount=0;
@@ -330,12 +332,21 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		int hasNoData = 0;
 		double ndv = bsrc->GetNoDataValue(&hasNoData);
 
-		bsrc->RasterIO( GF_Read,
+		CPLErr eErr = bsrc->RasterIO( GF_Read,
 		    src_offset_x*tsz_x, src_offset_y*tsz_y, // offset in input image
 		    sz_x, sz_y, // Size in output image
 		    buffer, sz_x, sz_y, // Buffer and size in buffer
 		    eDataType, // Requested type
-		    pixel_size, 2 * line_size ); // Pixel and line space
+		    pixel_size, 2 * line_size
+#if GDAL_VERSION_MAJOR >= 2
+		    ,NULL
+#endif
+		    ); // Pixel and line space
+                if( eErr != CE_None )
+                {
+                    // TODO ?
+                    CPLError(CE_Failure, CPLE_AppDefined, "RasterIO() failed");
+                }
 
 		// Count the NoData values
 		int count = 0; // Assume all points are data
@@ -364,6 +375,7 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		    case GDT_Int32:     resample(GInt32);
 		    case GDT_Float32:   resample(float);
 		    case GDT_Float64:   resample(double);
+                    default: CPLAssert(FALSE); break;
 		    }
 #undef resample
 
@@ -389,6 +401,7 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		    case GDT_Int32:     resample(GInt32);
 		    case GDT_Float32:   resample(float);
 		    case GDT_Float64:   resample(double);
+                    default: CPLAssert(FALSE); break;
 		    }
 #undef resample
 
@@ -405,12 +418,21 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 		if ( bdst->GetYSize() < dst_offset_y * sz_y + sz_y )
 		    sz_y = bdst->GetYSize() - dst_offset_y * sz_y;
 
-		bdst->RasterIO( GF_Write,
+		eErr = bdst->RasterIO( GF_Write,
 		    dst_offset_x*tsz_x, dst_offset_y*tsz_y, // offset in output image
 		    sz_x, sz_y, // Size in output image
 		    buffer, sz_x, sz_y, // Buffer and size in buffer
 		    eDataType, // Requested type
-		    pixel_size, line_size ); // Pixel and line space
+		    pixel_size, line_size
+#if GDAL_VERSION_MAJOR >= 2
+                    ,NULL
+#endif
+                ); // Pixel and line space
+                if( eErr != CE_None )
+                {
+                    // TODO ?
+                    CPLError(CE_Failure, CPLE_AppDefined, "RasterIO() failed");
+                }
 	    }
 
 	    // Mark the input data as no longer needed, saves RAM
@@ -428,3 +450,6 @@ CPLErr GDALMRFDataset::PatchOverview(int BlockX,int BlockY,
 	return CE_None;
     return PatchOverview( BlockXOut, BlockYOut, WidthOut, HeightOut, srcLevel+1, true);
 }
+
+NAMESPACE_MRF_END
+

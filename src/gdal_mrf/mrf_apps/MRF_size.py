@@ -59,41 +59,28 @@ def XMLprettify(elem, level=0):
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
 
+def attr(node, key, default):
+    return default if node is None or node.get(key) is None else node.get(key)
+
 class PointXYZC(object):
-    'Four value'
     def __init__(self, node, defaults = (-1, -1, 1, 1)):
-        try:
-            self.x = int(node.attrib['x'])
-        except:
-            self.x = defaults[0]
-        try:
-            self.y = int(node.attrib['y'])
-        except:
-            self.y = defaults[1]
-        try:
-            self.z = int(node.attrib['z'])
-        except:
-            self.z = defaults[2]
-        try:
-            self.c = int(node.attrib['c'])
-        except:
-            self.c = defaults[3]
+        key = 'x','y','z','c'
+        self.x, self.y, self.z, self.c = (
+            int(attr(node, key[i], defaults[i])) for i in range(4))
 
     def __str__(self):
-        f = "PointXYZC ({self.x}, {self.y}, {self.z}, {self.c})"
-        return f.format(self=self)
+        f = "PointXYZC ({p.x}, {p.y}, {p.z}, {p.c})"
+        return f.format(p = self)
 
 class BBOX(object):
-    'Four value'
-    def __init__(self, node):
-        self.minx = float(node.attrib['minx'])
-        self.maxx = float(node.attrib['maxx'])
-        self.miny = float(node.attrib['miny'])
-        self.maxy = float(node.attrib['maxy'])
+    def __init__(self, node, defaults):
+        key = 'minx', 'miny', 'maxx', 'maxy'
+        self.minx, self.miny, self.maxx, self.maxy = (
+            float(attr(node, key[i], defaults[i])) for i in range(4))
 
     def __str__(self):
-        f = "BBOX ({self.minx}, {self.miny}, {self.maxx}, {self.maxy})"
-        return f.format(self=self)
+        f = "BBOX ({p.minx}, {p.miny}, {p.maxx}, {p.maxy})"
+        return f.format(p = self)
 
 class MRF(object):
     'MRF metadata reader'
@@ -112,17 +99,19 @@ class MRF(object):
         self.pagesize = PointXYZC(root.find('Raster/PageSize'),
             (512, 512, 1, self.size.c))
         self.projection = root.find('GeoTags/Projection').text
-        self.bbox = BBOX(root.find('GeoTags/BoundingBox'))
+        self.bbox = BBOX(root.find('GeoTags/BoundingBox'),
+            (0, 0, self.size.x, self.size.y))
 
     def geotransform(self):
         'gdal style affine geotransform as a list'
-        return [self.bbox.minx, (self.bbox.maxx - self.bbox.minx)/self.size.x, 0,
+        return [
+            self.bbox.minx, (self.bbox.maxx - self.bbox.minx)/self.size.x, 0,
             self.bbox.maxy, 0, (self.bbox.miny - self.bbox.maxy)/self.size.y]
 
 def VRT_Size(mrf):
     'Builds and returns a gdal VRT XML tree'
-    xsz = 1 + (mrf.size.x-1)/mrf.pagesize.x
-    ysz = 1 + (mrf.size.y-1)/mrf.pagesize.y
+    xsz = 1 + (mrf.size.x-1) / mrf.pagesize.x
+    ysz = 1 + (mrf.size.y-1) / mrf.pagesize.y
     root = XML.Element('VRTDataset', {
         'rasterXSize':str(xsz),
         'rasterYSize':str(ysz)
@@ -132,7 +121,7 @@ def VRT_Size(mrf):
     # Adjust for pagesize
     gt[1] *= mrf.pagesize.x
     gt[5] *= mrf.pagesize.y
-    XML.SubElement(root,'GeoTransform').text = ",".join(( str(x) for x in gt))
+    XML.SubElement(root,'GeoTransform').text = ",".join((str(x) for x in gt))
     bands = mrf.size.c / mrf.pagesize.c
     for band in range(bands):
         xband = XML.SubElement(root, 'VRTRasterBand', {

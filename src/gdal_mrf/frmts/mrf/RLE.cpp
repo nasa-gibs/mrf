@@ -17,11 +17,13 @@ Contributors:  Thomas Maurer
 #include "RLE.h"
 #include <cstring>
 
+NAMESPACE_MRF_START
+
 // -------------------------------------------------------------------------- ;
 
 size_t RLE::computeNumBytesRLE(const Byte* arr, size_t numBytes) const
 {
-  if (arr == 0 || numBytes == 0)
+  if (arr == NULL || numBytes == 0)
     return 0;
 
   const Byte* ptr = arr;
@@ -115,7 +117,7 @@ size_t RLE::computeNumBytesRLE(const Byte* arr, size_t numBytes) const
 bool RLE::compress(const Byte* arr, size_t numBytes,
                    Byte** arrRLE, size_t& numBytesRLE, bool verify) const
 {
-  if (arr == 0 || numBytes == 0)
+  if (arr == NULL || numBytes == 0)
     return false;
 
   numBytesRLE = computeNumBytesRLE(arr, numBytes);
@@ -127,7 +129,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
   const Byte* srcPtr = arr;
   Byte* cntPtr = *arrRLE;
   Byte* dstPtr = cntPtr + 2;
-  size_t sum = 0;
+  /*size_t sum = 0;*/
   size_t cntOdd = 0;
   size_t cntEven = 0;
   size_t cntTotal = 0;
@@ -146,7 +148,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
       {
         cntEven++;
         writeCount(-(short)cntEven, &cntPtr, &dstPtr);    // - sign for even cnts
-        sum += 2 + 1;
+        /*sum += 2 + 1;*/
         bOdd = true;
         cntOdd = 0;
         cntEven = 0;
@@ -179,7 +181,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
           if (cntOdd > 0)
           {
             writeCount((short)cntOdd, &cntPtr, &dstPtr);    // + sign for odd cnts
-            sum += 2 + cntOdd;
+            /*sum += 2 + cntOdd;*/
           }
           bOdd = false;
           cntOdd = 0;
@@ -192,14 +194,14 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
     if (cntOdd == 32767)    // prevent short counters from overflow
     {
       writeCount((short)cntOdd, &cntPtr, &dstPtr);
-      sum += 2 + 32767;
+      /*sum += 2 + 32767;*/
       cntOdd = 0;
     }
     if (cntEven == 32767)
     {
       *dstPtr++ = *srcPtr;
       writeCount(-(short)cntEven, &cntPtr, &dstPtr);
-      sum += 2 + 1;
+      /*sum += 2 + 1;*/
       cntEven = 0;
     }
 
@@ -213,21 +215,21 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
   {
     cntOdd++;
     writeCount((short)cntOdd, &cntPtr, &dstPtr);
-    sum += 2 + cntOdd;
+    /*sum += 2 + cntOdd;*/
   }
   else
   {
     cntEven++;
     writeCount(-(short)cntEven, &cntPtr, &dstPtr);
-    sum += 2 + 1;
+    /*sum += 2 + 1;*/
   }
 
   writeCount(-32768, &cntPtr, &dstPtr);    // write end of stream symbol
-  sum += 2;
+  /*sum += 2;*/
 
   if (verify)
   {
-    Byte* arr2 = 0;
+    Byte* arr2 = NULL;
     size_t numBytes2 = 0;
     if (!decompress(*arrRLE, &arr2, numBytes2) || numBytes2 != numBytes)
     {
@@ -262,6 +264,11 @@ bool RLE::decompress(const Byte* arrRLE, Byte** arr, size_t& numBytes) const
   }
 
   numBytes = sum;
+  if( numBytes == 0 )
+  {
+    *arr = NULL;
+    return true;
+  }
   *arr = new Byte[numBytes];
   if (!*arr)
     return false;
@@ -300,7 +307,7 @@ bool RLE::decompress(const Byte* arrRLE, Byte* arr) const
 void RLE::writeCount(short cnt, Byte** ppCnt, Byte** ppDst) const
 {
   SWAP_2(cnt);    // write short's in little endian byte order, always
-  *((short*)*ppCnt) = cnt;
+  memcpy(*ppCnt, &cnt, sizeof(short));
   *ppCnt = *ppDst;
   *ppDst += 2;
 }
@@ -309,7 +316,8 @@ void RLE::writeCount(short cnt, Byte** ppCnt, Byte** ppDst) const
 
 short RLE::readCount(const Byte** ppCnt) const
 {
-  short cnt = *((const short*)*ppCnt);
+  short cnt;
+  memcpy(&cnt, *ppCnt, sizeof(short));
   SWAP_2(cnt);
   *ppCnt += 2;
   return cnt;
@@ -317,3 +325,4 @@ short RLE::readCount(const Byte** ppCnt) const
 
 // -------------------------------------------------------------------------- ;
 
+NAMESPACE_MRF_END

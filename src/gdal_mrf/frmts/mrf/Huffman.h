@@ -22,6 +22,8 @@ Contributors:  Thomas Maurer
 #include "Defines.h"
 #include <vector>
 
+NAMESPACE_MRF_START
+
 // ---- related classes ----------------------------------------------------- ;
 
 // -------------------------------------------------------------------------- ;
@@ -29,7 +31,7 @@ Contributors:  Thomas Maurer
 class Huffman
 {
 public:
-  Huffman() : m_maxHistoSize(1 << 15), m_maxNumBitsLUT(12), m_root(0) {};
+  Huffman() : m_maxHistoSize(1 << 15), m_maxNumBitsLUT(12), m_root(NULL) {};
   ~Huffman() { Clear(); };
 
   // Limitation: We limit the max Huffman code length to 32 bit. If this happens, the function ComputeCodes() 
@@ -65,7 +67,7 @@ private:
     {
       value = val;
       weight = -cnt;
-      child0 = child1 = 0;
+      child0 = child1 = NULL;
     }
 
     Node(Node* c0, Node* c1)    // new internal node from children c0 and c1
@@ -130,6 +132,7 @@ inline bool Huffman::DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int
     return false;
 
   // first get the next (up to) 12 bits as a copy
+  /* coverity[large_shift] */
   int valTmp = ((**ppSrc) << bitPos) >> (32 - numBitsLUT);
   if (32 - bitPos < numBitsLUT)
     valTmp |= (*(*ppSrc + 1)) >> (64 - bitPos - numBitsLUT);
@@ -155,6 +158,7 @@ inline bool Huffman::DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int
   value = -1;
   while (value < 0)
   {
+    /* coverity[large_shift] */
     int bit = ((**ppSrc) << bitPos) >> 31;
     bitPos++;
     if (bitPos == 32)
@@ -174,3 +178,4 @@ inline bool Huffman::DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int
 
 // -------------------------------------------------------------------------- ;
 
+NAMESPACE_MRF_END

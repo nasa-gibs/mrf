@@ -19,6 +19,8 @@ Contributors:  Thomas Maurer
 #include <algorithm>
 #include <cstring>
 
+NAMESPACE_MRF_START
+
 using namespace std;
 
 // -------------------------------------------------------------------------- ;
@@ -32,7 +34,7 @@ bool BitStuffer2::EncodeSimple(Byte** ppByte, const vector<unsigned int>& dataVe
 
   unsigned int maxElem = *max_element(dataVec.begin(), dataVec.end());
   int numBits = 0;
-  while ((maxElem >> numBits) && (numBits < 32))
+  while ((numBits < 32) && (maxElem >> numBits))
     numBits++;
 
   if (numBits >= 32)
@@ -81,12 +83,12 @@ bool BitStuffer2::EncodeLut(Byte** ppByte,
 
   for (unsigned int i = 1; i < numElem; i++)
   {
-    unsigned int prev = sortedDataVec[i - 1].first;
+    unsigned int prev = static_cast<unsigned int>(sortedDataVec[i - 1].first);
     m_tmpIndexVec[sortedDataVec[i - 1].second] = indexLut;
 
     if (sortedDataVec[i].first != prev)
     {
-      m_tmpLutVec.push_back(sortedDataVec[i].first);
+      m_tmpLutVec.push_back(static_cast<unsigned int>(sortedDataVec[i].first));
       indexLut++;
     }
   }
@@ -95,7 +97,7 @@ bool BitStuffer2::EncodeLut(Byte** ppByte,
   // write first 2 data elements same as simple, but bit5 set to 1
   unsigned int maxElem = m_tmpLutVec.back();
   int numBits = 0;
-  while ((maxElem >> numBits) && (numBits < 32))
+  while ((numBits < 32) && (maxElem >> numBits))
     numBits++;
 
   if (numBits >= 32)
@@ -192,11 +194,11 @@ bool BitStuffer2::Decode(const Byte** ppByte, vector<unsigned int>& dataVec) con
 unsigned int BitStuffer2::ComputeNumBytesNeededLut(const vector<Quant >& sortedDataVec,
                                                     bool& doLut) const
 {
-  unsigned int maxElem = sortedDataVec.back().first;
+  unsigned int maxElem = static_cast<unsigned int>(sortedDataVec.back().first);
   unsigned int numElem = (unsigned int)sortedDataVec.size();
 
   int numBits = 0;
-  while ((maxElem >> numBits) && (numBits < 32))
+  while ((numBits < 32) && (maxElem >> numBits))
     numBits++;
   unsigned int numBytes = 1 + NumBytesUInt(numElem) + ((numElem * numBits + 7) >> 3);
 
@@ -238,7 +240,10 @@ void BitStuffer2::BitStuff(Byte** ppByte, const vector<unsigned int>& dataVec, i
   {
     if (32 - bitPos >= numBits)
     {
-      *dstPtr |= (*srcPtr++) << (32 - bitPos - numBits);
+      unsigned int dstValue;
+      memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+      dstValue |= (*srcPtr++) << (32 - bitPos - numBits);
+      memcpy(dstPtr, &dstValue, sizeof(unsigned int));
       bitPos += numBits;
       if (bitPos == 32)    // shift >= 32 is undefined
       {
@@ -248,9 +253,15 @@ void BitStuffer2::BitStuff(Byte** ppByte, const vector<unsigned int>& dataVec, i
     }
     else
     {
+      unsigned int dstValue;
       int n = numBits - (32 - bitPos);
-      *dstPtr++ |= (*srcPtr  ) >> n;
-      *dstPtr   |= (*srcPtr++) << (32 - n);
+      memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+      dstValue |= (*srcPtr  ) >> n;
+      memcpy(dstPtr, &dstValue, sizeof(unsigned int));
+      dstPtr ++;
+      memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+      dstValue |= (*srcPtr++) << (32 - n);
+      memcpy(dstPtr, &dstValue, sizeof(unsigned int));
       bitPos = n;
     }
   }
@@ -259,7 +270,12 @@ void BitStuffer2::BitStuff(Byte** ppByte, const vector<unsigned int>& dataVec, i
   unsigned int numBytesNotNeeded = NumTailBytesNotNeeded(numElements, numBits);
   unsigned int n = numBytesNotNeeded;
   while (n--)
-    *dstPtr >>= 8;
+  {
+    unsigned int dstValue;
+    memcpy(&dstValue, dstPtr, sizeof(unsigned int));
+    dstValue >>= 8;
+    memcpy(dstPtr, &dstValue, sizeof(unsigned int));
+  }
 
   *ppByte += numBytes - numBytesNotNeeded;
 }
@@ -280,11 +296,17 @@ void BitStuffer2::BitUnStuff(const Byte** ppByte, vector<unsigned int>& dataVec,
 
   // needed to save the 0-3 bytes not used in the last UInt
   srcPtr--;
-  unsigned int lastUInt = *srcPtr;
+  unsigned int lastUInt;
+  memcpy(&lastUInt, srcPtr, sizeof(unsigned int));
   unsigned int numBytesNotNeeded = NumTailBytesNotNeeded(numElements, numBits);
   unsigned int n = numBytesNotNeeded;
   while (n--)
-    *srcPtr <<= 8;
+  {
+    unsigned int srcValue;
+    memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+    srcValue <<= 8;
+    memcpy(srcPtr, &srcValue, sizeof(unsigned int));
+  }
 
   // do the un-stuffing
   srcPtr = arr;
@@ -295,8 +317,10 @@ void BitStuffer2::BitUnStuff(const Byte** ppByte, vector<unsigned int>& dataVec,
   {
     if (32 - bitPos >= numBits)
     {
-      unsigned int n = (*srcPtr) << bitPos;
-      *dstPtr++ = n >> (32 - numBits);
+      unsigned int srcValue;
+      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+      unsigned int n2 = srcValue << bitPos;
+      *dstPtr++ = n2 >> (32 - numBits);
       bitPos += numBits;
       if (bitPos == 32)    // shift >= 32 is undefined
       {
@@ -306,17 +330,25 @@ void BitStuffer2::BitUnStuff(const Byte** ppByte, vector<unsigned int>& dataVec,
     }
     else
     {
-      unsigned int n = (*srcPtr++) << bitPos;
-      *dstPtr = n >> (32 - numBits);
+      unsigned int srcValue;
+      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+      srcPtr ++;
+      unsigned int n2 = srcValue << bitPos;
+      *dstPtr = n2 >> (32 - numBits);
       bitPos -= (32 - numBits);
-      *dstPtr++ |= (*srcPtr) >> (32 - bitPos);
+      memcpy(&srcValue, srcPtr, sizeof(unsigned int));
+      *dstPtr++ |= srcValue >> (32 - bitPos);
     }
   }
 
   if (numBytesNotNeeded > 0)
-    *srcPtr = lastUInt;    // restore the last UInt
+  {
+    memcpy(srcPtr, &lastUInt, sizeof(unsigned int));  // restore the last UInt
+  }
 
   *ppByte += numBytes - numBytesNotNeeded;
 }
 
 // -------------------------------------------------------------------------- ;
+
+NAMESPACE_MRF_END
