@@ -73,11 +73,7 @@ cp %{SOURCE1} upstream
 
 
 %build
-%if 0%{?el6}
-make gdal PREFIX=/usr POSTGRES_VERSION=9.2
-%else
-make gdal PREFIX=/usr POSTGRES_VERSION=9.3
-%endif
+make gdal PREFIX=/usr
 
 
 %install
@@ -143,6 +139,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.2
+- Remove PostgreSQL dependency 
+
 * Tue Oct 14 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.1-1
 - New upstream GDAL version
 
