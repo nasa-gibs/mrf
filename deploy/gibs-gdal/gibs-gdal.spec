@@ -1,6 +1,6 @@
 %global gdal_version 1.11.2
-%global gdal_release 1%{?dist}
-%global mrf_version 0.8.0
+%global gdal_release 2%{?dist}
+%global mrf_version 0.9.0
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -36,9 +36,9 @@ BuildRequires:  python-setuptools
 Requires:	proj-devel
 
 Provides:	gdal = %{gdal_version}-%{gdal_release}
-Obsoletes:	gdal < 1.10
+Obsoletes:	gdal < 1.11
 Provides:	gdal-python = %{gdal_version}-%{gdal_release}
-Obsoletes:	gdal-python < 1.10
+Obsoletes:	gdal-python < 1.11
 	
 %description
 The GDAL library provides support to handle multiple GIS file formats.
@@ -139,7 +139,7 @@ rm -rf %{buildroot}
 
 
 %changelog
-* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.2
+* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.1-2
 - Remove PostgreSQL dependency 
 
 * Tue Oct 14 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.1-1
