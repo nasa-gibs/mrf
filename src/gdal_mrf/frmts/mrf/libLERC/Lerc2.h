@@ -15,7 +15,8 @@ http://github.com/Esri/lerc/
 Contributors:  Thomas Maurer
 */
 
-#pragma once
+#ifndef LERC2_H
+#define LERC2_H
 
 #include "BitMask2.h"
 #include "BitStuffer2.h"
@@ -29,7 +30,7 @@ Contributors:  Thomas Maurer
 #include <cfloat>
 #include <cmath>
 
-NAMESPACE_MRF_START
+NAMESPACE_LERC_START
 
 #define TryHuffman
 
@@ -1458,4 +1459,5 @@ bool Lerc2::DecodeHuffman(const Byte** ppByte, T* data) const
 // -------------------------------------------------------------------------- ;
 
 
-NAMESPACE_MRF_END
+NAMESPACE_LERC_END
+#endif
