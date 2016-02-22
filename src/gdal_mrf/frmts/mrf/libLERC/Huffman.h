@@ -169,6 +169,14 @@ inline bool Huffman::DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int
   if (!m_root)
     return false;
 
+  // skip leading 0 bits before entering the tree
+  bitPos += m_numBitsToSkipInTree;
+  if (bitPos >= 32)
+  {
+    bitPos -= 32;
+    (*ppSrc)++;
+  }
+
   const Node* node = m_root;
   value = -1;
   while (value < 0)
@@ -190,8 +198,6 @@ inline bool Huffman::DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int
 
   return true;
 }
-
-// -------------------------------------------------------------------------- ;
 
 NAMESPACE_LERC_END
 #endif

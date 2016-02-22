@@ -69,7 +69,13 @@ bool Huffman::ComputeCodes(const vector<int>& histo)
   Node nodeNonConst = pq.top();
   nodeNonConst.FreeTree(numNodes);
 
-  return (numNodes == 0); // Return error if freeing nodes fails
+  if (numNodes != 0)    // check the ref count
+    return false;
+
+  if (!ConvertCodesToCanonical())
+    return false;
+
+  return true;
 }
 
 // -------------------------------------------------------------------------- ;
@@ -499,23 +505,29 @@ bool Huffman::BitUnStuffCodes(const Byte** ppByte, int i0, int i1)
 }
 
 // -------------------------------------------------------------------------- ;
+
+struct MyLargerThanOp
+{
+  inline bool operator() (const pair<int, int>& p0, const pair<int, int>& p1)  { return p0.first > p1.first; }
+};
+
+// -------------------------------------------------------------------------- ;
+
 bool Huffman::ConvertCodesToCanonical()
 {
   // from the non canonical code book, create an array to be sorted in descending order:
   //   codeLength * tableSize - index
 
   int tableSize = (int)m_codeTable.size();
-  vector<Quant> sortVec(tableSize);
-  memset(&sortVec[0], 0, tableSize * sizeof(Quant));
+  vector<pair<int, int> > sortVec(tableSize);
+  memset(&sortVec[0], 0, tableSize * sizeof(pair<int, int>));
 
   for (int i = 0; i < tableSize; i++)
-      if (m_codeTable[i].first > 0) {
-	  sortVec[i].first = m_codeTable[i].first;
-	  sortVec[i].second = i;
-      }
+    if (m_codeTable[i].first > 0)
+      sortVec[i] = pair<int, int>(m_codeTable[i].first * tableSize - i, i);
 
   // sort descending
-  sort(sortVec.begin(), sortVec.end());
+  std::sort(sortVec.begin(), sortVec.end(), MyLargerThanOp());
 
   // create canonical codes and assign to orig code table
   unsigned int codeCanonical = 0;
@@ -524,7 +536,7 @@ bool Huffman::ConvertCodesToCanonical()
   int i = 0;
   while (i < tableSize && sortVec[i].first > 0)
   {
-    index = sortVec[i++].second;
+    int index = sortVec[i++].second;
     short delta = codeLen - m_codeTable[index].first;
     codeCanonical >>= delta;
     codeLen -= delta;
