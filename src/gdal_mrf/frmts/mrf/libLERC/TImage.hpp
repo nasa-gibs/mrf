@@ -1,21 +1,28 @@
 /*
 Copyright 2015 Esri
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
 http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
 A local copy of the license and additional notices are located with the
 source distribution at:
+
 http://github.com/Esri/lerc/
+
 Contributors:  Thomas Maurer
 */
 
-#pragma once
+#ifndef TIMAGE_HPP
+#define TIMAGE_HPP
 
 // ---- includes ------------------------------------------------------------ ;
 
@@ -24,10 +31,7 @@ Contributors:  Thomas Maurer
 #include <cstdlib>
 #include "Image.h"
 
-NAMESPACE_MRF_START
-// -------------------------------------------------------------------------- ;
-// -------------------------------------------------------------------------- ;
-// ---- related classes ----------------------------------------------------- ;
+NAMESPACE_LERC_START
 
 class CntZ
 {
@@ -37,12 +41,6 @@ public:
   bool operator != (const CntZ& cz) const    { return cnt != cz.cnt || z != cz.z; }
   void operator += (const CntZ& cz)          { cnt += cz.cnt;  z += cz.z; }
 };
-
-// -------------------------------------------------------------------------- ;
-
-/**	Template Image
- *	
- */
 
 template< class Element >
 class TImage : public Image
@@ -57,17 +55,17 @@ public:
   /// assignment
   TImage& operator=(const TImage& tImg);
 
-  bool resize(long width, long height);
+  bool resize(int width, int height);
   virtual void clear();
 
   /// get data
-  Element getPixel(long row, long col) const;
-  const Element& operator() (long row, long col) const;
+  Element getPixel(int row, int col) const;
+  const Element& operator() (int row, int col) const;
   const Element* getData() const;
 
   /// set data
-  void setPixel(long row, long col, Element element);
-  Element& operator() (long row, long col);
+  void setPixel(int row, int col, Element element);
+  Element& operator() (int row, int col);
   Element* getData();
 
   /// compare
@@ -82,14 +80,14 @@ protected:
 // -------------------------------------------------------------------------- ;
 
 template< class Element >
-inline Element TImage< Element >::getPixel(long i, long j) const
+inline Element TImage< Element >::getPixel(int i, int j) const
 {
   assert(isInside(i, j));
   return data_[i * width_ + j];
 }
 
 template< class Element >
-inline const Element& TImage< Element >::operator () (long i, long j) const
+inline const Element& TImage< Element >::operator () (int i, int j) const
 {
   assert(isInside(i, j));
   return data_[i * width_ + j];
@@ -102,14 +100,14 @@ inline const Element* TImage< Element >::getData() const
 }
 
 template< class Element >
-inline void TImage< Element >::setPixel(long i, long j, Element element)
+inline void TImage< Element >::setPixel(int i, int j, Element element)
 {
   assert(isInside(i, j));
   data_[i * width_ + j] = element;
 }
 
 template< class Element >
-inline Element& TImage< Element >::operator () (long i, long j)
+inline Element& TImage< Element >::operator () (int i, int j)
 {
   assert(isInside(i, j));
   return data_[i * width_ + j];
@@ -124,7 +122,7 @@ inline Element* TImage< Element >::getData()
 // -------------------------------------------------------------------------- ;
 
 template< class Element >
-bool TImage< Element >::resize(long width, long height)
+bool TImage< Element >::resize(int width, int height)
 {
   if (width <= 0 || height <= 0)
     return false;
@@ -188,7 +186,7 @@ bool TImage< Element >::operator == (const Image& img) const
 
   const Element* ptr0 = getData();
   const Element* ptr1 = ((const TImage&)img).getData();
-  long cnt = getSize();
+  int cnt = getSize();
   while (cnt--)
     if (*ptr0++ != *ptr1++)
       return false;
@@ -196,5 +194,5 @@ bool TImage< Element >::operator == (const Image& img) const
   return true;
 }
 
-NAMESPACE_MRF_END
-
+NAMESPACE_LERC_END
+#endif

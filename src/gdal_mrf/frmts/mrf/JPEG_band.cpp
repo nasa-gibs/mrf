@@ -52,24 +52,15 @@ CPL_C_END
 
 NAMESPACE_MRF_START
 
-/**
-*\Brief Helper class for jpeg error management
-*/
+typedef struct MRFJPEGErrorStruct
+{
+    jmp_buf     setjmpBuffer;
 
-#ifdef _MSC_VER
-#pragma warning( push )
-#pragma warning( disable : 4324 ) /* warning C4324: 'GDAL_MRF::ErrorMgr' : structure was padded due to __declspec(align()) at line where jmp_buf setjmpBuffer is defined */
-#endif
-
-struct ErrorMgr : public jpeg_error_mgr {
-    inline ErrorMgr();
-    int signaled() { return setjmp(setjmpBuffer); };
-    jmp_buf setjmpBuffer;
-};
-
-#ifdef _MSC_VER
-#pragma warning( pop )
-#endif
+    MRFJPEGErrorStruct()
+    {
+        memset(&setjmpBuffer, 0, sizeof(setjmpBuffer));
+    }
+} MRFJPEGErrorStruct;
 
 /**
 *\brief Called when jpeg wants to report a warning
@@ -81,47 +72,44 @@ struct ErrorMgr : public jpeg_error_mgr {
 
 static void emitMessage(j_common_ptr cinfo, int msgLevel)
 {
-    jpeg_error_mgr* err = cinfo->err;
     if (msgLevel > 0) return; // No trace msgs
     // There can be many warnings, just print the first one
-    if (err->num_warnings++ >1) return;
+    if (cinfo->err->num_warnings++ >1) return;
     char buffer[JMSG_LENGTH_MAX];
-    err->format_message(cinfo, buffer);
+    cinfo->err->format_message(cinfo, buffer);
     CPLError(CE_Failure, CPLE_AppDefined, "%s", buffer);
 }
 
 static void errorExit(j_common_ptr cinfo)
 {
-    ErrorMgr* err = (ErrorMgr*)cinfo->err;
+    MRFJPEGErrorStruct* psErrorStruct = (MRFJPEGErrorStruct* ) cinfo->client_data;
     // format the warning message
     char buffer[JMSG_LENGTH_MAX];
 
-    err->format_message(cinfo, buffer);
+    cinfo->err->format_message(cinfo, buffer);
     CPLError(CE_Failure, CPLE_AppDefined, "%s", buffer);
     // return control to the setjmp point
-    longjmp(err->setjmpBuffer, 1);
+    longjmp(psErrorStruct->setjmpBuffer, 1);
 }
 
-/**
-*\bried set up the normal JPEG error routines, then override error_exit
-*/
-ErrorMgr::ErrorMgr()
-{
-    memset(&setjmpBuffer, 0, sizeof(setjmpBuffer));
-    jpeg_std_error(this);
-    error_exit = errorExit;
-    emit_message = emitMessage;
-}
 
 /**
 *\Brief Do nothing stub function for JPEG library, called
 */
-static void stub_source_dec(j_decompress_ptr /*cinfo*/) {};
+static void stub_source_dec(j_decompress_ptr /*cinfo*/) {}
 
 /**
-*\Brief: Do nothing stub function for JPEG library, called?
+*\Brief: This function is supposed to do refilling of the input buffer,
+* but as we provided everything at the beginning, if it is called, then
+* we have an error.
 */
-static boolean fill_input_buffer_dec(j_decompress_ptr /*cinfo*/) { return TRUE; };
+static boolean fill_input_buffer_dec(j_decompress_ptr cinfo)
+{
+    if (0 != cinfo->src->bytes_in_buffer)
+	return TRUE;
+    CPLError(CE_Failure, CPLE_AppDefined, "Invalid JPEG stream");
+    return FALSE;
+}
 
 /**
 *\Brief: Do nothing stub function for JPEG library, not called
@@ -154,7 +142,8 @@ CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     // The cinfo should stay open and reside in the DS, since it can be left initialized
     // It saves some time because it has the tables initialized
     struct jpeg_compress_struct cinfo;
-    ErrorMgr jerr;
+    MRFJPEGErrorStruct sErrorStruct;
+    struct jpeg_error_mgr sJErr;
 
     jpeg_destination_mgr jmgr;
     jmgr.next_output_byte = (JOCTET *)dst.buffer;
@@ -164,8 +153,10 @@ CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     jmgr.term_destination = init_or_terminate_destination;
 
     // Look at the source of this, some interesting tidbits
-    cinfo.err = &jerr;
-    cinfo.client_data = NULL;
+    cinfo.err = jpeg_std_error( &sJErr );
+    sJErr.error_exit = errorExit;
+    sJErr.emit_message = emitMessage;
+    cinfo.client_data = (void *) &(sErrorStruct);
     jpeg_create_compress(&cinfo);
     cinfo.dest = &jmgr;
 
@@ -214,7 +205,7 @@ CPLErr JPEG_Band::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     for (int i = 0; i < img.pagesize.y; i++)
 	rowp[i] = (JSAMPROW)(src.buffer + i*linesize);
 
-    if (jerr.signaled()) {
+    if (setjmp(sErrorStruct.setjmpBuffer)) {
 	CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG compression error");
 	jpeg_destroy_compress(&cinfo);
 	CPLFree(rowp);
@@ -251,13 +242,18 @@ CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     int nbands = img.pagesize.c;
     // Locals, clean up after themselves
     jpeg_decompress_struct cinfo;
-    ErrorMgr jerr;
-    
+    MRFJPEGErrorStruct sErrorStruct;
+    struct jpeg_error_mgr sJErr;
+
     memset(&cinfo, 0, sizeof(cinfo));
 
     struct jpeg_source_mgr src;
 
-    cinfo.err=&jerr;
+    cinfo.err = jpeg_std_error( &sJErr );
+    sJErr.error_exit = errorExit;
+    sJErr.emit_message = emitMessage;
+    cinfo.client_data = (void *) &(sErrorStruct);
+
     src.next_input_byte = (JOCTET *)isrc.buffer;
     src.bytes_in_buffer = isrc.size;
     src.term_source = src.init_source = stub_source_dec;
@@ -265,11 +261,14 @@ CPLErr JPEG_Band::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     src.fill_input_buffer = fill_input_buffer_dec;
     src.resync_to_restart = jpeg_resync_to_restart;
 
-    if (jerr.signaled()) {
+    jpeg_create_decompress(&cinfo);
+
+    if (setjmp(sErrorStruct.setjmpBuffer)) {
         CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error reading JPEG page");
+        jpeg_destroy_decompress(&cinfo);
         return CE_Failure;
     }
-    jpeg_create_decompress(&cinfo);
+
     cinfo.src = &src;
     jpeg_read_header(&cinfo, TRUE);
     // Use float, it is actually faster than the ISLOW method by a tiny bit

@@ -92,14 +92,22 @@ GDALMRFDataset::GDALMRFDataset()
     ifp.acc = GF_Read;
 }
 
-void GDALMRFDataset::SetPBuffer(unsigned int sz)
+bool GDALMRFDataset::SetPBuffer(unsigned int sz)
 {
     if (sz == 0) {
 	CPLFree(pbuffer);
 	pbuffer = NULL;
     }
-    pbuffer = CPLRealloc(pbuffer, sz);
+    void* pbufferNew = VSIRealloc(pbuffer, sz);
+    if( pbufferNew == NULL )
+    {
+        CPLError(CE_Failure, CPLE_OutOfMemory, "Cannot allocate %u bytes",
+                 sz);
+        return false;
+    }
+    pbuffer = pbufferNew;
     pbsize = (pbuffer == NULL) ? 0 : sz;
+    return true;
 }
 
 GDALMRFDataset::~GDALMRFDataset()
@@ -818,7 +826,7 @@ start_idx = end_idx;
     // Data Type, use GDAL Names
     image.dt = GDALGetDataTypeByName(
 	CPLGetXMLValue(defimage, "DataType", GDALGetDataTypeName(image.dt)));
-    if (image.dt == GDT_Unknown) {
+    if (image.dt == GDT_Unknown || GDALGetDataTypeSize(image.dt) == 0 ) {
 	CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Image has wrong type");
 	return CE_Failure;
     }
@@ -839,7 +847,16 @@ start_idx = end_idx;
     }
 
     // Calculate the page size in bytes
-    image.pageSizeBytes = GDALGetDataTypeSize(image.dt) / 8 *
+    if( image.pagesize.z <= 0 ||
+        image.pagesize.x > INT_MAX / image.pagesize.y ||
+        image.pagesize.x * image.pagesize.y > INT_MAX / image.pagesize.z ||
+        image.pagesize.x * image.pagesize.y * image.pagesize.z > INT_MAX / image.pagesize.c ||
+        image.pagesize.x * image.pagesize.y * image.pagesize.z* image.pagesize.c  > INT_MAX / (GDALGetDataTypeSize(image.dt) / 8) )
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF page size too big");
+        return CE_Failure;
+    }
+    image.pageSizeBytes = (GDALGetDataTypeSize(image.dt) / 8) *
 	image.pagesize.x * image.pagesize.y * image.pagesize.z * image.pagesize.c;
 
     // Calculate the page count, including the total for the level
@@ -1205,6 +1222,11 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
 	// Capture the zslice in pagesize.l
 	current.pagesize.l = zslice; 
 	// Adjust offset for base image
+        if( full.size.z <= 0 )
+        {
+            CPLError(CE_Failure, CPLE_AppDefined, "GDAL MRF: Invalid Raster.z value");
+            return CE_Failure;
+        }
 	current.idxoffset += sizeof(ILIdx) * current.pagecount.l / full.size.z * zslice; 
     }
 
@@ -1311,8 +1333,10 @@ CPLErr GDALMRFDataset::Initialize(CPLXMLNode *config)
     // If not set by the bands, get a pageSizeBytes buffer
     if (GetPBufferSize() == 0)
     {
-        /* Add some arbitrary margin (needed for PNG with very small block sizes) */
-	SetPBuffer(current.pageSizeBytes + 100);
+        if( !SetPBuffer(current.pageSizeBytes) )
+        {
+            return CE_Failure;
+        }
     }
 
     if (hasVersions) { // It has versions, but how many?
@@ -1660,7 +1684,13 @@ GDALMRFDataset::Create(const char * pszName,
 
     // If not set by the band, get a pageSizeBytes buffer
     if (poDS->GetPBufferSize() == 0)
-	poDS->SetPBuffer(poDS->current.pageSizeBytes);
+    {
+        if( !poDS->SetPBuffer(poDS->current.pageSizeBytes) )
+        {
+            delete poDS;
+            return NULL;
+        }
+    }
 
     // Tell PAM what our real file name is, to help it find the aux.xml
     poDS->SetPhysicalFilename(poDS->GetFname());
@@ -1682,9 +1712,9 @@ void GDALMRFDataset::Crystalize()
 
     CPLXMLNode *config = BuildConfig();
     WriteConfig(config);
+    CPLDestroyXMLNode(config);
     if (!IdxFP() || !DataFP())
 	throw CPLString().Printf("MRF: Can't create file %s", strerror(errno));
-    CPLDestroyXMLNode(config);
 
     bCrystalized = TRUE;
 }
