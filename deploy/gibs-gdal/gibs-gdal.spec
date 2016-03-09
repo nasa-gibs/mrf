@@ -45,7 +45,7 @@ Obsoletes:	gdal-python < 1.11
 %description
 The GDAL library provides support to handle multiple GIS file formats.
 
-This build includes the MRF plug-in for GIBS.
+This build includes the MRF driver for GIBS.
 
 
 %package devel
@@ -55,18 +55,6 @@ Requires:	%{name} = %{gdal_version}-%{gdal_release}
 
 %description devel
 Development libraries for the GDAL library
-
-
-%package plugin-mrf
-Summary:	Plugin for the MRF raster file format
-Group:		Development/Libraries
-Requires:	%{name} = %{gdal_version}-%{gdal_release}
-Version:	%{mrf_version}
-Release:	%{mrf_release}
-
-%description plugin-mrf
-Plugin for the MRF raster file format
-
 
 %prep
 %setup -q
@@ -91,9 +79,6 @@ rm -f %{buildroot}/%{_bindir}/*.dox
 
 # gdal doesn't respect the lib64 directory
 install -m 755 -d %{buildroot}/usr/lib/gdalplugins
-install -m 755 build/gdal/frmts/mrf/gdal_mrf.so.1 \
-        %{buildroot}/usr/lib/gdalplugins
-ln -s gdal_mrf.so.1 %{buildroot}/usr/lib/gdalplugins/gdal_mrf.so
 
 # Remove SWIG samples
 rm -rf swig/python/samples
@@ -131,11 +116,6 @@ rm -rf %{buildroot}
 %{_libdir}/*.la
 %{_libdir}/*.so
 
-%files plugin-mrf
-%defattr(-,root,root,-)
-%{_bindir}/mrf_insert
-/usr/lib/gdalplugins/*
-
 %post 
 cd %{_datadir}/numpy/
 python setup.py build
@@ -147,7 +127,7 @@ python setup.py install
 
 %changelog
 * Tue Mar 8 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.2-3
-- Added numpy 
+- Added numpy and removed plugin-mrf package 
 
 * Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.2-2
 - Remove PostgreSQL dependency 
