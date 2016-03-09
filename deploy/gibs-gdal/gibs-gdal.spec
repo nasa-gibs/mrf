@@ -1,6 +1,6 @@
 %global gdal_version 1.11.2
-%global gdal_release 2%{?dist}
-%global mrf_version 0.9.0
+%global gdal_release 3%{?dist}
+%global mrf_version 0.9.1
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -13,9 +13,10 @@ License:	MIT
 URL:		http://www.gdal.org/
 Source0:	gibs-gdal-%{gdal_version}.tar.bz2
 Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar.gz
+Source2:	https://pypi.python.org/packages/source/n/numpy/numpy-1.10.4.tar.gz
 
 BuildRequires:	libtool pkgconfig
-BuildRequires:	python-devel numpy xerces-c-devel
+BuildRequires:	python-devel xerces-c-devel
 BuildRequires:	libpng-devel libungif-devel
 BuildRequires:	libjpeg-devel
 BuildRequires:	libtiff-devel
@@ -34,6 +35,7 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
 Requires:	proj-devel
+Conflicts:  numpy < 1.10.4
 
 Provides:	gdal = %{gdal_version}-%{gdal_release}
 Obsoletes:	gdal < 1.11
@@ -70,7 +72,7 @@ Plugin for the MRF raster file format
 %setup -q
 mkdir upstream
 cp %{SOURCE1} upstream
-
+cp %{SOURCE2} upstream
 
 %build
 make gdal PREFIX=/usr
@@ -119,6 +121,7 @@ rm -rf %{buildroot}
 %{python_sitearch}/osr*
 %{python_sitearch}/osgeo
 %dir /usr/lib/gdalplugins
+%{_datadir}/numpy
 
 %files devel
 %defattr(-,root,root,-)
@@ -133,13 +136,20 @@ rm -rf %{buildroot}
 %{_bindir}/mrf_insert
 /usr/lib/gdalplugins/*
 
+%post 
+cd %{_datadir}/numpy/
+python setup.py build
+python setup.py install
+/sbin/ldconfig
 
-%post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
 
 %changelog
-* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.1-2
+* Tue Mar 8 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.2-3
+- Added numpy 
+
+* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.2-2
 - Remove PostgreSQL dependency 
 
 * Tue Oct 14 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.1-1
