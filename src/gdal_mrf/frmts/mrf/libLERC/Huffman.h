@@ -58,7 +58,7 @@ public:
   bool ReadCodeTable(const Byte** ppByte);
 
   bool BuildTreeFromCodes(int& numBitsLUT);
-  bool DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int numBitsLUT, int& value) const;
+  bool DecodeOneValue(const unsigned int** srcPtr, int& bitPos, int numBitsLUT, int& value) const;
   void Clear();
 
 private:
