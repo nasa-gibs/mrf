@@ -35,6 +35,9 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
 Requires:	proj-devel
+Requires:	gcc-c++
+Requires:	python-devel
+Requires:	python-pycxx-devel
 Conflicts:  numpy < 1.10.4
 
 Provides:	gdal = %{gdal_version}-%{gdal_release}
