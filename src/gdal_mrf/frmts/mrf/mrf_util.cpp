@@ -57,12 +57,13 @@ CPL_C_END
 
 NAMESPACE_MRF_START
 
-static const char * const ILC_N[]={ "PNG", "PPNG", "JPEG", "NONE", "DEFLATE", "TIF", 
+// These have to be positionally in sync with the enums in marfa.h
+static const char * const ILC_N[] = { "PNG", "PPNG", "JPEG", "JPNG", "NONE", "DEFLATE", "TIF",
 #if defined(LERC)
 	"LERC", 
 #endif
 	"Unknown" };
-static const char * const ILC_E[]={ ".ppg", ".ppg", ".pjg", ".til", ".pzp", ".ptf", 
+static const char * const ILC_E[]={ ".ppg", ".ppg", ".pjg", ".pjp", ".til", ".pzp", ".ptf", 
 #if defined(LERC)
 	".lrc" ,
 #endif
@@ -360,14 +361,15 @@ GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *pDS, const ILImage &image, i
     switch(pDS->current.comp)
     {
     case IL_PPNG: // Uses the PNG code, just has a palette in each PNG
-    case IL_PNG:  bnd = new PNG_Band(pDS,image,b,level);  break;
-    case IL_JPEG: bnd = new JPEG_Band(pDS,image,b,level); break;
-    case IL_NONE: bnd = new Raw_Band(pDS,image,b,level);  break;
+    case IL_PNG:  bnd = new PNG_Band(pDS, image, b, level);  break;
+    case IL_JPEG: bnd = new JPEG_Band(pDS, image, b, level); break;
+    case IL_JPNG: bnd = new JPNG_Band(pDS, image, b, level); break;
+    case IL_NONE: bnd = new Raw_Band(pDS, image, b, level);  break;
     // ZLIB is a just raw, deflated band
-    case IL_ZLIB: bnd = new Raw_Band(pDS,image,b,level);  bnd->SetDeflate(1); break;
-    case IL_TIF:  bnd = new TIF_Band(pDS,image,b,level);  break;
+    case IL_ZLIB: bnd = new Raw_Band(pDS, image, b, level);  bnd->SetDeflate(1); break;
+    case IL_TIF:  bnd = new TIF_Band(pDS, image, b, level);  break;
 #if defined(LERC)
-    case IL_LERC: bnd = new LERC_Band(pDS,image,b,level); break;
+    case IL_LERC: bnd = new LERC_Band(pDS, image, b, level); break;
 #endif
     default:
 	return NULL; 

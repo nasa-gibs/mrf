@@ -340,7 +340,6 @@ JPEG_Band::JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level
 GDALMRFRasterBand(pDS, image, b, int(level)), sameres(FALSE), rgb(FALSE), optimize(false)
 {
     int nbands = image.pagesize.c;
-    //  TODO: Add 12bit JPEG support
     // Check behavior on signed 16bit.  Does the libjpeg sign extend?
 #if defined(LIBJPEG_12_H)
     if (GDT_Byte != image.dt && GDT_UInt16 != image.dt) {

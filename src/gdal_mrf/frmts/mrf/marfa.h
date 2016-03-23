@@ -94,7 +94,7 @@ NAMESPACE_MRF_START
 // These are a pain to maintain in sync.  They should be replaced with 
 // C++11 uniform initializers.  The externs reside in util.cpp
 enum ILCompression {
-    IL_PNG = 0, IL_PPNG, IL_JPEG, IL_NONE, IL_ZLIB, IL_TIF,
+    IL_PNG = 0, IL_PPNG, IL_JPEG, IL_NONE, IL_ZLIB, IL_TIF, IL_JPNG,
 #if defined(LERC)
     IL_LERC,
 #endif
@@ -599,6 +599,7 @@ protected:
 
     CPLErr CompressPNG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressPNG(buf_mgr &dst, buf_mgr &src);
+
     CPLErr ResetPalette();
     void *PNGColors;
     void *PNGAlpha;
@@ -627,6 +628,20 @@ protected:
     bool sameres;
     bool rgb;
     bool optimize;
+};
+
+// A 2 or 4 band, with JPEG and/or PNG page encoding, optimized for size
+class JPNG_Band : public GDALMRFRasterBand {
+    friend class GDALMRFDataset;
+public:
+    JPNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
+    virtual ~JPNG_Band();
+protected:
+    virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
+
+    CPLErr CompressJPNG(buf_mgr &dst, buf_mgr &src);
+    CPLErr DecompressJPNG(buf_mgr &dst, buf_mgr &src);
 };
 
 class Raw_Band : public GDALMRFRasterBand {
