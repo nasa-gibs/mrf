@@ -37,7 +37,7 @@ NAMESPACE_LERC_START
 class Huffman
 {
 public:
-  Huffman() : m_maxHistoSize(1 << 15), m_maxNumBitsLUT(12), m_root(NULL) {};
+  Huffman() : m_maxHistoSize(1 << 15), m_maxNumBitsLUT(12), m_numBitsToSkipInTree(0), m_root(NULL) {};
   ~Huffman() { Clear(); };
 
   // Limitation: We limit the max Huffman code length to 32 bit. If this happens, the function ComputeCodes() 
@@ -58,7 +58,7 @@ public:
   bool ReadCodeTable(const Byte** ppByte);
 
   bool BuildTreeFromCodes(int& numBitsLUT);
-  bool DecodeOneValue(const unsigned int** ppSrc, int& bitPos, int numBitsLUT, int& value) const;
+  bool DecodeOneValue(const unsigned int** srcPtr, int& bitPos, int numBitsLUT, int& value) const;
   void Clear();
 
 private:
