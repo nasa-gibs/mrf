@@ -58,7 +58,7 @@ GDALMRFRasterBand(pDS, image, b, level)
 	return;
     }
     if (image.pagesize.c != 4 && image.pagesize.c != 2) {
-	CPLError(CE_Failure, CPLE_NotSupported, "MRF PNG can only handle up to 4 bands per page");
+	CPLError(CE_Failure, CPLE_NotSupported, "MRF JPNG can only handle 2 or 4 bands per page");
 	return;
     }
 

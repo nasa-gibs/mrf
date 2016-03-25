@@ -606,14 +606,13 @@ protected:
     int PalSize, TransSize;
 };
 
-class JPEG_Band : public GDALMRFRasterBand {
-    friend class GDALMRFDataset;
+/* 
+ * The JPEG Codec can be used outside of the JPEG_Band
+*/
+
+class JPEG_Codec {
 public:
-    JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
-    virtual ~JPEG_Band() {};
-protected:
-    virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
-    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
+    JPEG_Codec(const ILImage &image) : img(image), sameres(FALSE), rgb(FALSE), optimize(false) {};
 
     CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &src);
@@ -624,10 +623,25 @@ protected:
     CPLErr DecompressJPEG12(buf_mgr &dst, buf_mgr &src);
 #endif
 
-    // Stored format flags, significant only for 3 band data
+    const ILImage &img;
+
+    // JPEG specific flags
     bool sameres;
     bool rgb;
     bool optimize;
+};
+
+class JPEG_Band : public GDALMRFRasterBand {
+    friend class GDALMRFDataset;
+public:
+    JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
+    virtual ~JPEG_Band() {};
+
+protected:
+    virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src);
+    virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src);
+
+    JPEG_Codec codec;
 };
 
 // A 2 or 4 band, with JPEG and/or PNG page encoding, optimized for size
