@@ -33,6 +33,40 @@ CPL_C_END
 
 NAMESPACE_MRF_START
 
+// Are all pixels in the tile opaque?
+static bool opaque(const buf_mgr &src, const ILImage &img) {
+    int stride = img.pagesize.c;
+    char *s = src.buffer + img.pagesize.c - 1;
+    char *stop = src.buffer + img.pageSizeBytes;
+    while (s < stop && 255 == static_cast<unsigned char>(*s))
+        s += stride;
+    return (s >= stop);
+}
+
+// Strip the alpha from an RGBA buffer
+static void RGBA2RGB(const buf_mgr &src, buf_mgr &dst) {
+    const char *start = src.buffer;
+    const char *stop = src.buffer + src.size;
+    char *target = dst.buffer;
+    while (start < stop) {
+        *target++ = *start++;
+        *target++ = *start++;
+        *target++ = *start++;
+        start++; // Skip the alpha
+    }
+}
+
+// Strip the alpha from an Luma Alpha buffer
+static void LA2L(const buf_mgr &src, buf_mgr &dst) {
+    const char *start = src.buffer;
+    const char *stop = src.buffer + src.size;
+    char *target = dst.buffer;
+    while (start < stop) {
+        *target++ = *start++;
+        start++; // Skip the alpha
+    }
+}
+
 CPLErr JPNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 {
     return CE_Failure;
@@ -41,7 +75,38 @@ CPLErr JPNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 // The PNG internal palette is set on first band write
 CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 {
-    return CE_Failure;
+    ILImage image(img);
+    CPLErr retval = CE_None;
+
+    buf_mgr temp;
+    temp.size = img.pageSizeBytes; // No need for a larger buffer
+    temp.buffer = (char *)(CPLMalloc(temp.size));
+    if (temp.buffer == NULL) {
+        CPLError(CE_Failure, CPLE_OutOfMemory, "Allocating temporary JPNG buffer");
+        return CE_Failure;
+    }
+
+    try {
+        if (opaque(src, image)) { // If all pixels are opaque, compress as JPEG
+            RGBA2RGB(src, temp);
+            image.pagesize.c -= 1; //
+            JPEG_Codec codec(image);
+            codec.rgb = rgb;
+            codec.optimize = optimize;
+            codec.sameres = sameres;
+            retval = codec.CompressJPEG(dst, temp);
+        }
+        else {
+            PNG_Codec codec(image);
+            retval = codec.CompressPNG(dst, src);
+        }
+    }
+    catch (CPLErr err) {
+        retval = err;
+    }
+
+    CPLFree(temp.buffer);
+    return retval;
 }
 
 /**
@@ -50,19 +115,30 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 */
 
 JPNG_Band::JPNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-GDALMRFRasterBand(pDS, image, b, level)
+GDALMRFRasterBand(pDS, image, b, level), 
+sameres(FALSE), rgb(FALSE), optimize(false)
 
 {   // Check error conditions
     if (image.dt != GDT_Byte) {
 	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPNG");
 	return;
     }
-    if (image.pagesize.c != 4 && image.pagesize.c != 2) {
-	CPLError(CE_Failure, CPLE_NotSupported, "MRF JPNG can only handle 2 or 4 bands per page");
+    if (image.order != IL_Interleaved || image.pagesize.c != 4 && image.pagesize.c != 2) {
+	CPLError(CE_Failure, CPLE_NotSupported, "MRF JPNG can only handle 2 or 4 interleaved bands");
 	return;
     }
 
-    // PNGs can be larger than the source, especially for small page size
+    if (img.pagesize.c == 4) { // RGBA can have storage flavors
+        CPLString const &pm = pDS->GetPhotometricInterpretation();
+        if (pm == "RGB" || pm == "MULTISPECTRAL") { // Explicit RGB or MS
+            rgb = TRUE;
+            sameres = TRUE;
+        }
+        if (pm == "YCC")
+            sameres = TRUE;
+    }
+
+    // PNGs and JPGs can be larger than the source, especially for small page size
     poDS->SetPBufferSize(image.pageSizeBytes + 100);
 }
 

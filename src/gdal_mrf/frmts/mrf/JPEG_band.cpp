@@ -144,6 +144,7 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     struct jpeg_compress_struct cinfo;
     MRFJPEGErrorStruct sErrorStruct;
     struct jpeg_error_mgr sJErr;
+    ILSize sz = img.pagesize;
 
     jpeg_destination_mgr jmgr;
     jmgr.next_output_byte = (JOCTET *)dst.buffer;
@@ -161,9 +162,9 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     cinfo.dest = &jmgr;
 
     // The page specific info, size and color spaces
-    cinfo.image_width = img.pagesize.x;
-    cinfo.image_height = img.pagesize.y;
-    cinfo.input_components = img.pagesize.c;
+    cinfo.image_width = sz.x;
+    cinfo.image_height = sz.y;
+    cinfo.input_components = sz.c;
     switch (cinfo.input_components) {
     case 1:cinfo.in_color_space = JCS_GRAYSCALE; break;
     case 3:cinfo.in_color_space = JCS_RGB; break;  // Stored as YCbCr 4:2:0 by default
@@ -201,9 +202,9 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
         }
     }
 
-    int linesize = cinfo.image_width*cinfo.num_components*((cinfo.data_precision == 8) ? 1 : 2);
-    JSAMPROW *rowp = (JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*img.pagesize.y);
-    for (int i = 0; i < img.pagesize.y; i++)
+    int linesize = cinfo.image_width * cinfo.input_components * ((cinfo.data_precision == 8) ? 1 : 2);
+    JSAMPROW *rowp = (JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*sz.y);
+    for (int i = 0; i < sz.y; i++)
         rowp[i] = (JSAMPROW)(src.buffer + i*linesize);
 
     if (setjmp(sErrorStruct.setjmpBuffer)) {
@@ -214,7 +215,7 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     }
 
     jpeg_start_compress(&cinfo, TRUE);
-    jpeg_write_scanlines(&cinfo, rowp, img.pagesize.y);
+    jpeg_write_scanlines(&cinfo, rowp, sz.y);
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
 

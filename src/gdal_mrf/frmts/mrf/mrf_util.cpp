@@ -595,7 +595,7 @@ void GDALRegister_mrf(void)
         driver->SetMetadataItem(GDAL_DMD_CREATIONOPTIONLIST,
             "<CreationOptionList>"
             "   <Option name='COMPRESS' type='string-select' default='PNG' description='PPNG = Palette PNG; DEFLATE = zlib '>"
-            "	    <Value>JPEG</Value><Value>PNG</Value><Value>PPNG</Value>"
+            "	    <Value>JPEG</Value><Value>PNG</Value><Value>PPNG</Value><Value>JPNG</Value>"
             "	    <Value>TIF</Value><Value>DEFLATE</Value><Value>NONE</Value>"
 #if defined(LERC)
             "	    <Value>LERC</Value>"
