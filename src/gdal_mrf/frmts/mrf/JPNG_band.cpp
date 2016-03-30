@@ -35,7 +35,7 @@ NAMESPACE_MRF_START
 
 // Are all pixels in the tile opaque?
 static bool opaque(const buf_mgr &src, const ILImage &img) {
-    int stride = img.pagesize.c;
+int stride = img.pagesize.c;
     char *s = src.buffer + img.pagesize.c - 1;
     char *stop = src.buffer + img.pageSizeBytes;
     while (s < stop && 255 == static_cast<unsigned char>(*s))
@@ -44,10 +44,7 @@ static bool opaque(const buf_mgr &src, const ILImage &img) {
 }
 
 // Strip the alpha from an RGBA buffer
-static void RGBA2RGB(const buf_mgr &src, buf_mgr &dst) {
-    const char *start = src.buffer;
-    const char *stop = src.buffer + src.size;
-    char *target = dst.buffer;
+static void RGBA2RGB(const char *start, const char *stop, char *target) {
     while (start < stop) {
         *target++ = *start++;
         *target++ = *start++;
@@ -57,10 +54,7 @@ static void RGBA2RGB(const buf_mgr &src, buf_mgr &dst) {
 }
 
 // Strip the alpha from an Luma Alpha buffer
-static void LA2L(const buf_mgr &src, buf_mgr &dst) {
-    const char *start = src.buffer;
-    const char *stop = src.buffer + src.size;
-    char *target = dst.buffer;
+static void LA2L(const char *start, const char *stop, char *target) {
     while (start < stop) {
         *target++ = *start++;
         start++; // Skip the alpha
@@ -88,8 +82,12 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 
     try {
         if (opaque(src, image)) { // If all pixels are opaque, compress as JPEG
-            RGBA2RGB(src, temp);
-            image.pagesize.c -= 1; //
+            if (image.pagesize.c == 4)
+                RGBA2RGB(src.buffer, src.buffer + image.pageSizeBytes, dst.buffer);
+            else
+                LA2L(src.buffer, src.buffer + image.pageSizeBytes, dst.buffer);
+
+            image.pagesize.c -= 1; // RGB or Grayscale only for JPEG
             JPEG_Codec codec(image);
             codec.rgb = rgb;
             codec.optimize = optimize;
@@ -138,12 +136,13 @@ sameres(FALSE), rgb(FALSE), optimize(false)
             sameres = TRUE;
     }
 
+    optimize = GetOptlist().FetchBoolean("OPTIMIZE", FALSE) != FALSE;
+
     // PNGs and JPGs can be larger than the source, especially for small page size
     poDS->SetPBufferSize(image.pageSizeBytes + 100);
 }
 
 JPNG_Band::~JPNG_Band() {
 }
-
 
 NAMESPACE_MRF_END
