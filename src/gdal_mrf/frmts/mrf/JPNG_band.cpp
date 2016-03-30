@@ -83,9 +83,9 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
     try {
         if (opaque(src, image)) { // If all pixels are opaque, compress as JPEG
             if (image.pagesize.c == 4)
-                RGBA2RGB(src.buffer, src.buffer + image.pageSizeBytes, dst.buffer);
+                RGBA2RGB(src.buffer, src.buffer + src.size, temp.buffer);
             else
-                LA2L(src.buffer, src.buffer + image.pageSizeBytes, dst.buffer);
+                LA2L(src.buffer, src.buffer + src.size, temp.buffer);
 
             image.pagesize.c -= 1; // RGB or Grayscale only for JPEG
             JPEG_Codec codec(image);

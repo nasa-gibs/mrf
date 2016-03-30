@@ -1442,14 +1442,21 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     GDALRasterBand *poSrcBand1 = poSrcDS->GetRasterBand(1);
 
     GDALDataType dt = poSrcBand1->GetRasterDataType();
-    GDALMRFDataset *poDS = NULL;
-
     // Have our own options, to modify as we want
     char **options = CSLDuplicate(papszOptions);
 
     const char *pszValue = poSrcDS->GetMetadataItem("INTERLEAVE", "IMAGE_STRUCTURE");
     options = CSLAddIfMissing(options, "INTERLEAVE", pszValue ? pszValue : "PIXEL");
+    int xb, yb;
+    poSrcBand1->GetBlockSize(&xb, &yb);
 
+    // Keep input block size if it exists and not explicitly set
+    if (CSLFetchNameValue(options, "BLOCKSIZE") == NULL && xb != x && yb != y) {
+        options = CSLAddIfMissing(options, "BLOCKXSIZE", PrintDouble(xb, "%d").c_str());
+        options = CSLAddIfMissing(options, "BLOCKYSIZE", PrintDouble(yb, "%d").c_str());
+    }
+
+    GDALMRFDataset *poDS = NULL;
     try {
 	poDS = reinterpret_cast<GDALMRFDataset *>(
 	    Create(pszFilename, x, y, nBands, dt, options));
@@ -1487,8 +1494,8 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 		mBand->SetMetadata(meta);
 	}
 
-	// Geotags
-	double gt[6];
+        // Geotags
+        double gt[6];
 	if (CE_None == poSrcDS->GetGeoTransform(gt))
 	    poDS->SetGeoTransform(gt);
 
@@ -1499,11 +1506,6 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 	// Color palette if we only have one band
 	if (1 == nBands && GCI_PaletteIndex == poSrcBand1->GetColorInterpretation())
 	    poDS->SetColorTable(poSrcBand1->GetColorTable()->Clone());
-
-	// Copy input GCPs, PAM handles it
-	if (poSrcDS->GetGCPCount())
-	    poDS->SetGCPs(poSrcDS->GetGCPCount(), poSrcDS->GetGCPs(), poSrcDS->GetGCPProjection());
-
 
 	// Finally write the XML in the right file name
 	poDS->Crystalize();
@@ -1519,11 +1521,15 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
 
     char **meta = poSrcDS->GetMetadata();
     if (poDS && CSLCount(meta))
-	poDS->SetMetadata(meta);
+        poDS->SetMetadata(meta);
+
+    // Copy input GCPs, PAM handles it
+    if (poSrcDS->GetGCPCount())
+        poDS->SetGCPs(poSrcDS->GetGCPCount(), poSrcDS->GetGCPs(), poSrcDS->GetGCPProjection());
 
     meta = poSrcDS->GetMetadata("RPC");
     if (poDS && CSLCount(meta))
-	poDS->SetMetadata(meta, "RPC");
+        poDS->SetMetadata(meta, "RPC");
 
     // If copy is disabled, we're done, we just created an empty MRF
     if (!poDS || on(CSLFetchNameValue(papszOptions, "NOCOPY")))
@@ -1885,6 +1891,8 @@ CPLErr GDALMRFDataset::SetGeoTransform(double *gt)
 CPLErr GDALMRFDataset::GetGeoTransform(double *gt)
 {
     memcpy(gt, GeoTransform, 6 * sizeof(double));
+    if (GetMetadata("RPC") || GetGCPCount()) 
+        bGeoTransformValid = FALSE;
     if (!bGeoTransformValid) return CE_Failure;
     return CE_None;
 }

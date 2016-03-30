@@ -35,11 +35,10 @@
 
 
 /**
- *  $Id$
  *
- *  Functions used by the driver, should all have prototypes in the header file
+ *  Functions used by the driver, should have prototypes in the header file
  *
- *  Author: Lucian Plesea, Lucian.Plesea@jpl.nasa.gov
+ *  Author: Lucian Plesea
  */
 
 #include "marfa.h"
