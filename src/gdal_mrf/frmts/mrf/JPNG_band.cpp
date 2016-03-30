@@ -43,7 +43,7 @@ int stride = img.pagesize.c;
     return (s >= stop);
 }
 
-// Strip the alpha from an RGBA buffer
+// Strip the alpha from an RGBA buffer, safe to use in place
 static void RGBA2RGB(const char *start, const char *stop, char *target) {
     while (start < stop) {
         *target++ = *start++;
@@ -53,7 +53,18 @@ static void RGBA2RGB(const char *start, const char *stop, char *target) {
     }
 }
 
-// Strip the alpha from an Luma Alpha buffer
+// Add opaque alpha to an RGB buffer, safe to use in place
+// works backwards, from stop to start, the last pointer is the end of the source region
+static void RGB2RGBA(const char *start, char *stop, const char *source_end) {
+    while (start < stop) {
+        *--stop = 0xff;
+        *--stop = *--source_end;
+        *--stop = *--source_end;
+        *--stop = *--source_end;
+    }
+}
+
+// Strip the alpha from an Luma Alpha buffer, fafe to use in place
 static void LA2L(const char *start, const char *stop, char *target) {
     while (start < stop) {
         *target++ = *start++;
@@ -61,9 +72,56 @@ static void LA2L(const char *start, const char *stop, char *target) {
     }
 }
 
+// Add opaque alpha to a Luma buffer, safe to use in place
+// works backwards, from stop to start, the last pointer is the end of the source region
+static void L2LA(const char *start, char *stop, const char *source_end) {
+    while (start < stop) {
+        *--stop = 0xff;
+        *--stop = *--source_end;
+    }
+}
+
+static CPLErr initBuffer(buf_mgr &b)
+{
+    b.buffer = (char *)(CPLMalloc(b.size));
+    if (b.buffer != NULL)
+        return CE_None;
+    CPLError(CE_Failure, CPLE_OutOfMemory, "Allocating temporary JPNG buffer");
+    return CE_Failure;
+}
+
 CPLErr JPNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 {
-    return CE_Failure;
+    CPLErr retval = CE_None;
+    const static GUInt32 JPEG_SIG = 0xe0ffd8ff; // JPEG (JFIF) magic int
+//  const static GUInt32 PNG_SIG  = 0x474e5089;  // PNG magic int
+
+    ILImage image(img);
+    GUInt32 signature;
+    memcpy(&signature, src.buffer, sizeof(GUInt32));
+
+    if (signature == JPEG_SIG) {
+        image.pagesize.c -= 1;
+        JPEG_Codec codec(image);
+
+        // JPEG decoder expects the destination size to be accurate
+        buf_mgr temp = dst; // dst still owns the storage
+        temp.size = (image.pagesize.c == 3) ? dst.size / 4 * 3 : dst.size / 2;
+
+        retval = codec.DecompressJPEG(temp, src);
+        if (CE_None == retval) { // add opaque alpha, in place
+            if (image.pagesize.c == 3)
+                RGB2RGBA(dst.buffer, dst.buffer + dst.size, temp.buffer + temp.size);
+            else
+                L2LA(dst.buffer, dst.buffer + dst.size, temp.buffer + temp.size);
+        }
+    }
+    else {
+        CPLError(CE_Failure, CPLE_NotSupported, "JPNG functionality not yet implemented");
+        return CE_Failure; // Not implemented yet
+    }
+
+    return retval;
 }
 
 // The PNG internal palette is set on first band write
@@ -72,13 +130,10 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
     ILImage image(img);
     CPLErr retval = CE_None;
 
-    buf_mgr temp;
-    temp.size = img.pageSizeBytes; // No need for a larger buffer
-    temp.buffer = (char *)(CPLMalloc(temp.size));
-    if (temp.buffer == NULL) {
-        CPLError(CE_Failure, CPLE_OutOfMemory, "Allocating temporary JPNG buffer");
-        return CE_Failure;
-    }
+    buf_mgr temp = { NULL, img.pageSizeBytes };
+    retval = initBuffer(temp);
+    if (retval != CE_None)
+        return retval;
 
     try {
         if (opaque(src, image)) { // If all pixels are opaque, compress as JPEG
@@ -95,6 +150,9 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
             retval = codec.CompressJPEG(dst, temp);
         }
         else {
+            CPLError(CE_Failure, CPLE_NotSupported, "JPNG functionality not yet implemented");
+            return CE_Failure; // Not implemented yet
+
             PNG_Codec codec(image);
             retval = codec.CompressPNG(dst, src);
         }

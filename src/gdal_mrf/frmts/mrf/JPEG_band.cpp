@@ -296,13 +296,13 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     // warn and fail if output buffer is too small
     if (linesize*cinfo.image_height != dst.size) {
         CPLError(CE_Warning, CPLE_AppDefined, "MRF: read JPEG size is wrong");
-        if (linesize*cinfo.image_height>dst.size) {
+        if (linesize*cinfo.image_height > dst.size) {
             CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG decompress buffer overflow");
             jpeg_destroy_decompress(&cinfo);
             return CE_Failure;
         }
     }
-    // Decompress, two lines at a time
+    // Decompress, two lines at a time is what libjpeg does
     while (cinfo.output_scanline < cinfo.image_height) {
         char *rp[2];
         rp[0] = (char *)dst.buffer + linesize*cinfo.output_scanline;
