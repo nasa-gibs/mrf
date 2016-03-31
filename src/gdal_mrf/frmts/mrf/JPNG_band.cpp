@@ -108,8 +108,8 @@ static CPLErr initBuffer(buf_mgr &b)
 CPLErr JPNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 {
     CPLErr retval = CE_None;
-    const static GUInt32 JPEG_SIG = 0xe0ffd8ff; // JPEG (JFIF) magic int
-//  const static GUInt32 PNG_SIG  = 0x474e5089;  // PNG magic int
+    const static GUInt32 JPEG_SIG = 0xe0ffd8ff; // JPEG 4CC code
+    const static GUInt32 PNG_SIG  = 0x474e5089;  // PNG 4CC code
 
     ILImage image(img);
     GUInt32 signature;
@@ -131,9 +131,11 @@ CPLErr JPNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
                 L2LA(dst.buffer, dst.buffer + dst.size, temp.buffer + temp.size);
         }
     }
-    else {
-        CPLError(CE_Failure, CPLE_NotSupported, "JPNG functionality not yet implemented");
-        return CE_Failure; // Not implemented yet
+    else { // Should be PNG
+        assert(PNG_SIG == signature);
+        PNG_Codec codec(image);
+        // PNG codec expands to 4 bands
+        return codec.DecompressPNG(dst, src);
     }
 
     return retval;
