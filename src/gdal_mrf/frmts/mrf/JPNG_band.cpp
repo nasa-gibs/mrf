@@ -33,15 +33,30 @@ CPL_C_END
 
 NAMESPACE_MRF_START
 
-// Are all pixels in the tile opaque?
-static bool opaque(const buf_mgr &src, const ILImage &img) {
-int stride = img.pagesize.c;
+// Test that all alpha values are equal to N
+template<int N> bool AllAlpha(const buf_mgr &src, const ILImage &img) {
+    int stride = img.pagesize.c;
     char *s = src.buffer + img.pagesize.c - 1;
     char *stop = src.buffer + img.pageSizeBytes;
-    while (s < stop && 255 == static_cast<unsigned char>(*s))
+    while (s < stop && N == static_cast<unsigned char>(*s))
         s += stride;
     return (s >= stop);
 }
+
+// Fully opaque
+#define opaque AllAlpha<255>
+// Fully transparent
+#define transparent AllAlpha<0>
+
+// Are all pixels in the tile opaque?
+//static bool opaque(const buf_mgr &src, const ILImage &img) {
+//    int stride = img.pagesize.c;
+//    char *s = src.buffer + img.pagesize.c - 1;
+//    char *stop = src.buffer + img.pageSizeBytes;
+//    while (s < stop && 255 == static_cast<unsigned char>(*s))
+//        s += stride;
+//    return (s >= stop);
+//}
 
 // Strip the alpha from an RGBA buffer, safe to use in place
 static void RGBA2RGB(const char *start, const char *stop, char *target) {
@@ -149,12 +164,13 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
             codec.sameres = sameres;
             retval = codec.CompressJPEG(dst, temp);
         }
-        else {
-            CPLError(CE_Failure, CPLE_NotSupported, "JPNG functionality not yet implemented");
-            dst.size = 0; // Write it as empty
-            return CE_Warning; // Not implemented yet, but returning errors here seems to break other things
-
+        else if (transparent(src, image)) {
+            dst.size = 0; // Don't store fully transparent pages
+        }
+        else
+        {
             PNG_Codec codec(image);
+            codec.deflate_flags = deflate_flags;
             retval = codec.CompressPNG(dst, src);
         }
     }
