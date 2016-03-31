@@ -151,7 +151,8 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
         }
         else {
             CPLError(CE_Failure, CPLE_NotSupported, "JPNG functionality not yet implemented");
-            return CE_Failure; // Not implemented yet
+            dst.size = 0; // Write it as empty
+            return CE_Warning; // Not implemented yet, but returning errors here seems to break other things
 
             PNG_Codec codec(image);
             retval = codec.CompressPNG(dst, src);
@@ -172,14 +173,14 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 
 JPNG_Band::JPNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
 GDALMRFRasterBand(pDS, image, b, level), 
-sameres(FALSE), rgb(FALSE), optimize(false)
+rgb(FALSE), sameres(FALSE), optimize(false)
 
 {   // Check error conditions
     if (image.dt != GDT_Byte) {
 	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPNG");
 	return;
     }
-    if (image.order != IL_Interleaved || image.pagesize.c != 4 && image.pagesize.c != 2) {
+    if (image.order != IL_Interleaved || (image.pagesize.c != 4 && image.pagesize.c != 2)) {
 	CPLError(CE_Failure, CPLE_NotSupported, "MRF JPNG can only handle 2 or 4 interleaved bands");
 	return;
     }
