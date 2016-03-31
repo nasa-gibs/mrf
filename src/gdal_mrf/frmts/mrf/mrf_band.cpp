@@ -886,13 +886,14 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	int success;
 	double val = GetNoDataValue(&success);
 	if (!success) val = 0.0;
-	if (isAllVal(eDataType, (char *)pabyThisImage, img.pageSizeBytes / poDS->nBands, val))
+        if (isAllVal(eDataType, (char *)pabyThisImage, blockSizeBytes(), val))
 	    empties |= bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
 	// Just the right mix of templates and macros make this real tidy
 #define CpySO(T) cpy_stride_out<T> (((T *)tbuffer)+iBand, pabyThisImage,\
 		blockSizeBytes()/sizeof(T), cstride)
+
 
 	// Build the page in tbuffer
 	switch (GDALGetDataTypeSize(eDataType)/8)
@@ -921,6 +922,10 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	    poBlock->DropLock();
 	}
     }
+
+    // Should keep track of the individual band buffers and only mix them if this is not
+    // an empty page ( move the Copy with Stride Out from above below this test
+    // This way works fine, but it does work extra for empty pages
 
     if (GIntBig(empties) == AllBandMask()) {
 	CPLFree(tbuffer);
