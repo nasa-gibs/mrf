@@ -430,8 +430,8 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return FetchClonedBlock(xblk, yblk, buffer);
 
     GDALDataset *poSrcDS;
-    const GInt32 cstride = img.pagesize.c; // 1 if pixel interleaved
-    ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
+    const GInt32 cstride = img.pagesize.c; // 1 if band separate
+    ILSize req(xblk, yblk, 0, m_band / cstride, m_l);
     GUIntBig infooffset = IdxOffset(req, img);
 
     if ( NULL == (poSrcDS = poDS->GetSrcDS())) {
@@ -471,7 +471,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     if (clip)
 	FillBlock(ob);
 
-    // Use the dataset RasterIO to read all bands
+    // Use the dataset RasterIO to read one or all bands if interleaved
     CPLErr ret = poSrcDS->RasterIO(GF_Read, Xoff, Yoff, readszx, readszy,
 	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
 	eDataType, cstride, (1 == cstride)? &nBand: NULL,
@@ -497,10 +497,12 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return RB(xblk, yblk, filesrc, buffer);
     }
 
-    // Test to see if it need to be written, or just marked
+    // Test to see if it needs to be written, or just marked as checked
     int success;
     double val = GetNoDataValue(&success);
     if (!success) val = 0.0;
+
+    // TODO: test band by band if data is interleaved
     if (isAllVal(eDataType, ob, img.pageSizeBytes, val)) {
 	// Mark it empty and checked, ignore the possible write error
 	poDS->WriteTile((void *)1, infooffset, 0);
