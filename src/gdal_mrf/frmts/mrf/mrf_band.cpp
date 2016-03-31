@@ -99,14 +99,10 @@ template<typename T> inline int isAllVal(const T *b, size_t bytecount, double nd
     T val = (T)(ndv);
     size_t count = bytecount / sizeof(T);
     while (count--) {
-    	if (*b) {
-			if (*(b++)!=val) {
-				return FALSE;
-			}
-    	} else {
-    		return FALSE;
-    	}
-	}
+        if (*(b++) != val) {
+            return FALSE;
+        }
+    }
     return TRUE;
 }
 
@@ -434,8 +430,8 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return FetchClonedBlock(xblk, yblk, buffer);
 
     GDALDataset *poSrcDS;
-    const GInt32 cstride = img.pagesize.c; // 1 if pixel interleaved
-    ILSize req(xblk, yblk, 0, m_band/cstride, m_l);
+    const GInt32 cstride = img.pagesize.c; // 1 if band separate
+    ILSize req(xblk, yblk, 0, m_band / cstride, m_l);
     GUIntBig infooffset = IdxOffset(req, img);
 
     if ( NULL == (poSrcDS = poDS->GetSrcDS())) {
@@ -475,7 +471,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
     if (clip)
 	FillBlock(ob);
 
-    // Use the dataset RasterIO to read all bands
+    // Use the dataset RasterIO to read one or all bands if interleaved
     CPLErr ret = poSrcDS->RasterIO(GF_Read, Xoff, Yoff, readszx, readszy,
 	ob, pcount(readszx, int(scl)), pcount(readszy, int(scl)),
 	eDataType, cstride, (1 == cstride)? &nBand: NULL,
@@ -501,10 +497,12 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
 	return RB(xblk, yblk, filesrc, buffer);
     }
 
-    // Test to see if it need to be written, or just marked
+    // Test to see if it needs to be written, or just marked as checked
     int success;
     double val = GetNoDataValue(&success);
     if (!success) val = 0.0;
+
+    // TODO: test band by band if data is interleaved
     if (isAllVal(eDataType, ob, img.pageSizeBytes, val)) {
 	// Mark it empty and checked, ignore the possible write error
 	poDS->WriteTile((void *)1, infooffset, 0);
@@ -888,13 +886,14 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	int success;
 	double val = GetNoDataValue(&success);
 	if (!success) val = 0.0;
-	if (isAllVal(eDataType, buffer, img.pageSizeBytes, val))
+        if (isAllVal(eDataType, (char *)pabyThisImage, blockSizeBytes(), val))
 	    empties |= bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
 	// Just the right mix of templates and macros make this real tidy
 #define CpySO(T) cpy_stride_out<T> (((T *)tbuffer)+iBand, pabyThisImage,\
 		blockSizeBytes()/sizeof(T), cstride)
+
 
 	// Build the page in tbuffer
 	switch (GDALGetDataTypeSize(eDataType)/8)
@@ -924,6 +923,10 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	}
     }
 
+    // Should keep track of the individual band buffers and only mix them if this is not
+    // an empty page ( move the Copy with Stride Out from above below this test
+    // This way works fine, but it does work extra for empty pages
+
     if (GIntBig(empties) == AllBandMask()) {
 	CPLFree(tbuffer);
 	return poDS->WriteTile(NULL, infooffset, 0);
@@ -934,8 +937,6 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	"MRF: IWrite, band dirty mask is " CPL_FRMT_GIB " instead of " CPL_FRMT_GIB,
 	poDS->bdirty, AllBandMask());
 
-//    ppmWrite("test.ppm",(char *)tbuffer, ILSize(nBlockXSize,nBlockYSize,0,poDS->nBands));
-
     buf_mgr src;
     src.buffer = (char *)tbuffer;
     src.size = static_cast<size_t>(img.pageSizeBytes);
@@ -944,7 +945,15 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     char *outbuff = (char *)tbuffer + img.pageSizeBytes;
 
     buf_mgr dst = {outbuff, poDS->pbsize};
-    Compress(dst, src);
+    CPLErr ret;
+
+    ret = Compress(dst, src);
+    if (ret != CE_None) {
+        // Compress failed, write it as an empty tile
+        CPLFree(tbuffer);
+        poDS->WriteTile(NULL, infooffset, 0);
+        return CE_None; // Should report the error, but it triggers partial band attempts
+    }
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
@@ -956,11 +965,13 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 	    CPLFree(tbuffer);
+            poDS->WriteTile(NULL, infooffset, 0);
+            poDS->bdirty = 0;
 	    return CE_Failure;
 	}
     }
 
-    CPLErr ret = poDS->WriteTile(usebuff, infooffset, dst.size);
+    ret = poDS->WriteTile(usebuff, infooffset, dst.size);
     CPLFree(tbuffer);
 
     poDS->bdirty = 0;
