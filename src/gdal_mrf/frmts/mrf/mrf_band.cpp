@@ -99,14 +99,10 @@ template<typename T> inline int isAllVal(const T *b, size_t bytecount, double nd
     T val = (T)(ndv);
     size_t count = bytecount / sizeof(T);
     while (count--) {
-    	if (*b) {
-			if (*(b++)!=val) {
-				return FALSE;
-			}
-    	} else {
-    		return FALSE;
-    	}
-	}
+        if (*(b++) != val) {
+            return FALSE;
+        }
+    }
     return TRUE;
 }
 
@@ -888,7 +884,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	int success;
 	double val = GetNoDataValue(&success);
 	if (!success) val = 0.0;
-	if (isAllVal(eDataType, buffer, img.pageSizeBytes, val))
+	if (isAllVal(eDataType, (char *)pabyThisImage, img.pageSizeBytes / poDS->nBands, val))
 	    empties |= bandbit(iBand);
 
 	// Copy the data into the dataset buffer here
@@ -934,8 +930,6 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	"MRF: IWrite, band dirty mask is " CPL_FRMT_GIB " instead of " CPL_FRMT_GIB,
 	poDS->bdirty, AllBandMask());
 
-//    ppmWrite("test.ppm",(char *)tbuffer, ILSize(nBlockXSize,nBlockYSize,0,poDS->nBands));
-
     buf_mgr src;
     src.buffer = (char *)tbuffer;
     src.size = static_cast<size_t>(img.pageSizeBytes);
@@ -944,7 +938,15 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
     char *outbuff = (char *)tbuffer + img.pageSizeBytes;
 
     buf_mgr dst = {outbuff, poDS->pbsize};
-    Compress(dst, src);
+    CPLErr ret;
+
+    ret = Compress(dst, src);
+    if (ret != CE_None) {
+        // Compress failed, write it as an empty tile
+        CPLFree(tbuffer);
+        poDS->WriteTile(NULL, infooffset, 0);
+        return CE_None; // Should report the error, but it triggers partial band attempts
+    }
 
     // Where the output is, in case we deflate
     void *usebuff = outbuff;
@@ -956,11 +958,13 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 	if (!usebuff) {
 	    CPLError(CE_Failure,CPLE_AppDefined, "MRF: Deflate error");
 	    CPLFree(tbuffer);
+            poDS->WriteTile(NULL, infooffset, 0);
+            poDS->bdirty = 0;
 	    return CE_Failure;
 	}
     }
 
-    CPLErr ret = poDS->WriteTile(usebuff, infooffset, dst.size);
+    ret = poDS->WriteTile(usebuff, infooffset, dst.size);
     CPLFree(tbuffer);
 
     poDS->bdirty = 0;
