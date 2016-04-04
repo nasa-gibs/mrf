@@ -591,7 +591,7 @@ protected:
 class PNG_Codec {
 public:
     PNG_Codec(const ILImage &image) : img(image), 
-        PNGColors(NULL), PNGAlpha(NULL), PalSize(0), TransSize(0) {};
+        PNGColors(NULL), PNGAlpha(NULL), PalSize(0), TransSize(0), deflate_flags(0) {};
 
     virtual ~PNG_Codec() {
         CPLFree(PNGColors);
@@ -606,6 +606,10 @@ public:
     void *PNGColors;
     void *PNGAlpha;
     int PalSize, TransSize, deflate_flags;
+
+private:
+    PNG_Codec& operator= (const PNG_Codec& src); // not implemented. but suppress MSVC warning about 'assignment operator could not be generated'
+
 };
 
 class PNG_Band : public GDALMRFRasterBand {
@@ -643,6 +647,9 @@ public:
     bool sameres;
     bool rgb;
     bool optimize;
+
+private:
+    JPEG_Codec& operator= (const JPEG_Codec& src); // not implemented. but suppress MSVC warning about 'assignment operator could not be generated'
 };
 
 class JPEG_Band : public GDALMRFRasterBand {
@@ -670,7 +677,7 @@ protected:
 
     CPLErr CompressJPNG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressJPNG(buf_mgr &dst, buf_mgr &src);
-    int rgb, sameres, optimize;
+    bool rgb, sameres, optimize;
 };
 
 class Raw_Band : public GDALMRFRasterBand {
