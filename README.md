@@ -1,6 +1,6 @@
 ### NASA Global Imagery Browse Services (GIBS)
 
-**This software was originally developed at the Jet Propulsion Laboratory as Tiled WMS (https://github.com/nasajpl/tiledwms).  OnEarth is now the latest actively developed version (https://github.com/nasa-gibs/onearth).  The Meta Raster Format driver for GDAL source code was split off into this repository.**
+**This software was originally developed at the Jet Propulsion Laboratory as part of Tiled WMS (https://github.com/nasajpl/tiledwms). The Meta Raster Format driver for GDAL source code was split off into this repository.**
 
 ## Meta Raster Format
 
@@ -15,7 +15,7 @@ For more information, visit https://earthdata.nasa.gov/gibs
 
 ## Preconditions
 
-The MRF driver for GDAL requires the use of GDAL (version 1.11.1 recommended).  GDAL is included with the RPM release.
+The MRF driver for GDAL requires the use of GDAL (version 1.11.4 recommended).  GDAL is included with the RPM release.
 
 ## RPM Installation
 
@@ -42,20 +42,20 @@ The MRF driver links with the rest of GDAL and has to be compiled with the same 
 
 Download GDAL source:
 ```
-wget http://download.osgeo.org/gdal/1.11.1/gdal1111.zip
+wget http://download.osgeo.org/gdal/1.11.4/gdal1114.zip
 ```
 
 Unpack GDAL source:
 ```
 mkdir src
-mv gdal1111.zip src/
+mv gdal1114.zip src/
 cd src/
-unzip gdal1111.zip
+unzip gdal1114.zip
 ```
  
 Go to the GDAL source directory:
 ```
-cd gdal-1.11.1/
+cd gdal-1.11.4/
 ``` 
 
 Configure GDAL source install:

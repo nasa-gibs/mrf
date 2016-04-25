@@ -1,6 +1,6 @@
-%global gdal_version 1.11.2
-%global gdal_release 4%{?dist}
-%global mrf_version 0.9.3
+%global gdal_version 1.11.4
+%global gdal_release 1%{?dist}
+%global mrf_version 1.0.0
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -129,6 +129,9 @@ python setup.py install
 
 
 %changelog
+* Mon Apr 25 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.4-1
+- New upstream GDAL version
+
 * Tue Mar 8 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.2-3
 - Added numpy and removed plugin-mrf package 
 
