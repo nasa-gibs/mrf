@@ -1,4 +1,4 @@
-# MRF User Guide
+# Meta Raster Format (MRF) User Guide
 
 For MRF Version 1.x
 

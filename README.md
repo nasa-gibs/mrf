@@ -1,23 +1,18 @@
 ### NASA Global Imagery Browse Services (GIBS)
 
-**This software was originally developed at the Jet Propulsion Laboratory as Tiled WMS (https://github.com/nasajpl/tiledwms).  OnEarth is now the latest actively developed version (https://github.com/nasa-gibs/onearth).  The Meta Raster Format driver for GDAL source code was split off into this repository.**
+**This software was originally developed at the Jet Propulsion Laboratory as part of Tiled WMS (https://github.com/nasajpl/tiledwms). The Meta Raster Format driver for GDAL source code was split off into this repository.**
 
 ## Meta Raster Format
 
-The source code contains the Meta Raster Format (MRF) specification and plugin for GDAL, which is a part of the OnEarth software package.  OnEarth consists of image formatting and serving modules which facilitate the deployment of a web service capable of efficiently serving standards-based requests for georeferenced raster imagery at multiple spatial resolutions including, but not limited to, full spatial resolution.  The Meta Raster Format and OnEarth software were originally developed at the Jet Propulsion Laboratory (JPL) to serve global daily composites of MODIS imagery.  Since then, it has been deployed and repurposed in other installations, including at the Physical Oceanography Distributed Active Archive Center (PO.DAAC) in support of the State of the Oceans (SOTO) visualization tool, the Lunar Mapping and Modeling Project (LMMP), and GIBS.
+The source code contains the Meta Raster Format (MRF) specification and plugin for GDAL, which is used by the OnEarth software package.  OnEarth consists of image formatting and serving modules which facilitate the deployment of a web service capable of efficiently serving standards-based requests for georeferenced raster imagery at multiple spatial resolutions including, but not limited to, full spatial resolution.  The Meta Raster Format and OnEarth software were originally developed at the Jet Propulsion Laboratory (JPL) to serve global daily composites of MODIS imagery.  Since then, it has been deployed and repurposed in other installations, including at the Physical Oceanography Distributed Active Archive Center ([PO.DAAC](http://podaac.jpl.nasa.gov/)) in support of the State of the Oceans ([SOTO](http://podaac-tools.jpl.nasa.gov/soto-2d/)) visualization tool, the Lunar Mapping and Modeling Project ([LMMP](http://pub.lmmp.nasa.gov/LMMPUI/LMMP_CLIENT/LMMP.html)), and [Worldview](https://earthdata.nasa.gov/labs/worldview/).
 
 [Meta Raster Format User Guide] (src/gdal_mrf/frmts/mrf/docs/MUG.md)
 
-[Meta Raster Format Specification] (spec/mrf_spec.md)
-
 For more information, visit https://earthdata.nasa.gov/gibs
-
-### OnEarth-Boxes
-[OnEarth-Boxes](https://github.com/nasa-gibs/onearth-boxes) is a tool that can build a virtual machine with demo imagery and pre-configured endpoints for demos, development, and getting started with MRF and OnEarth. Multiple VM image formats are supported. For more information visit https://github.com/nasa-gibs/onearth-boxes.
 
 ## Preconditions
 
-The MRF driver for GDAL requires the use of GDAL (version 1.11.2 recommended).  GDAL is included with the RPM release.
+The MRF driver for GDAL requires the use of GDAL (version 1.11.4 recommended).  GDAL is included with the RPM release.
 
 ## RPM Installation
 
@@ -44,20 +39,20 @@ The MRF driver links with the rest of GDAL and has to be compiled with the same 
 
 Download GDAL source:
 ```
-wget http://download.osgeo.org/gdal/1.11.2/gdal1112.zip
+wget http://download.osgeo.org/gdal/1.11.4/gdal1114.zip
 ```
 
 Unpack GDAL source:
 ```
 mkdir src
-mv gdal1112.zip src/
+mv gdal1114.zip src/
 cd src/
-unzip gdal1112.zip
+unzip gdal1114.zip
 ```
  
 Go to the GDAL source directory:
 ```
-cd gdal-1.11.2/
+cd gdal-1.11.4/
 ``` 
 
 Configure GDAL source install:

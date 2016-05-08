@@ -1,4 +1,4 @@
-## Meta Raster Format (MRF) Specification v0.3.0 (Draft)
+## Meta Raster Format (MRF) Specification v1.0.0
 
 The Meta Raster Format (MRF) is an image and data storage format designed for fast access to imagery within a georeferenced tile pyramid at discrete resolutions. 
 
