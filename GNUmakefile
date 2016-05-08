@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-GDAL_VERSION=1.11.2
+GDAL_VERSION=1.11.4
 GDAL_ARTIFACT=gdal-$(GDAL_VERSION).tar.gz
 GDAL_HOME=http://download.osgeo.org/gdal
 GDAL_URL=$(GDAL_HOME)/$(GDAL_VERSION)/$(GDAL_ARTIFACT)
@@ -24,16 +24,19 @@ LIB_DIR=$(shell \
 )
 RPMBUILD_FLAGS=-ba
 
+NUMPY_ARTIFACT=numpy-1.10.4.tar.gz
+NUMPY_URL=https://pypi.python.org/packages/source/n/numpy/$(NUMPY_ARTIFACT)
+
 all: 
 	@echo "Use targets gdal-rpm"
 
-gdal: gdal-unpack mrf-overlay gdal-patch gdal-compile
+gdal: gdal-unpack numpy-unpack mrf-overlay gdal-patch gdal-compile
 
 #-----------------------------------------------------------------------------
 # Download
 #-----------------------------------------------------------------------------
 
-download: gdal-download 
+download: gdal-download numpy-download
 
 gdal-download: upstream/$(GDAL_ARTIFACT).downloaded
 
@@ -42,6 +45,14 @@ upstream/$(GDAL_ARTIFACT).downloaded:
 	rm -f upstream/$(GDAL_ARTIFACT)
 	( cd upstream ; wget $(GDAL_URL) )
 	touch upstream/$(GDAL_ARTIFACT).downloaded
+	
+numpy-download: upstream/$(NUMPY_ARTIFACT).downloaded
+
+upstream/$(NUMPY_ARTIFACT).downloaded: 
+	mkdir -p upstream
+	rm -f upstream/$(NUMPY_ARTIFACT)
+	( cd upstream ; wget $(NUMPY_URL) )
+	touch upstream/$(NUMPY_ARTIFACT).downloaded
 
 #-----------------------------------------------------------------------------
 # Compile
@@ -52,6 +63,13 @@ gdal-unpack: build/gdal/VERSION
 build/gdal/VERSION:
 	mkdir -p build/gdal
 	tar xf upstream/$(GDAL_ARTIFACT) -C build/gdal \
+		--strip-components=1 --exclude=.gitignore
+
+numpy-unpack: build/numpy/VERSION
+
+build/numpy/VERSION:
+	mkdir -p build/numpy
+	tar xf upstream/$(NUMPY_ARTIFACT) -C build/numpy \
 		--strip-components=1 --exclude=.gitignore
 
 mrf-overlay:
@@ -121,6 +139,9 @@ gdal-install:
 	$(MAKE) -C build/gdal install install-man PREFIX=$(PREFIX)
 	$(MAKE) -C build/gdal/mrf_apps install
 
+	install -m 755 -d $(DESTDIR)/$(PREFIX)/share/numpy
+	cp -r build/numpy/* $(DESTDIR)/$(PREFIX)/share/numpy
+	
 #-----------------------------------------------------------------------------
 # Local install
 #-----------------------------------------------------------------------------
@@ -154,6 +175,7 @@ gdal-rpm: gdal-artifact
 	rm -f dist/gibs-gdal*.rpm
 	cp \
 		upstream/gdal-$(GDAL_VERSION).tar.gz \
+		upstream/$(NUMPY_ARTIFACT) \
 		dist/gibs-gdal-$(GDAL_VERSION).tar.bz2 \
 		build/rpmbuild/SOURCES
 	rpmbuild \

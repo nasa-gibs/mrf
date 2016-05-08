@@ -1,6 +1,6 @@
-%global gdal_version 1.11.2
+%global gdal_version 1.11.4
 %global gdal_release 1%{?dist}
-%global mrf_version 0.8.0
+%global mrf_version 1.0.0
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -13,9 +13,10 @@ License:	MIT
 URL:		http://www.gdal.org/
 Source0:	gibs-gdal-%{gdal_version}.tar.bz2
 Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar.gz
+Source2:	https://pypi.python.org/packages/source/n/numpy/numpy-1.10.4.tar.gz
 
 BuildRequires:	libtool pkgconfig
-BuildRequires:	python-devel numpy xerces-c-devel
+BuildRequires:	python-devel xerces-c-devel
 BuildRequires:	libpng-devel libungif-devel
 BuildRequires:	libjpeg-devel
 BuildRequires:	libtiff-devel
@@ -34,16 +35,20 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
 Requires:	proj-devel
+Requires:	gcc-c++
+Requires:	python-devel
+Requires:	python-pycxx-devel
+Conflicts:  numpy < 1.10.4
 
 Provides:	gdal = %{gdal_version}-%{gdal_release}
-Obsoletes:	gdal < 1.10
+Obsoletes:	gdal < 1.11
 Provides:	gdal-python = %{gdal_version}-%{gdal_release}
-Obsoletes:	gdal-python < 1.10
+Obsoletes:	gdal-python < 1.11
 	
 %description
 The GDAL library provides support to handle multiple GIS file formats.
 
-This build includes the MRF plug-in for GIBS.
+This build includes the MRF driver for GIBS.
 
 
 %package devel
@@ -54,23 +59,11 @@ Requires:	%{name} = %{gdal_version}-%{gdal_release}
 %description devel
 Development libraries for the GDAL library
 
-
-%package plugin-mrf
-Summary:	Plugin for the MRF raster file format
-Group:		Development/Libraries
-Requires:	%{name} = %{gdal_version}-%{gdal_release}
-Version:	%{mrf_version}
-Release:	%{mrf_release}
-
-%description plugin-mrf
-Plugin for the MRF raster file format
-
-
 %prep
 %setup -q
 mkdir upstream
 cp %{SOURCE1} upstream
-
+cp %{SOURCE2} upstream
 
 %build
 make gdal PREFIX=/usr
@@ -89,9 +82,6 @@ rm -f %{buildroot}/%{_bindir}/*.dox
 
 # gdal doesn't respect the lib64 directory
 install -m 755 -d %{buildroot}/usr/lib/gdalplugins
-install -m 755 build/gdal/frmts/mrf/gdal_mrf.so.1 \
-        %{buildroot}/usr/lib/gdalplugins
-ln -s gdal_mrf.so.1 %{buildroot}/usr/lib/gdalplugins/gdal_mrf.so
 
 # Remove SWIG samples
 rm -rf swig/python/samples
@@ -119,6 +109,7 @@ rm -rf %{buildroot}
 %{python_sitearch}/osr*
 %{python_sitearch}/osgeo
 %dir /usr/lib/gdalplugins
+%{_datadir}/numpy
 
 %files devel
 %defattr(-,root,root,-)
@@ -128,18 +119,23 @@ rm -rf %{buildroot}
 %{_libdir}/*.la
 %{_libdir}/*.so
 
-%files plugin-mrf
-%defattr(-,root,root,-)
-%{_bindir}/mrf_insert
-/usr/lib/gdalplugins/*
+%post 
+cd %{_datadir}/numpy/
+python setup.py build
+python setup.py install
+/sbin/ldconfig
 
-
-%post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
 
 %changelog
-* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.2
+* Mon Apr 25 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.4-1
+- New upstream GDAL version
+
+* Tue Mar 8 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.2-3
+- Added numpy and removed plugin-mrf package 
+
+* Tue Feb 2 2016 Joshua Rodriguez <jdrodrig@jpl.nasa.gov> - 1.11.2-2
 - Remove PostgreSQL dependency 
 
 * Tue Oct 14 2014 Mike McGann <mike.mcgann@nasa.gov> - 1.11.1-1
