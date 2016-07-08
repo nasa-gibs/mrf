@@ -57,7 +57,7 @@
 
 #include <vector>
 #include <assert.h>
-#include "../zlib/zlib.h"
+#include "zlib.h"
 
 using std::vector;
 using std::string;
