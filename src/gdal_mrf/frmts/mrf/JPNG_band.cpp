@@ -21,6 +21,8 @@
 #include "marfa.h"
 #include <cassert>
 
+CPL_CVSID("$Id: JPNG_band.cpp 35044 2016-08-10 15:19:27Z rouault $");
+
 CPL_C_START
 #include <jpeglib.h>
 
@@ -34,7 +36,7 @@ CPL_C_END
 NAMESPACE_MRF_START
 
 // Test that all alpha values are equal to N
-template<int N> bool AllAlpha(const buf_mgr &src, const ILImage &img) {
+template<int N> static bool AllAlpha(const buf_mgr &src, const ILImage &img) {
     int stride = img.pagesize.c;
     char *s = src.buffer + img.pagesize.c - 1;
     char *stop = src.buffer + img.pageSizeBytes;
@@ -184,17 +186,16 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 */
 
 JPNG_Band::JPNG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-GDALMRFRasterBand(pDS, image, b, level), 
-rgb(FALSE), sameres(FALSE), optimize(false)
-
+    GDALMRFRasterBand(pDS, image, b, level),
+    rgb(FALSE), sameres(FALSE), optimize(false)
 {   // Check error conditions
     if (image.dt != GDT_Byte) {
-	CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPNG");
-	return;
+        CPLError(CE_Failure, CPLE_NotSupported, "Data type not supported by MRF JPNG");
+        return;
     }
     if (image.order != IL_Interleaved || (image.pagesize.c != 4 && image.pagesize.c != 2)) {
-	CPLError(CE_Failure, CPLE_NotSupported, "MRF JPNG can only handle 2 or 4 interleaved bands");
-	return;
+        CPLError(CE_Failure, CPLE_NotSupported, "MRF JPNG can only handle 2 or 4 interleaved bands");
+        return;
     }
 
     if (img.pagesize.c == 4) { // RGBA can have storage flavors
