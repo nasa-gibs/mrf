@@ -38,6 +38,7 @@
 #include "mrf_insert.h"
 
 using namespace std;
+USING_NAMESPACE_MRF
 
 // Size and location from handle
 

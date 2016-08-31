@@ -73,7 +73,7 @@ class state {
 
 public:
     state():Progress(GDALTermProgress),
-        Resampling(SAMPLING_Avg),
+        Resampling(GDAL_MRF::SAMPLING_Avg),
         verbose(false),
         overlays(false),
 	start_level(0), // From begining
@@ -99,9 +99,9 @@ public:
 
     void setResampling(const std::string &Resamp) {
 	if (EQUALN(Resamp.c_str(), "Avg", 3))
-	    Resampling = SAMPLING_Avg;
+	    Resampling = GDAL_MRF::SAMPLING_Avg;
 	else if (EQUALN(Resamp.c_str(), "NearNb", 6))
-	    Resampling = SAMPLING_Near;
+	    Resampling = GDAL_MRF::SAMPLING_Near;
     }
 
 private:
