@@ -52,7 +52,7 @@
 #include <assert.h>
 #include "../zlib/zlib.h"
 
-CPL_CVSID("$Id: mrf_band.cpp 35044 2016-08-10 15:19:27Z rouault $");
+CPL_CVSID("$Id: mrf_band.cpp 35250 2016-08-30 04:20:18Z goatbar $");
 
 using std::vector;
 using std::string;
@@ -200,14 +200,18 @@ static void *DeflateBlock(buf_mgr &src, size_t extrasize, int flags) {
 // itself is not set.  This allows for PNG features to be controlled, as well
 // as any other bands that use zlib by itself
 //
-GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
-                                     const ILImage &image, int band, int ov)
+GDALMRFRasterBand::GDALMRFRasterBand( GDALMRFDataset *parent_dataset,
+                                      const ILImage &image, int band, int ov ) :
+    poDS(parent_dataset),
+    deflatep(GetOptlist().FetchBoolean("DEFLATE", FALSE)),
+    // Bring the quality to 0 to 9
+    deflate_flags(image.quality / 10),
+    m_l(ov),
+    img(image),
+    overview(0)
 {
-    poDS=parent_dataset;
-    nBand=band;
-    m_l=ov;
-    img=image;
-    eDataType=parent_dataset->current.dt;
+    nBand = band;
+    eDataType = parent_dataset->current.dt;
     nRasterXSize = img.size.x;
     nRasterYSize = img.size.y;
     nBlockXSize = img.pagesize.x;
@@ -216,17 +220,15 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
     nBlocksPerColumn = img.pagecount.y;
     img.NoDataValue = GetNoDataValue(&img.hasNoData);
 
-    deflatep = GetOptlist().FetchBoolean("DEFLATE", FALSE);
-    // Bring the quality to 0 to 9
-    deflate_flags = img.quality / 10;
     // Pick up the twists, aka GZ, RAWZ headers
-    if (GetOptlist().FetchBoolean("GZ", FALSE))
+    if( GetOptlist().FetchBoolean("GZ", FALSE) )
         deflate_flags |= ZFLAG_GZ;
-    else if (GetOptlist().FetchBoolean("RAWZ", FALSE))
+    else if( GetOptlist().FetchBoolean("RAWZ", FALSE) )
         deflate_flags |= ZFLAG_RAW;
     // And Pick up the ZLIB strategy, if any
     const char *zstrategy = GetOptlist().FetchNameValueDef("Z_STRATEGY", NULL);
-    if (zstrategy) {
+    if( zstrategy )
+    {
         int zv = Z_DEFAULT_STRATEGY;
         if (EQUAL(zstrategy, "Z_HUFFMAN_ONLY"))
             zv = Z_HUFFMAN_ONLY;
@@ -238,13 +240,13 @@ GDALMRFRasterBand::GDALMRFRasterBand(GDALMRFDataset *parent_dataset,
             zv = Z_FIXED;
         deflate_flags |= (zv << 6);
     }
-    overview = 0;
 }
 
 // Clean up the overviews if they exist
 GDALMRFRasterBand::~GDALMRFRasterBand()
 {
-    while (0!=overviews.size()) {
+    while( 0!=overviews.size() )
+    {
         delete overviews[overviews.size()-1];
         overviews.pop_back();
     };
@@ -288,28 +290,28 @@ CPLErr  GDALMRFRasterBand::SetNoDataValue(double val)
 
 double GDALMRFRasterBand::GetNoDataValue(int *pbSuccess)
 {
-    std::vector<double> &v = poDS->vNoData;
+    std::vector<double> &v=poDS->vNoData;
     if (v.size() == 0)
         return GDALPamRasterBand::GetNoDataValue(pbSuccess);
-    if (pbSuccess) *pbSuccess = TRUE;
+    if (pbSuccess) *pbSuccess=TRUE;
     return getBandValue(v, nBand - 1);
 }
 
 double GDALMRFRasterBand::GetMinimum(int *pbSuccess)
 {
-    std::vector<double> &v = poDS->vMin;
+    std::vector<double> &v=poDS->vMin;
     if (v.size() == 0)
         return GDALPamRasterBand::GetMinimum(pbSuccess);
-    if (pbSuccess) *pbSuccess = TRUE;
+    if (pbSuccess) *pbSuccess=TRUE;
     return getBandValue(v, nBand - 1);
 }
 
 double GDALMRFRasterBand::GetMaximum(int *pbSuccess)
 {
-    std::vector<double> &v = poDS->vMax;
+    std::vector<double> &v=poDS->vMax;
     if (v.size() == 0)
         return GDALPamRasterBand::GetMaximum(pbSuccess);
-    if (pbSuccess) *pbSuccess = TRUE;
+    if (pbSuccess) *pbSuccess=TRUE;
     return getBandValue(v, nBand - 1);
 }
 
@@ -366,9 +368,9 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr /*src*/, void *buffer) 
     vector<GDALRasterBlock *> blocks;
 
     for (int i = 0; i < poDS->nBands; i++) {
-        GDALRasterBand *b = poDS->GetRasterBand(i + 1);
+        GDALRasterBand *b = poDS->GetRasterBand(i+1);
         if (b->GetOverviewCount() && 0 != m_l)
-            b = b->GetOverview(m_l - 1);
+            b = b->GetOverview(m_l-1);
 
         void *ob = buffer;
         // Get the other band blocks, keep them around until later
@@ -386,7 +388,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr /*src*/, void *buffer) 
     blockSizeBytes()/sizeof(T), img.pagesize.c)
 
         // Page is already in poDS->pbuffer, not empty
-        // There are only four cases since only the data size matters
+        // There are only four cases, since only the data size matters
         switch (GDALGetDataTypeSize(eDataType)/8)
         {
         case 1: CpySI(GByte); break;
@@ -395,6 +397,7 @@ CPLErr GDALMRFRasterBand::RB(int xblk, int yblk, buf_mgr /*src*/, void *buffer) 
         case 8: CpySI(GIntBig); break;
         }
     }
+
 #undef CpySI
 
     // Drop the locks we acquired
@@ -423,7 +426,7 @@ CPLErr GDALMRFRasterBand::FetchBlock(int xblk, int yblk, void *buffer)
         return FetchClonedBlock(xblk, yblk, buffer);
 
     const GInt32 cstride = img.pagesize.c; // 1 if band separate
-    ILSize req(xblk, yblk, 0, (nBand - 1) / cstride, m_l);
+    ILSize req(xblk, yblk, 0, (nBand-1) / cstride, m_l);
     GUIntBig infooffset = IdxOffset(req, img);
 
     GDALDataset *poSrcDS = NULL;
@@ -574,7 +577,7 @@ CPLErr GDALMRFRasterBand::FetchClonedBlock(int xblk, int yblk, void *buffer)
         return b->IReadBlock(xblk,yblk,buffer);
     }
 
-    ILSize req(xblk, yblk, 0, (nBand - 1)/img.pagesize.c , m_l);
+    ILSize req(xblk, yblk, 0, (nBand-1)/img.pagesize.c , m_l);
     ILIdx tinfo;
 
     // Get the cloned source tile info
@@ -648,9 +651,9 @@ CPLErr GDALMRFRasterBand::IReadBlock(int xblk, int yblk, void *buffer)
 {
     ILIdx tinfo;
     GInt32 cstride = img.pagesize.c;
-    ILSize req(xblk, yblk, 0, (nBand - 1) / cstride, m_l);
+    ILSize req(xblk, yblk, 0, (nBand-1)/cstride, m_l);
     CPLDebug("MRF_IB", "IReadBlock %d,%d,0,%d, level %d, idxoffset " CPL_FRMT_GIB "\n",
-        xblk, yblk, nBand - 1, m_l, IdxOffset(req,img));
+        xblk, yblk, nBand-1, m_l, IdxOffset(req,img));
 
     // If this is a caching file and bypass is on, just do the fetch
     if (poDS->bypass_cache && !poDS->source.empty())
@@ -798,7 +801,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 
 {
     GInt32 cstride = img.pagesize.c;
-    ILSize req(xblk, yblk, 0, (nBand - 1)/cstride, m_l);
+    ILSize req(xblk, yblk, 0, (nBand-1)/cstride, m_l);
     GUIntBig infooffset = IdxOffset(req, img);
 
     CPLDebug("MRF_IB", "IWriteBlock %d,%d,0,%d, level  %d, stride %d\n", xblk, yblk,
@@ -859,7 +862,7 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
         const char *pabyThisImage=NULL;
         GDALRasterBlock *poBlock=NULL;
 
-        if (iBand == (nBand - 1))
+        if (iBand == nBand-1)
         {
             pabyThisImage = (char *) buffer;
             poDS->bdirty |= bandbit();

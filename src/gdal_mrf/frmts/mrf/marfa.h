@@ -34,7 +34,7 @@
 */
 
 /******************************************************************************
- * $Id: marfa.h 34521 2016-07-02 21:26:43Z goatbar $
+ * $Id: marfa.h 35250 2016-08-30 04:20:18Z goatbar $
  *
  * Project:  Meta Raster Format
  * Purpose:  MRF structures
@@ -286,8 +286,6 @@ enum { SAMPLING_ERR, SAMPLING_Avg, SAMPLING_Near };
 GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *, const ILImage &, int, int level = 0);
 
 class GDALMRFDataset : public GDALPamDataset {
-
-
     friend class GDALMRFRasterBand;
     friend GDALMRFRasterBand *newMRFRasterBand(GDALMRFDataset *, const ILImage &, int, int level);
 
@@ -401,7 +399,6 @@ protected:
     virtual CPLErr IBuildOverviews(const char*, int, int*, int, int*,
         GDALProgressFunc, void*);
 
-
     // Write a tile, the infooffset is the relative position in the index file
     virtual CPLErr WriteTile(void *buff, GUIntBig infooffset, GUIntBig size = 0);
 
@@ -513,7 +510,6 @@ public:
     virtual double  GetMinimum(int *);
     virtual double  GetMaximum(int *);
 
-
     // MRF specific, fetch is from a remote source
     CPLErr FetchBlock(int xblk, int yblk, void *buffer = NULL);
     // Fetch a block from a cloned MRF
@@ -561,7 +557,7 @@ protected:
 
     // Read the index record itself, can be overwritten
     //    virtual CPLErr ReadTileIdx(const ILSize &, ILIdx &, GIntBig bias = 0);
-    
+
     GIntBig bandbit(int b) { return ((GIntBig)1) << b; }
     GIntBig bandbit() { return bandbit(nBand - 1); }
     GIntBig AllBandMask() { return bandbit(poDS->nBands) - 1; }
