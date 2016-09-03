@@ -10,17 +10,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Modified for MRF plugin
+# Modified for MRF apps
 
 include GDALmake.opt
 
 GDAL_OBJ	=	$(GDAL_ROOT)/frmts/o/*.o \
 			$(GDAL_ROOT)/gcore/*.o \
 			$(GDAL_ROOT)/port/*.o \
-			$(GDAL_ROOT)/alg/*.o
+			$(GDAL_ROOT)/alg/*.o \
+			$(GDAL_ROOT)/apps/commonutils.o \
+			$(GDAL_ROOT)/apps/gdalinfo_lib.o \
+			$(GDAL_ROOT)/apps/gdal_translate_lib.o \
+			$(GDAL_ROOT)/apps/gdalwarp_lib.o \
+			$(GDAL_ROOT)/apps/ogr2ogr_lib.o \
+			$(GDAL_ROOT)/apps/gdaldem_lib.o \
+			$(GDAL_ROOT)/apps/nearblack_lib.o \
+			$(GDAL_ROOT)/apps/gdal_grid_lib.o \
+			$(GDAL_ROOT)/apps/gdal_rasterize_lib.o \
+			$(GDAL_ROOT)/apps/gdalbuildvrt_lib.o
 
-ifeq ($(OGR_ENABLED),yes)
 GDAL_OBJ += $(GDAL_ROOT)/ogr/ogrsf_frmts/o/*.o
+
+ifeq ($(GNM_ENABLED),yes)
+   GDAL_OBJ += $(GDAL_ROOT)/gnm/*.o $(GDAL_ROOT)/gnm/gnm_frmts/o/*.o
 endif
 
 include ./ogr/file.lst
@@ -31,7 +43,10 @@ LIBGDAL-$(HAVE_LD_SHARED)	+=	$(GDAL_SLIB)
 # override if we are using libtool
 LIBGDAL-$(HAVE_LIBTOOL)	:= $(LIBGDAL)
 
-default:	lib-target apps-target mrf-apps-target swig-target
+default:	lib-target mrf-apps-target apps-target swig-target gdal.pc
+ifeq ($(PDF_PLUGIN),yes)
+	(cd frmts/pdf; $(MAKE) plugin)
+endif
 
 lib-target:	check-lib;
 
@@ -59,14 +74,24 @@ ifeq ($(MACOSX_FRAMEWORK),yes)
 	install_name_tool -id ${OSX_VERSION_FRAMEWORK_PREFIX}/GDAL .libs/libgdal.dylib
 endif
 
-check-lib:	port-target core-target frmts-target ogr-target
+check-lib:	port-target core-target frmts-target ogr-target gnm-target appslib-target
 	$(MAKE) $(LIBGDAL-yes)
+
+appslib-target:
+	(cd apps; $(MAKE) appslib)
 
 port-target:
 	(cd port; $(MAKE))
 
 ogr-target:
 	(cd ogr; $(MAKE) lib )
+
+ifeq ($(GNM_ENABLED),yes)
+gnm-target:
+	(cd gnm; $(MAKE) lib )
+else
+gnm-target:	;
+endif
 
 core-target:
 	(cd gcore; $(MAKE))
@@ -90,12 +115,14 @@ else
 swig-target:    swig-modules;
 endif
 
-swig-modules:	lib-target
+# Python bindings needs gdal-config, hence apps-target
+swig-modules:	apps-target
 	(cd swig; $(MAKE) build)
 
 clean:	lclean
 	(cd port; $(MAKE) clean)
 	(cd ogr; $(MAKE) clean)
+	(cd gnm; $(MAKE) clean)
 	(cd gcore; $(MAKE) clean)
 	(cd frmts; $(MAKE) clean)
 	(cd alg; $(MAKE) clean)
@@ -104,7 +131,9 @@ clean:	lclean
 ifneq ($(BINDINGS),)
 	(cd swig; $(MAKE) clean)
 endif
-
+ifeq ($(PDF_PLUGIN),yes)
+	(cd frmts/pdf; $(MAKE) clean)
+endif
 
 
 lclean:
@@ -128,7 +157,6 @@ GDALmake.opt:	GDALmake.opt.in config.status
 	./config.status
 
 docs:
-	(cd ogr; $(MAKE) docs)
 	(cd html; rm -f *.*)
 # Generate translated docs. Should go first, because index.html page should
 # be overwritten with the main one later
@@ -143,17 +171,25 @@ docs:
 	cp doc/images/*.* html
 	cp doc/grid/*.png html
 	cp frmts/*.html frmts/*/frmt_*.html html
-	cp frmts/wms/frmt_wms_*.xml html
-	cp frmts/wms/frmt_twms_*.xml html
+	cp frmts/openjpeg/*.xml html
+	cp frmts/wms/frmt_*.xml html
+	cp ogr/ogrsf_frmts/*/drv_*.html html
+	cp ogr/ogrsf_frmts/ogr_formats.html html
+	cp ogr/ogr_feature_style.html html
+	cp ogr/ogrsf_frmts/gpkg/geopackage_aspatial.html html
+	cp ogr/*.gif html
+
+.PHONY: man
 
 man:
 # Generate man pages
 	(cat Doxyfile ; echo "ENABLED_SECTIONS=man"; echo "INPUT=apps swig/python/scripts"; echo "FILE_PATTERNS=*.cpp *.dox"; echo "GENERATE_HTML=NO"; echo "GENERATE_MAN=YES") | doxygen -
+# Remove "Directory reference" file. Not sure if there's a better way of doing it.
+	 @find man -name '_home_*_gdal_apps_.1' -exec rm {} \;
 
 all:	default ogr-all
 
 install-docs:
-	(cd ogr; $(MAKE) install-docs)
 	$(INSTALL_DIR) $(DESTDIR)$(INST_DOCS)/gdal
 	cp html/*.* $(DESTDIR)$(INST_DOCS)/gdal
 
@@ -162,8 +198,8 @@ install-man:
 	for f in $(wildcard man/man1/*.1) ; do $(INSTALL_DATA) $$f $(DESTDIR)$(INST_MAN)/man1 ; done
 
 web-update:	docs
+	$(INSTALL_DIR) $(INST_HTML)
 	cp html/*.* $(INST_HTML)
-	(cd ogr; make web-update)
 
 install:	default install-actions
 
@@ -189,13 +225,16 @@ endif
 	(cd frmts; $(MAKE) install)
 	(cd alg; $(MAKE) install)
 	(cd ogr; $(MAKE) install)
+	(cd gnm; $(MAKE) install)
 	(cd apps; $(MAKE) install)
 ifneq ($(BINDINGS),)
 	(cd swig; $(MAKE) install)
 endif
+	(cd scripts; $(MAKE) install)
 	for f in LICENSE.TXT data/*.* ; do $(INSTALL_DATA) $$f $(DESTDIR)$(INST_DATA) ; done
-	$(LIBTOOL_FINISH) $(INST_LIB)
-
+	$(LIBTOOL_FINISH) $(DESTDIR)$(INST_LIB)
+	$(INSTALL_DIR) $(DESTDIR)$(INST_LIB)/pkgconfig
+	$(INSTALL_DATA) gdal.pc $(DESTDIR)$(INST_LIB)/pkgconfig/gdal.pc
 
 ifeq ($(HAVE_LIBTOOL),yes)
 
@@ -212,6 +251,8 @@ ifeq ($(MACOSX_FRAMEWORK),yes)
 	rm -f $(DESTDIR)$(INST_LIB)/libgdal.$(GDAL_VERSION_MAJOR).dylib
 	rm -f $(DESTDIR)$(INST_LIB)/libgdal.dylib
 	rm -f $(DESTDIR)$(INST_LIB)/libgdal.la
+else
+	$(INSTALL_DIR) $(DESTDIR)$(INST_LIB)/gdalplugins
 endif
 
 else
@@ -234,6 +275,7 @@ else
 	 ln -s $(GDAL_SLIB_B).$(GDAL_VER) $(GDAL_SLIB_B).$(GDAL_VERSION_MAJOR))
 	(cd $(DESTDIR)$(INST_LIB) ; \
 	 ln -s $(GDAL_SLIB_B).$(GDAL_VERSION_MAJOR) $(GDAL_SLIB_B))
+	$(INSTALL_DIR) $(DESTDIR)$(INST_LIB)/gdalplugins
 endif
 
 else
@@ -247,3 +289,12 @@ endif # HAVE_LD_SHARED=no
 
 endif # HAVE_LIBTOOL=no 
 
+
+gdal.pc:	gdal.pc.in GDALmake.opt ./GNUmakefile VERSION
+	rm -f gdal.pc
+	echo 'CONFIG_VERSION='`cat ./VERSION`'' >> gdal.pc
+	echo 'CONFIG_INST_PREFIX=$(INST_PREFIX)' >> gdal.pc
+	echo 'CONFIG_INST_LIBS=$(CONFIG_LIBS_INS)' >> gdal.pc
+	echo 'CONFIG_INST_CFLAGS=-I$(INST_INCLUDE)' >> gdal.pc
+	echo 'CONFIG_INST_DATA=$(INST_DATA)/data' >> gdal.pc
+	cat gdal.pc.in >> gdal.pc

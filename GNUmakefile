@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-GDAL_VERSION=1.11.4
+GDAL_VERSION=2.1.1
 GDAL_ARTIFACT=gdal-$(GDAL_VERSION).tar.gz
 GDAL_HOME=http://download.osgeo.org/gdal
 GDAL_URL=$(GDAL_HOME)/$(GDAL_VERSION)/$(GDAL_ARTIFACT)
@@ -30,7 +30,7 @@ NUMPY_URL=https://pypi.python.org/packages/source/n/numpy/$(NUMPY_ARTIFACT)
 all: 
 	@echo "Use targets gdal-rpm"
 
-gdal: gdal-unpack numpy-unpack mrf-overlay gdal-patch gdal-compile
+gdal: gdal-unpack numpy-unpack mrf-overlay gdal-compile
 
 #-----------------------------------------------------------------------------
 # Download
@@ -75,23 +75,12 @@ build/numpy/VERSION:
 mrf-overlay:
 	cp -r src/gdal_mrf/* build/gdal
 
-gdal-patch: build/gdal/swig/python/GNUmakefile
-
 build/gdal/swig/python/GNUmakefile: deploy/gibs-gdal/python-install.patch
 # 	Python install does not respect DESTDIR
 	( cd build/gdal ; \
 		patch -p0 < ../../deploy/gibs-gdal/python-install.patch )
 # 	Use external libtool
 	sed -i 's|@LIBTOOL@|/usr/bin/libtool|g' build/gdal/GDALmake.opt.in
-	
-#   Build MRF into GDAL
-	sed -i 's|GDAL_FORMATS = |GDAL_FORMATS = mrf |g' build/gdal/GDALmake.opt.in
-	sed -i -e'/^CPL_C_START/a void CPL_DLL GDALRegister_mrf(void);' build/gdal/gcore/gdal_frmts.h
-	sed -i -e'/AutoLoadDrivers/a #ifdef FRMT_mrf\n    GDALRegister_mrf();\n#endif' build/gdal/frmts/gdalallregister.cpp
-
-#	Patch gcore/overview.cpp	
-	( cd build/gdal/gcore ; \
-		patch < ../../../deploy/gibs-gdal/overview.patch )
 
 gdal-compile:
 	( cd build/gdal ; ./configure \

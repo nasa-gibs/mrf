@@ -1,6 +1,6 @@
-%global gdal_version 1.11.4
+%global gdal_version 2.1.1
 %global gdal_release 1%{?dist}
-%global mrf_version 1.0.0
+%global mrf_version 1.1.0
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -108,6 +108,7 @@ rm -rf %{buildroot}
 %{python_sitearch}/ogr*
 %{python_sitearch}/osr*
 %{python_sitearch}/osgeo
+%{_libdir}/pkgconfig/gdal.pc
 %dir /usr/lib/gdalplugins
 %{_datadir}/numpy
 
@@ -129,6 +130,9 @@ python setup.py install
 
 
 %changelog
+* Fri Sep 2 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.1-1
+- Transition to GDAL version 2
+
 * Mon Apr 25 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.11.4-1
 - New upstream GDAL version
 
