@@ -109,7 +109,11 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
 
     // Call the raster band read with the trimmed values
     return band->RasterIO(GF_Read, nXOff, nYOff, nXSize, nYSize,
-	pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace);
+	pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace
+#if GDAL_VERSION_MAJOR >= 2
+    ,NULL
+#endif
+    );
 }
 
 // Insert the target in the base level
@@ -264,7 +268,11 @@ bool state::patch() {
 			    tsz_x, tsz_y, // Size in output image
 			    buffer, tsz_x, tsz_y, // Buffer and size in buffer
 			    eDataType, // Requested type
-			    pixel_size, line_size); // Pixel and line space
+			    pixel_size, line_size // Pixel and line space
+#if GDAL_VERSION_MAJOR >= 2
+			    ,NULL
+#endif
+			    );
 		    }
 
 		    // Works just like RasterIO, except that it only reads the 
@@ -282,7 +290,11 @@ bool state::patch() {
 			tsz_x, tsz_y, // Size in output image
 			buffer, tsz_x, tsz_y, // Buffer and size in buffer
 			eDataType, // Requested type
-			pixel_size, line_size); // Pixel and line space
+			pixel_size, line_size // Pixel and line space
+#if GDAL_VERSION_MAJOR >= 2
+		    ,NULL
+#endif
+		    );
 		}
 	    }
 	}
