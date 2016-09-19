@@ -75,13 +75,6 @@ build/numpy/VERSION:
 mrf-overlay:
 	cp -r src/gdal_mrf/* build/gdal
 
-build/gdal/swig/python/GNUmakefile: deploy/gibs-gdal/python-install.patch
-# 	Python install does not respect DESTDIR
-	( cd build/gdal ; \
-		patch -p0 < ../../deploy/gibs-gdal/python-install.patch )
-# 	Use external libtool
-	sed -i 's|@LIBTOOL@|/usr/bin/libtool|g' build/gdal/GDALmake.opt.in
-
 gdal-compile:
 	( cd build/gdal ; ./configure \
 		--prefix=$(PREFIX) \
