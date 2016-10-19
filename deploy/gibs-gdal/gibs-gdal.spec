@@ -1,7 +1,7 @@
 %global gdal_version 2.1.1
-%global gdal_release 1%{?dist}
+%global gdal_release 3%{?dist}
 %global mrf_version 1.1.0
-%global mrf_release 1%{?dist}
+%global mrf_release 3%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -25,7 +25,7 @@ BuildRequires:	jasper-devel cfitsio-devel libdap-devel librx-devel
 BuildRequires:	hdf-static hdf-devel
 BuildRequires:	unixODBC-devel mysql-devel sqlite-devel 
 BuildRequires:	zlib-devel
-BuildRequires:	proj-devel geos-devel netcdf-devel hdf5-devel ogdi-devel 
+BuildRequires:	proj-devel netcdf-devel hdf5-devel ogdi-devel 
 BuildRequires:	libgeotiff-devel
 BuildRequires:	curl-devel
 BuildRequires:	perl(ExtUtils::MakeMaker)
@@ -34,10 +34,12 @@ BuildRequires:	swig
 BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
+BuildRequires:  geos-devel = 3.3.2
 Requires:	proj-devel
 Requires:	gcc-c++
 Requires:	python-devel
 Requires:	python-pycxx-devel
+Requires:	geos >= 3.3.2
 Conflicts:  numpy < 1.10.4
 
 Provides:	gdal = %{gdal_version}-%{gdal_release}
