@@ -34,7 +34,7 @@ BuildRequires:	swig
 BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
-BuildRequires:  geos-devel = 3.3.2
+BuildRequires:  geos-devel >= 3.3.2
 Requires:	proj-devel
 Requires:	gcc-c++
 Requires:	python-devel
