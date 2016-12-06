@@ -33,8 +33,6 @@
 * limitations under the License.
 */
 
-
-
 /*
  * JPEG band
  * JPEG page compression and decompression functions, gets compiled twice
@@ -50,7 +48,7 @@ CPL_C_START
 #include <jpeglib.h>
 CPL_C_END
 
-CPL_CVSID("$Id: JPEG_band.cpp 35250 2016-08-30 04:20:18Z goatbar $");
+CPL_CVSID("$Id: JPEG_band.cpp 35897 2016-10-24 11:54:24Z goatbar $");
 
 NAMESPACE_MRF_START
 
@@ -93,14 +91,13 @@ static void errorExit(j_common_ptr cinfo)
     longjmp(psErrorStruct->setjmpBuffer, 1);
 }
 
-
 /**
-*\Brief Do nothing stub function for JPEG library, called
+*\brief Do nothing stub function for JPEG library, called
 */
 static void stub_source_dec(j_decompress_ptr /*cinfo*/) {}
 
 /**
-*\Brief: This function is supposed to do refilling of the input buffer,
+*\brief: This function is supposed to do refilling of the input buffer,
 * but as we provided everything at the beginning, if it is called, then
 * we have an error.
 */
@@ -113,7 +110,7 @@ static boolean fill_input_buffer_dec(j_decompress_ptr cinfo)
 }
 
 /**
-*\Brief: Do nothing stub function for JPEG library, not called
+*\brief: Do nothing stub function for JPEG library, not called
 */
 static void skip_input_data_dec(j_decompress_ptr /*cinfo*/, long /*l*/) {};
 
@@ -127,7 +124,7 @@ static boolean empty_output_buffer(j_compress_ptr /*cinfo*/) {
 }
 
 /*
-*\Brief Compress a JPEG page in memory
+*\brief Compress a JPEG page in memory
 *
 * It handles byte or 12 bit data, grayscale, RGB, CMYK, multispectral
 *
@@ -228,7 +225,6 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     return CE_None;
 }
 
-
 /**
 *\brief In memory decompression of JPEG file
 *
@@ -260,7 +256,8 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 
     src.next_input_byte = (JOCTET *)isrc.buffer;
     src.bytes_in_buffer = isrc.size;
-    src.term_source = src.init_source = stub_source_dec;
+    src.term_source = stub_source_dec;
+    src.init_source = stub_source_dec;
     src.skip_input_data = skip_input_data_dec;
     src.fill_input_buffer = fill_input_buffer_dec;
     src.resync_to_restart = jpeg_resync_to_restart;

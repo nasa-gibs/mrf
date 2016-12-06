@@ -7,3 +7,4 @@ upstream
 build
 dist
 update*
+*.obj

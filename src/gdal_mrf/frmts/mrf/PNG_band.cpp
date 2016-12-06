@@ -33,8 +33,6 @@
 * limitations under the License.
 */
 
-
-
 /*
  * PNG band
  * PNG page compression and decompression functions
@@ -53,7 +51,7 @@ CPL_C_START
 #endif
 CPL_C_END
 
-CPL_CVSID("$Id: PNG_band.cpp 35250 2016-08-30 04:20:18Z goatbar $");
+CPL_CVSID("$Id: PNG_band.cpp 35897 2016-10-24 11:54:24Z goatbar $");
 
 NAMESPACE_MRF_START
 
@@ -175,7 +173,7 @@ CPLErr PNG_Codec::DecompressPNG(buf_mgr &dst, buf_mgr &src)
 }
 
 /**
-*\Brief Compress a page in PNG format
+*\brief Compress a page in PNG format
 * Returns the compressed size in dst.size
 *
 */
@@ -343,7 +341,7 @@ CPLErr PNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 }
 
 /**
- * \Brief For PPNG, builds the data structures needed to write the palette
+ * \brief For PPNG, builds the data structures needed to write the palette
  * The presence of the PNGColors and PNGAlpha is used as a flag for PPNG only
  */
 

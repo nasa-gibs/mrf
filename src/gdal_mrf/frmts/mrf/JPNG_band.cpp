@@ -21,7 +21,7 @@
 #include "marfa.h"
 #include <cassert>
 
-CPL_CVSID("$Id: JPNG_band.cpp 35250 2016-08-30 04:20:18Z goatbar $");
+CPL_CVSID("$Id: JPNG_band.cpp 36455 2016-11-22 23:11:35Z rouault $");
 
 CPL_C_START
 #include <jpeglib.h>
@@ -42,7 +42,7 @@ template<int N> static bool AllAlpha(const buf_mgr &src, const ILImage &img) {
     char *stop = src.buffer + img.pageSizeBytes;
     while (s < stop && N == static_cast<unsigned char>(*s))
         s += stride;
-    return (s >= stop);
+    return s >= stop;
 }
 
 // Fully opaque
@@ -141,10 +141,9 @@ CPLErr JPNG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 {
     ILImage image(img);
-    CPLErr retval = CE_None;
 
     buf_mgr temp = { NULL, static_cast<size_t>(img.pageSizeBytes) };
-    retval = initBuffer(temp);
+    CPLErr retval = initBuffer(temp);
     if (retval != CE_None)
         return retval;
 
@@ -172,7 +171,7 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
             retval = codec.CompressPNG(dst, src);
         }
     }
-    catch (CPLErr err) {
+    catch (const CPLErr& err) {
         retval = err;
     }
 
@@ -181,7 +180,7 @@ CPLErr JPNG_Band::Compress(buf_mgr &dst, buf_mgr &src)
 }
 
 /**
-* \Brief For PPNG, builds the data structures needed to write the palette
+* \brief For PPNG, builds the data structures needed to write the palette
 * The presence of the PNGColors and PNGAlpha is used as a flag for PPNG only
 */
 
