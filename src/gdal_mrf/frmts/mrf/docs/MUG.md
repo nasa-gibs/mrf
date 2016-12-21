@@ -28,7 +28,7 @@ An MRF dataset has three components, metadata, index and data.  Usually each com
 
 - The metadata file represents the raster itself.  It is an XML formatted file, which improves readability and extensibility.  In GDAL, the XML content can be used directly instead of a file name, so the metadata file does not even need to exist as such.  The metadata file uses the .mrf extension by convention, but any other file extension can also be used.
 - The index file is concerned with the two dimensional organization of the raster tiles on a grid.  It contains a two dimensional array of structures, each structure holding the size and offset of a tile.  The index file size is proportional to the number of tiles that can reside in an MRF.  The organization of the index file depends on which MRF features are being used, but for a single raster they are stored in a top-left aligned, row major array.  The index file name is by default the same as the metadata file name with the .idx extension replacing the original .mrf.
-- The data file contains the raster tiles forming the MRF, which themselves contain the data values for each pixel.  There is no implicit order of the tiles in the data file.  The datafile is modified only by extending the file, existing content will continue to take space on disk, even if it is no longer accessible.
+-	The data file contains the raster tiles forming the MRF, which themselves contain the data values for each pixel.  There is no implicit order of the tiles in the data file.  The datafile is modified only by appending at the end of the file, all existing content will continue to take space on disk, even if it is no longer accessible by the MRF driver.
 
 Note that neither the index, nor the data file contain any information about the MRF size, organization or content.  All three files are required for accessing the MRF content, it is usually not possible to recover the data from one or two of the files.
 
@@ -300,6 +300,8 @@ gdal\_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
 
 gdaladdo –r avg TenSlice.mrf:MRF:Z3
 ```
+## LERC data MRF
+The MRF driver also recognizes and reads a lerc compressed data-file, if it is one of the supported fromats.  This type of data behaves as a read-only single tile MRF with LERC compression, without geo-reference.  This feature is mostly intended to be used by the GDAL WMS driver.  An open option, DATATYPE, can be used to change the data type when reading from LERC V1 compressed data.  The default data type for LERC V1 is byte.  LERC V2 can only be read as the same data type it was encoded as, the DATATYPE open option is ignored.
 
 ## Overwriting an MRF
 
@@ -350,13 +352,14 @@ In GDAL, a list of key-value string pairs can be used to pass various options to
 | NETBYTEORDER | FALSE | If true, for some packings, forces endianness dependent input data to big endian when writing, and back to native when reading |
 | QUALITY | 85 | An integer, 0 to 100, used to control the compression |
 | PHOTOMETRIC |   | Sets the interpretation of the bands and controls some of the compression algorithms |
+|SPACING | 0 | Reserve this many bytes before each tile data |
 | NOCOPY | False | Create an empty MRF, do not copy input |
 | UNIFORM\_SCALE |   | Flags the MRF as containing overviews, with a given numerical scale factor between successive overviews |
 | CACHEDSOURCE |   | GDAL raster reference to be cached in the caching MRF being created |
 
 
 
-# APPENDIX D, Free-Form Options
+# APPENDIX D, Free-Form Create Options
 
 In addition to the normal create options, MRF also supports a set of options that control features of only certain packing formats, or can be used to modify default behaviors.  The main difference between the create options and free-form options is that the latter are saved in the MRF metadata file and may apply when a file is read, not only when it is written.  The free form options are not part of the GDAL interface, and as such they are not checked for correctness when passed to the driver.  If a free form option doesn't seem to have the expected effect, the exact spelling should be checked, they are case sensitive.
 
@@ -375,3 +378,11 @@ When using gdal\_translate utility, the free form option syntax will be:
 | V2 | False | LERC | Uses LERC V2 compression |
 | LERC\_PREC | 0.5 for integer types0.001  for floating point | LERC | Maximum value change allowed |
 | OPTIMIZE | False | JPEG | Optimize the Huffman tables for each tile.  Always true for JPEG12 |
+
+# APPENDIX E, Open Options
+
+In GDAL 2.x API, a list of key-value string pairs can be used to pass various options to the target driver when reading.  Using the gdal_translate utility, these options are passed using the –oo Key=Value syntax.
+
+|Key|Default Value|Description|
+| --- | --- | --- |
+| DATATYPE | Byte | Sets data type for reading raw LERC V1 files|
