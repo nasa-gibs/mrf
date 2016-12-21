@@ -1,7 +1,7 @@
-%global gdal_version 2.1.1
-%global gdal_release 3%{?dist}
-%global mrf_version 1.1.0
-%global mrf_release 3%{?dist}
+%global gdal_version 2.1.2
+%global gdal_release 1%{?dist}
+%global mrf_version 1.1.1
+%global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -132,6 +132,9 @@ python setup.py install
 
 
 %changelog
+* Wed Dec 21 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.2-1
+- New upstream GDAL version
+
 * Fri Sep 2 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.1-1
 - Transition to GDAL version 2
 
