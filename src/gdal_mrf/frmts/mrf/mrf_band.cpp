@@ -49,7 +49,7 @@
 
 #include <vector>
 #include <assert.h>
-#include "../zlib/zlib.h"
+#include "zlib.h"
 
 CPL_CVSID("$Id: mrf_band.cpp 36691 2016-12-04 22:45:59Z rouault $");
 
