@@ -24,7 +24,7 @@ Contributors:  Lucian Plesea
 #include <CntZImage.h>
 #include <Lerc2.h>
 
-CPL_CVSID("$Id: LERC_band.cpp 36711 2016-12-06 00:19:18Z rouault $");
+CPL_CVSID("$Id: LERC_band.cpp 37475 2017-02-26 02:50:00Z goatbar $");
 
 USING_NAMESPACE_LERC
 
@@ -365,8 +365,8 @@ CPLErr LERC_Band::Decompress(buf_mgr &dst, buf_mgr &src)
         return CE_Failure;
     }
 
-    if (img.pagesize.x != hdInfo.nCols 
-        || img.pagesize.y != hdInfo.nRows 
+    if (img.pagesize.x != hdInfo.nCols
+        || img.pagesize.y != hdInfo.nRows
         || img.dt != GetL2DataType(hdInfo.dt)
         || dst.size < static_cast<size_t>(hdInfo.nCols * hdInfo.nRows * GDALGetDataTypeSizeBytes(img.dt))) {
         CPLError(CE_Failure, CPLE_AppDefined, "MRF: Lerc2 format");

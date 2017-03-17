@@ -51,7 +51,7 @@
 #include <assert.h>
 #include "../zlib/zlib.h"
 
-CPL_CVSID("$Id: mrf_band.cpp 36691 2016-12-04 22:45:59Z rouault $");
+CPL_CVSID("$Id: mrf_band.cpp 37663 2017-03-09 20:42:19Z lplesea $");
 
 using std::vector;
 using std::string;
@@ -244,7 +244,7 @@ GDALMRFRasterBand::~GDALMRFRasterBand()
 {
     while( !overviews.empty() )
     {
-        delete overviews[overviews.size()-1];
+        delete overviews.back();
         overviews.pop_back();
     };
 }
@@ -801,6 +801,10 @@ CPLErr GDALMRFRasterBand::IWriteBlock(int xblk, int yblk, void *buffer)
 
     CPLDebug("MRF_IB", "IWriteBlock %d,%d,0,%d, level  %d, stride %d\n", xblk, yblk,
         nBand, m_l, cstride);
+
+    // Finish the Create call
+    if (!poDS->bCrystalized)
+        poDS->Crystalize();
 
     if (1 == cstride) {     // Separate bands, we can write it as is
         // Empty page skip

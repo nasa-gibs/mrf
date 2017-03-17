@@ -18,7 +18,7 @@
 * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *
-* Copyright 2014-2015 Esri
+* Portions copyright 2014-2017 Esri
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@
 *
 ******************************************************************************
 *
-*   Since the MRF dataset and the band are so closely tied together, they should be
+*   The MRF dataset and the band are closely tied together, they should be
 *   considered a single class, or a class (dataset) with extensions (bands).
 *
 *
@@ -56,7 +56,7 @@
 #include <algorithm>
 #include <vector>
 
-CPL_CVSID("$Id: marfa_dataset.cpp 36711 2016-12-06 00:19:18Z rouault $");
+CPL_CVSID("$Id: marfa_dataset.cpp 37669 2017-03-09 23:35:51Z lplesea $");
 
 using std::vector;
 using std::string;
@@ -79,7 +79,7 @@ GDALMRFDataset::GDALMRFDataset() :
     mp_safe(FALSE),
     hasVersions(FALSE),
     verCount(0),
-    bCrystalized(FALSE), // Assume not in create mode
+    bCrystalized(TRUE), // Assume not in create mode
     spacing(0),
     poSrcDS(NULL),
     level(-1),
@@ -120,16 +120,42 @@ bool GDALMRFDataset::SetPBuffer(unsigned int sz)
     return true;
 }
 
+//
+// Called by dataset destructor or at GDAL termination, to avoid
+// closing datasets whose drivers have already been unloaded
+//
+int GDALMRFDataset::CloseDependentDatasets()
+{
+    int bHasDroppedRef = GDALPamDataset::CloseDependentDatasets();
+
+    if (poSrcDS)
+    {
+        bHasDroppedRef = TRUE;
+        GDALClose(reinterpret_cast<GDALDatasetH>(poSrcDS));
+        poSrcDS = NULL;
+    }
+
+    if (cds) {
+        bHasDroppedRef = TRUE;
+        GDALClose(reinterpret_cast<GDALDatasetH>(cds));
+        cds = NULL;
+    }
+
+    return bHasDroppedRef;
+}
+
 GDALMRFDataset::~GDALMRFDataset()
 
 {   // Make sure everything gets written
     FlushCache();
+
+    CloseDependentDatasets();
+
     if (ifp.FP)
         VSIFCloseL(ifp.FP);
     if (dfp.FP)
         VSIFCloseL(dfp.FP);
-    delete cds;
-    delete poSrcDS;
+
     delete poColorTable;
 
     // CPLFree ignores being called with NULL
@@ -178,10 +204,6 @@ CPLErr GDALMRFDataset::IRasterIO(GDALRWFlag eRWFlag, int nXOff, int nYOff, int n
         nXOff, nYOff, nXSize, nYSize, nBufXSize, nBufYSize, nBandCount,
         static_cast<int>(nPixelSpace), static_cast<int>(nLineSpace),
         static_cast<int>(nBandSpace));
-
-    // Finish the Create call
-    if (!bCrystalized)
-        Crystalize();
 
     //
     // Call the parent implementation, which splits it into bands and calls their IRasterIO
@@ -550,7 +572,7 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
             config = LERC_Band::GetMRFConfig(poOpenInfo);
 #endif
 
-    } 
+    }
     else {
         if (EQUALN(pszFileName, "<MRF_META>", 10)) // Content as file name
             config = CPLParseXMLString(pszFileName);
@@ -650,7 +672,7 @@ CPLErr GDALMRFDataset::LevelInit(const int l) {
         return CE_Failure;
     }
 
-    GDALMRFRasterBand *srcband = 
+    GDALMRFRasterBand *srcband =
         reinterpret_cast<GDALMRFRasterBand *>(cds->GetRasterBand(1)->GetOverview(l));
 
     // Copy the sizes from this level
@@ -1714,7 +1736,7 @@ GDALMRFDataset::Create(const char * pszName,
     img.nbo = FALSE;
 
     // Set the guard that tells us it needs saving before IO can take place
-    poDS->bCrystalized = 0;
+    poDS->bCrystalized = FALSE;
 
     // Process the options, anything that an MRF might take
 

@@ -44,7 +44,7 @@
 #include <zlib.h>
 #include <algorithm>
 
-CPL_CVSID("$Id: mrf_util.cpp 36682 2016-12-04 20:34:45Z rouault $");
+CPL_CVSID("$Id: mrf_util.cpp 36776 2016-12-10 11:17:47Z rouault $");
 
 // LERC is not ready for big endian hosts for now
 #if defined(LERC) && defined(WORDS_BIGENDIAN)
@@ -159,7 +159,7 @@ void ppmWrite(const char *fname, const char *data, const ILSize &sz) {
         fwrite(data,sz.x,sz.y,fp);
         break;
     default:
-        fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);
+        fprintf(stderr,"Can't write ppm file with %d bands\n",sz.c);/*ok*/
         return;
     }
     fclose(fp);

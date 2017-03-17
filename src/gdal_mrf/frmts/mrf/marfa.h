@@ -34,7 +34,7 @@
 */
 
 /******************************************************************************
- * $Id: marfa.h 36706 2016-12-05 23:23:36Z lplesea $
+ * $Id: marfa.h 37669 2017-03-09 23:35:51Z lplesea $
  *
  * Project:  Meta Raster Format
  * Purpose:  MRF structures
@@ -392,6 +392,8 @@ protected:
 
     virtual CPLErr IBuildOverviews(const char*, int, int*, int, int*,
         GDALProgressFunc, void*) override;
+
+    virtual int CloseDependentDatasets() override;
 
     // Write a tile, the infooffset is the relative position in the index file
     virtual CPLErr WriteTile(void *buff, GUIntBig infooffset, GUIntBig size = 0);
