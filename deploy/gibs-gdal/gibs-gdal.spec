@@ -88,6 +88,11 @@ install -m 755 -d %{buildroot}/usr/lib/gdalplugins
 # Remove SWIG samples
 rm -rf swig/python/samples
 
+# Remove gdal-bash-completion if it exists
+%if 0%{?centos}  == 7
+rm -rf %{buildroot}/usr/etc/bash_completion.d/gdal-bash-completion.sh
+%endif
+
 
 %clean
 rm -rf %{buildroot}
