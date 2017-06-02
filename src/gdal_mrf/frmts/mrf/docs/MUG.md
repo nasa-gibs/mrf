@@ -313,11 +313,8 @@ The MRF index is a vector of tile records.  A tile index record is sixteen bytes
 
 ```
 typedef struct {
-
- uint64_t offset;
-
- uint64_t size;
-
+    uint64_t offset;
+    uint64_t size;
 } tidx;
 ```
 
