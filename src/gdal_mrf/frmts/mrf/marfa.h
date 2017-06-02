@@ -34,7 +34,7 @@
 */
 
 /******************************************************************************
- * $Id: marfa.h 37669 2017-03-09 23:35:51Z lplesea $
+ * $Id: marfa.h 38791 2017-06-02 01:28:10Z lplesea $
  *
  * Project:  Meta Raster Format
  * Purpose:  MRF structures
@@ -357,11 +357,13 @@ protected:
 
     // Apply create options to the current dataset
     void ProcessCreateOptions(char **papszOptions);
+    void ProcessOpenOptions(char **papszOptions);
 
     // Writes the XML tree as MRF.  It does not check the content
     int WriteConfig(CPLXMLNode *);
 
     // Initializes the dataset from an MRF metadata XML
+    // Options should be papszOpenOptions, but the dataset already has a member with that name
     CPLErr Initialize(CPLXMLNode *);
 
     // Do nothing, this is not possible in an MRF
@@ -439,12 +441,15 @@ protected:
     GIntBig idxSize; // The size of each version index, or the size of the cloned index
 
     int clonedSource; // Is it a cloned source
+    int nocopy;       // Set when initializing a caching MRF
     int bypass_cache; // Do we alter disk cache
     int mp_safe;      // Not thread safe, only multiple writers
     int hasVersions;  // Does it support versions
     int verCount;     // The last version
     int bCrystalized; // Unset only during the create process
     int spacing;      // How many spare bytes before each tile data
+    int no_errors;    // Ignore read errors
+    int missing;      // set if no_errors is set and data is missing
 
     // Freeform sticky dataset options, as a list of key-value pairs
     CPLStringList optlist;
@@ -515,8 +520,11 @@ public:
     // Block not stored on disk
     CPLErr FillBlock(void *buffer);
 
+    // Same, for interleaved bands, current band goes in buffer
+    CPLErr FillBlock(int xblk, int yblk, void *buffer);
+
     // de-interlace a buffer in pixel blocks
-    CPLErr RB(int xblk, int yblk, buf_mgr src, void *buffer);
+    CPLErr ReadInterleavedBlock(int xblk, int yblk, void *buffer);
 
     const char *GetOptionValue(const char *opt, const char *def) const;
     void SetAccess(GDALAccess eA) { eAccess = eA; }

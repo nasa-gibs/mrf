@@ -44,7 +44,7 @@
 #include <zlib.h>
 #include <algorithm>
 
-CPL_CVSID("$Id: mrf_util.cpp 36776 2016-12-10 11:17:47Z rouault $");
+CPL_CVSID("$Id: mrf_util.cpp 38203 2017-05-09 18:34:27Z lplesea $");
 
 // LERC is not ready for big endian hosts for now
 #if defined(LERC) && defined(WORDS_BIGENDIAN)
@@ -632,6 +632,13 @@ void GDALRegister_mrf()
         "       <Value>YCC</Value>"
         "   </Option>\n"
         "</CreationOptionList>\n");
+
+    driver->SetMetadataItem(
+      GDAL_DMD_OPENOPTIONLIST,
+      "<OpenOptionList>"
+      "    <Option name='NOERRORS' type='boolean' description='Ignore decompression errors' default='FALSE'/>"
+      "</OpenOptionList>"
+      );
 
     driver->pfnOpen = GDALMRFDataset::Open;
     driver->pfnIdentify = GDALMRFDataset::Identify;

@@ -56,7 +56,7 @@
 #include <algorithm>
 #include <vector>
 
-CPL_CVSID("$Id: marfa_dataset.cpp 37669 2017-03-09 23:35:51Z lplesea $");
+CPL_CVSID("$Id: marfa_dataset.cpp 38791 2017-06-02 01:28:10Z lplesea $");
 
 using std::vector;
 using std::string;
@@ -74,13 +74,15 @@ GDALMRFDataset::GDALMRFDataset() :
     zslice(0),
     idxSize(0),
     clonedSource(FALSE),
-    bypass_cache(
-        BOOLTEST(CPLGetConfigOption("MRF_BYPASSCACHING", "FALSE"))),
+    nocopy(FALSE),
+    bypass_cache(BOOLTEST(CPLGetConfigOption("MRF_BYPASSCACHING", "FALSE"))),
     mp_safe(FALSE),
     hasVersions(FALSE),
     verCount(0),
     bCrystalized(TRUE), // Assume not in create mode
     spacing(0),
+    no_errors(0),
+    missing(0),
     poSrcDS(NULL),
     level(-1),
     cds(NULL),
@@ -468,6 +470,9 @@ void GDALMRFDataset::SetMaxValue(const char *pszVal) {
 int GDALMRFDataset::Identify(GDALOpenInfo *poOpenInfo)
 
 {
+  if (STARTS_WITH(poOpenInfo->pszFilename, "<MRF_META>"))
+        return TRUE;
+
     CPLString fn(poOpenInfo->pszFilename);
     if (fn.find(":MRF:") != string::npos)
         return TRUE;
@@ -563,7 +568,6 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
 
     // Different ways to open an MRF
     if (poOpenInfo->nHeaderBytes >= 10) {
-
         const char *pszHeader = reinterpret_cast<char *>(poOpenInfo->pabyHeader);
         if (STARTS_WITH(pszHeader, "<MRF_META>")) // Regular file name
             config = CPLParseXMLFile(pszFileName);
@@ -615,6 +619,9 @@ GDALDataset *GDALMRFDataset::Open(GDALOpenInfo *poOpenInfo)
     {
         ret = ds->Initialize(config);
     }
+
+    if (ret == CE_None)
+        ds->ProcessOpenOptions(poOpenInfo->papszOpenOptions);
 
     CPLDestroyXMLNode(config);
 
@@ -966,6 +973,10 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     if (ifp.FP != NULL)
         return ifp.FP;
 
+    // If missing is set, we already checked, there is no index
+    if (missing)
+        return NULL;
+
     // If name starts with '(' it is not a real file name
     if (current.idxfname[0] == '(')
         return NULL;
@@ -979,6 +990,12 @@ VSILFILE *GDALMRFDataset::IdxFP() {
     }
 
     ifp.FP = VSIFOpenL(current.idxfname, mode);
+
+    // If file didn't open for reading and no_errors is set, just return null and make a note
+    if (ifp.FP == NULL && eAccess == GA_ReadOnly && no_errors) {
+        missing = 1;
+        return NULL;
+    }
 
     // need to create the index file
     if (ifp.FP == NULL && !bCrystalized && (eAccess == GA_Update || !source.empty())) {
@@ -1620,6 +1637,14 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     return poDS;
 }
 
+
+// Apply create options to the current dataset, only valid during creation
+void GDALMRFDataset::ProcessOpenOptions(char **papszOptions)
+{
+    CPLStringList opt(papszOptions, FALSE);
+    no_errors = opt.FetchBoolean("NOERRORS", FALSE);
+}
+
 // Apply create options to the current dataset, only valid during creation
 void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
 {
@@ -1653,7 +1678,10 @@ void GDALMRFDataset::ProcessCreateOptions(char **papszOptions)
     img.nbo = opt.FetchBoolean("NETBYTEORDER", FALSE);
 
     val = opt.FetchNameValue("CACHEDSOURCE");
-    if (val) source = val;
+    if (val) {
+        source = val;
+        nocopy = opt.FetchBoolean("NOCOPY", FALSE);
+    }
 
     val = opt.FetchNameValue("UNIFORM_SCALE");
     if (val) scale = atoi(val);
@@ -1803,9 +1831,8 @@ void GDALMRFDataset::Crystalize()
     CPLXMLNode *config = BuildConfig();
     WriteConfig(config);
     CPLDestroyXMLNode(config);
-    if (!IdxFP() || !DataFP())
-        throw CPLString().Printf("MRF: Can't create file %s", strerror(errno));
-
+    if (!nocopy && (!IdxFP() || !DataFP()))
+        throw CPLString().Printf("MRF: %s", strerror(errno));
     bCrystalized = TRUE;
 }
 
@@ -2010,6 +2037,10 @@ CPLErr GDALMRFDataset::ReadTileIdx(ILIdx &tinfo, const ILSize &pos, const ILImag
 
 {
     VSILFILE *l_ifp = IdxFP();
+
+    // Initialize the tinfo structure, in case the files are missing
+    if (missing)
+      return CE_None;
 
     GIntBig offset = bias + IdxOffset(pos, img);
     if (l_ifp == NULL && img.comp == IL_NONE ) {
