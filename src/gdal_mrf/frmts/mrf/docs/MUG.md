@@ -341,6 +341,7 @@ In GDAL, a list of key-value string pairs can be used to pass various options to
 
 | Key | Default Value | Description |
 | --- | --- | --- |
+| APPEND_SUBDATASET| False | Avoid overwriting the .mrf metadata when insterting new content |
 | BLOCKSIZE | 512 | The tile size, in both X and Y |
 | BLOCKXSIZE | 512 | Horizontal tile size |
 | BLOCKYSIZE | 512 | Vertical tile size |
