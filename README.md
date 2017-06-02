@@ -12,7 +12,9 @@ For more information, visit https://earthdata.nasa.gov/gibs
 
 ## Preconditions
 
-The MRF driver for GDAL requires the use of GDAL (version 1.11.4 recommended).  GDAL is included with the RPM release.
+The MRF driver is included and maintained within the standard GDAL source since GDAL version 2.1.  This repository usually lags the GDAL trunk.  It is maintained in support of the NASA GIBS and as a source of MRF documentation.
+
+The MRF driver for GDAL requires the use of GDAL (version 2.2 or newer recommended).  GDAL is included with the RPM release.
 
 ## RPM Installation
 
