@@ -1,8 +1,6 @@
 # Meta Raster Format (MRF) User Guide
 
-For MRF Version 1.x
-
-# MRF: Definition, Context and Introduction
+## MRF: Definition, Context and Introduction
 
 MRF, short for Meta Raster Format, is a technology that combines raster storage with cloud computing.  While the main target domain is cloud GIS, the MRF technology could also be used in other areas, such as medical imaging and scientific data processing.
 
@@ -369,13 +367,13 @@ When using gdal\_translate utility, the free form option syntax will be:
 
 `-co OPTIONS="Key1=Value1 Key2=Value2 …"`
 
-|Key|Default Value|Format|Description|
+|Key|Default Value|Tile Format|Description|
 | --- | --- | --- | --- |
 | DEFLATE | False | Most | Apply zlib DEFLATE as a final packing stage |
 | GZ | False | DEFLATE | GZIP headers |
 | RAWZ | False | DEFLATE | No headers |
 | Z\_STRATEGY |   | PNG, DEFLATE | DEFLATE algorithmic choiceZ\_HUFFMAN\_ONLY, Z\_FILTERED, Z\_RLE, Z\_FIXED |
-| V2 | False | LERC | Uses LERC V2 compression |
+| V1 | False | LERC | Uses LERC V1 compression |
 | LERC\_PREC | 0.5 for integer types0.001  for floating point | LERC | Maximum value change allowed |
 | OPTIMIZE | False | JPEG | Optimize the Huffman tables for each tile.  Always true for JPEG12 |
 
@@ -386,3 +384,4 @@ In GDAL 2.x API, a list of key-value string pairs can be used to pass various op
 |Key|Default Value|Description|
 | --- | --- | --- |
 | DATATYPE | Byte | Sets data type for reading raw LERC V1 files|
+| NOERRORS | False | Changes most reading errors into warnings |
