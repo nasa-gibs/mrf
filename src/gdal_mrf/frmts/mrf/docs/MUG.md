@@ -32,7 +32,7 @@ Note that neither the index, nor the data file contain any information about the
 
 # Referring to an MRF
 
-The normal reference to a specific MRF raster is to use to the metadata file name.  The metadata file can have any extension, the file format detection in GDAL is done by matching the first ten characters in the file, which have the value `"<MRF\_META>"`.  For example this command will work if the test.mrf is an MRF metadata file.
+The normal reference to a specific MRF raster is to use to the metadata file name.  The metadata file can have any extension, the file format detection in GDAL is done by matching the first ten characters in the file, which have the value `"<MRF_META>"`.  For example this command will work if the test.mrf is an MRF metadata file.
 
 `gdalinfo test.mrf`
 
@@ -95,7 +95,7 @@ As the name suggest, the RAW format directly stores the tile array, in a row maj
 DEFLATE is a generic compression algorithm, implemented in the open source zlib library.  In MRF it can be used in two ways, as a stand-alone tile packing mechanism and also as a second packing step to other compression formats.  The second meaning is activated by adding DEFLATE:on to the free form list OPTIONS.  Raw compression with the DEFLATE option is equivalent to the DEFLATE compression format, even though the content of the metadata file is different.  These two commands should generate MRFs with identical size data files, although the tile order may differ.
 
 ```
-gdal\_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on" input.tif raw\_and\_deflate.mrf
+gdal\_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 
 gdal\_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
 ```
@@ -106,11 +106,11 @@ The DEFLATE compression will generate zlib compatible tile headers by default.  
 
 The following command will generate an MRF in which every tile is a gzip stream:
 
-`gdal\_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on GZ:on" input.tif gzipped.mrf`
+`gdal_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on GZ:on" input.tif gzipped.mrf`
 
 Which is equivalent to:
 
-`gdal\_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on" input.tif gzipped.mrf`
+`gdal_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on" input.tif gzipped.mrf`
 
 The strategy used for compression by zlib can also be controlled.  It only affects the algorithm used during the compression.  The generated stream can always be decompressed.  For exact details on what the strategy flags refer to the zlib documentation.  The free form option is Z\_STRATEGY, and the valid values are:
 
@@ -134,7 +134,7 @@ The QUALITY setting controls the DEFLATE stage of the PNG, with the same meaning
 
 Example of gdal\_translate options for PNG
 
-`-of MRF –co COMPRESS=PNG –co OPTIONS="Z\_STRATEGY=Z\_RLE" –co QUALITY=50`
+`-of MRF –co COMPRESS=PNG –co OPTIONS="Z_STRATEGY=Z_RLE" –co QUALITY=50`
 
 ## LERC Compression
 
@@ -146,15 +146,15 @@ For integer types the default LERC\_PREC value is 0.5, corresponding to lossless
 
 To set a custom LERC precision value, use the free form MRF OPTIONS mechanism, the option name being "OPTIONS".  To set the LERC precision for a new MRF, use the create option like this:
 
-`-co OPTIONS="LERC\_PREC=0.005"`
+`-co OPTIONS="LERC_PREC=0.005"`
 
 To use LERC instead of the default LERC2, add V1=ON to the options string, like this:
 
-`-co OPTIONS="LERC\_PREC=0.01 V1=ON"`
+`-co OPTIONS="LERC_PREC=0.01 V1=ON"`
 
 MRF tiles compressed with LERC can be further encoded with zlib (DEFLATE), which sometimes results in better compression at a slight expense of speed.  DEFLATE speed is asymmetric, decompression being faster than compression, so it does not affect read speeds as much as it does writes.  To add DEFLATE to LERC, add "DEFLATE:ON" to the list of options.  This example sets both the LERC precision and the extra DEFLATE option:
 
-`-co OPTIONS="LERC\_PREC=0.01 DEFLATE=ON"`
+`-co OPTIONS="LERC_PREC=0.01 DEFLATE=ON"`
 
 Once set, the LERC\_PREC value will be used for all subsequent writes into the respective MRF.
 
@@ -198,7 +198,7 @@ The MRF GDAL driver only supports the CreateCopy, so the simplest way to instant
 
 An example of creating a caching MRF:
 
-`gdal\_translate –of MRF –co **CACHEDSOURCE= H12003\_MB\_1m\_MLLW\_14of16.tif** \data\LERC\_test\H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\tst.mrf`
+`gdal_translate –of MRF –co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 In the command above, the presence of the CACHEDSOURCE option flags the file as a caching MRF and gets stored in the MRF metadata file.  The value is the file name without the absolute path, which means that the caching mrf metadata file will always reside in the same location as the parent dataset file.
 
@@ -208,7 +208,7 @@ The command above will create the caching MRF metadata, data and index files and
 
 To initialize a caching MRF but not store any data in it, use the Boolean create option **NOCOPY** = **True**.  For example:
 
-`gdal\_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC\_PREC=0.01" -co **NOCOPY=True** -co CACHEDSOURCE=H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC=0.01" -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 The combined use of the CACHEDSOURCE and the NOCOPY options should be the most common use.  Normally, the source raster as used on the gdal\_translate command line and the value of the CACHEDSOURCE are identical.  The source raster is used as the source of data and metadata during the gdal\_translate execution.   The CACHEDSOURCE raster is used later, when reading from the caching MRF, if the data is not present.  While this syntax seems clumsy, it is required due to the structure of gdal\_translate, and it also offers the possibility to initialize a caching MRF using a local file while caching a different, possibly remote raster.
 
@@ -218,7 +218,7 @@ The example above, in addition to the precedent one, sets the caching MRF compre
 
 The MRF (caching or normal) can be created with the full set of internal overlays.  This is especially useful when creating a caching MRF.
 
-`gdal\_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC\_PREC:0.01" -co **UNIFORM\_ SCALE=2** -co NOCOPY=True -co CACHEDSOURCE=H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC:0.01" -co UNIFORM_ SCALE=2 -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 Note that the overlays will be written with data read at the corresponding scale from the parent dataset, thus they might be different from the ones that could be created via gdaladdo command.  However, gdaladdo will still work on the caching MRF, especially if the base level is fully populated already.  Exercise this option with caution, the current implementation of the overlay building reads the destination tile before writing to it.  In the case of a caching MRF, this will result in fetching the tile from the parent source, storing a copy in the caching MRF, then reading the higher resolution source from the MRF, scaling by 2 and writing the tile again into the caching MRF.
 
@@ -285,7 +285,7 @@ It is also possible to select a specific overview of a specific Z index, for exa
 
 To create an MRF with the Z size different from one, the ZSIZE create option has to be set at creation time.  This gdal\_translate command will create an MRF with the Z size of 10, getting the size and other parameters from the source.tif file and leaving the output MRF empty.
 
-`gdal\_translate –of MRF –co ZSIZE=10 –co NOCOPY=true source.tif TenSlice.mrf`
+`gdal_translate –of MRF –co ZSIZE=10 –co NOCOPY=true source.tif TenSlice.mrf`
 
 If the NOCOPY parameter is not set, the data from source.tif will also be copied in the slice index zero of the TenSlice.mrf.  The UNIFORM\_SCALE parameter can also be used, reserving space but not populating the overviews.  Using the Z index selection names, gdaladdo can also be used to reserve the index space for the overviews and populate them, for any valid Z index value.
 
@@ -294,7 +294,7 @@ Once the 3rd dimension MRF exists, the full resolution image at a Z index differ
 The following commands will copy a source3.tif into the z index 3 of the mrf created above, followed by populating the overviews for the slice:
 
 ```
-gdal\_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
+gdal_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
 
 gdaladdo –r avg TenSlice.mrf:MRF:Z3
 ```
@@ -314,9 +314,9 @@ The MRF index is a vector of tile records.  A tile index record is sixteen bytes
 ```
 typedef struct {
 
- uint16\_t offset;
+ uint64_t offset;
 
- uint16\_t size;
+ uint64_t size;
 
 } tidx;
 ```
