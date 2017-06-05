@@ -1,6 +1,6 @@
-%global gdal_version 2.1.2
+%global gdal_version 2.1.3
 %global gdal_release 1%{?dist}
-%global mrf_version 1.1.1
+%global mrf_version 1.1.2
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -88,6 +88,11 @@ install -m 755 -d %{buildroot}/usr/lib/gdalplugins
 # Remove SWIG samples
 rm -rf swig/python/samples
 
+# Remove gdal-bash-completion if it exists
+%if 0%{?centos}  == 7
+rm -rf %{buildroot}/usr/etc/bash_completion.d/gdal-bash-completion.sh
+%endif
+
 
 %clean
 rm -rf %{buildroot}
@@ -132,6 +137,9 @@ python setup.py install
 
 
 %changelog
+* Wed Apr 12 2017 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.3-1
+- New upstream GDAL version
+
 * Wed Dec 21 2016 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.2-1
 - New upstream GDAL version
 

@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-GDAL_VERSION=2.1.2
+GDAL_VERSION=2.1.3
 GDAL_ARTIFACT=gdal-$(GDAL_VERSION).tar.gz
 GDAL_HOME=http://download.osgeo.org/gdal
 GDAL_URL=$(GDAL_HOME)/$(GDAL_VERSION)/$(GDAL_ARTIFACT)
@@ -74,6 +74,7 @@ build/numpy/VERSION:
 
 mrf-overlay:
 	cp -r src/gdal_mrf/* build/gdal
+	sed -i 's/CPPFLAGS)/CPPFLAGS) -fPIC/' build/gdal/frmts/mrf/GNUmakefile
 
 gdal-compile:
 	( cd build/gdal ; ./configure \
