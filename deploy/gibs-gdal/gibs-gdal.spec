@@ -173,7 +173,7 @@ python setup.py install
 * Tue Feb 18 2014 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 1.10.1-3
 - Changed MRF version to 0.2.4 to be consistent with project release
 
-* Thu Sep 4 2013 Mike McGann <mike.mcgann@nasa.gov> - 1.10.1-2
+* Thu Sep 5 2013 Mike McGann <mike.mcgann@nasa.gov> - 1.10.1-2
 - Rebuild with PostgreSQL 9.2 and Expat support
 - Added correct Obsoletes/Provides for devel package
 
@@ -187,7 +187,7 @@ python setup.py install
 * Wed Jul 24 2013 Mike McGann <mike.mcgann@nasa.gov> - 1.10.0-6
 - Corrections for mrf_insert from Lucian.
 
-* Wed Jul 11 2013 Mike McGann <mike.mcgann@nasa.gov> - 1.10.0-5
+* Thu Jul 11 2013 Mike McGann <mike.mcgann@nasa.gov> - 1.10.0-5
 - Link failure discovered in chroot build. Back to dynamic linking of
   proj with a dependency on the devel package.
 
