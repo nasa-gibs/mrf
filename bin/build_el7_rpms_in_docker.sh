@@ -9,7 +9,7 @@ cat > dist/build_rpms.sh <<EOS
 
 set -evx
 
-yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
+yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 sed -i \
   -e 's/^mirrorlist=/#mirrorlist=/' \
   -e 's/^#baseurl=/baseurl=/' \
@@ -32,8 +32,8 @@ rsync -av --exclude .git /source/ /build/
   make gdal-rpm
 )
 
-cp /build/dist/gibs-gdal-*.rpm /artifacts/
-chown "${DOCKER_UID}:${DOCKER_GID}" /artifacts/gibs-gdal-*.rpm
+cp /build/dist/gibs-gdal-*.rpm /dist/
+chown "${DOCKER_UID}:${DOCKER_GID}" /dist/gibs-gdal-*.rpm
 EOS
 chmod +x dist/build_rpms.sh
 
@@ -43,6 +43,6 @@ docker run \
   --env "DOCKER_GID=$(id -g)" \
   --volume "$(pwd):/source:ro" \
   --volume "$(pwd)/dist:/dist" \
-  centos:6 /dist/build_rpms.sh
+  centos:7 /dist/build_rpms.sh
 
 rm dist/build_rpms.sh
