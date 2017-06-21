@@ -8,3 +8,4 @@ build
 dist
 update*
 *.obj
+/dist/
