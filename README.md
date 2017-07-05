@@ -36,7 +36,7 @@ Alternatively: The GDAL plugin for MRF is available if using the included versio
 sudo yum -y install gibs-gdal-plugin-mrf-*
 ```
 
-## Quick Build Instructions (using Docker)
+## RPM Quick Build Instructions (using Docker)
 
 These instructions assume that Docker is installed and running.  On a Mac, you
 can easily install Docker using [Docker Community Edition for Mac](https://store.docker.com/editions/community/docker-ce-desktop-mac).
@@ -164,6 +164,18 @@ Format Details:
     <Value>YCC</Value>
   </Option>
 </CreationOptionList>
+```
+
+## Building a gibs-gdal Docker image
+
+There is a script named `bin/build_el7_docker_image.sh` that will create a Docker
+image with the gibs-gdal images installed.  It assumes that the RPMs have already
+been built and are in the `dist` directory.  The image is based on the publicly
+available "centos:7" image.  The script takes an optional tag name to be applied
+to the created image.
+
+```
+./bin/build_el7_docker_image.sh gibs-gdal:abc123
 ```
 
 ## Sample Usage
