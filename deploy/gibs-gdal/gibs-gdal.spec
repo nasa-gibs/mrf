@@ -1,4 +1,4 @@
-%global gdal_version 2.1.3
+%global gdal_version 2.1.4
 %global gdal_release 1%{?dist}
 %global mrf_version 1.1.2
 %global mrf_release 1%{?dist}
@@ -137,6 +137,9 @@ python setup.py install
 
 
 %changelog
+* Thu Jul 6 2017 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.4-1
+- New upstream GDAL version
+
 * Wed Apr 12 2017 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.3-1
 - New upstream GDAL version
 
