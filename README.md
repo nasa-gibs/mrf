@@ -36,8 +36,21 @@ Alternatively: The GDAL plugin for MRF is available if using the included versio
 sudo yum -y install gibs-gdal-plugin-mrf-*
 ```
 
+## RPM Quick Build Instructions (using Docker)
+
+These instructions assume that Docker is installed and running.  On a Mac, you
+can easily install Docker using [Docker Community Edition for Mac](https://store.docker.com/editions/community/docker-ce-desktop-mac).
+
+Once Docker is installed and running, the Enterprise Linux 7 RPMs can be built with:
+
+```
+./bin/build_el7_rpms_in_docker.sh
+```
+
+The generated RPMs will be written to the `dist` directory.
+
 ## Installing from Source
- 
+
 The MRF driver links with the rest of GDAL and has to be compiled with the same compiler, libraries, and options by which GDAL was compiled.
 
 Download GDAL source:
@@ -52,11 +65,11 @@ mv gdal1114.zip src/
 cd src/
 unzip gdal1114.zip
 ```
- 
+
 Go to the GDAL source directory:
 ```
 cd gdal-1.11.4/
-``` 
+```
 
 Configure GDAL source install:
 ```
@@ -89,7 +102,7 @@ Go to the mrf driver source directory:
 ```
 cd <gdal source directory>/frmts/mrf
 ```
- 
+
 Make the driver:
 ```
 make clean
@@ -101,13 +114,13 @@ Install the driver:
 mkdir -p <gdal install location>/lib/gdalplugins
 cp gdal_mrf.so.1 <gdal install location>/lib/gdalplugins
 ```
- 
+
 Create soft link:
 ```
 cd <gdal install location>/lib/gdalplugins
 ln -s gdal_mrf.so.1 gdal_mrf.so
 ```
- 
+
 Verify that the MRF driver is recognized by GDAL:
 ```
 gdalinfo --format MRF
@@ -151,6 +164,18 @@ Format Details:
     <Value>YCC</Value>
   </Option>
 </CreationOptionList>
+```
+
+## Building a gibs-gdal Docker image
+
+There is a script named `bin/build_el7_docker_image.sh` that will create a Docker
+image with the gibs-gdal images installed.  It assumes that the RPMs have already
+been built and are in the `dist` directory.  The image is based on the publicly
+available "centos:7" image.  The script takes an optional tag name to be applied
+to the created image.
+
+```
+./bin/build_el7_docker_image.sh gibs-gdal:abc123
 ```
 
 ## Sample Usage

@@ -8,3 +8,5 @@ build
 dist
 update*
 *.obj
+/dist/
+/docker/el7/rpms/
