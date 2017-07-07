@@ -37,7 +37,7 @@ def index_name(mrf_name):
 def write_idx(didx, lidx):
     'Write a chunk of the index file or just extend the file'
     if sum(i[1] for i in lidx):
-        didx.write(struct.pack(">{0}Q".format(len(lidx)), *sum(lidx, ())))
+        didx.write(struct.pack(">{0}Q".format(2 * len(lidx)), *sum(lidx, ())))
     else:
         didx.seek(16 * len(lidx), os.SEEK_CUR)
 
