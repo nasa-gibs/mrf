@@ -19,8 +19,7 @@
 # Author:      luci6974
 #
 # Created:     30/07/2015
-# Copyright:   (c) luci6974 2015
-# Licence:     <your licence>
+# Copyright:   (c) luci6974 2015-2017
 #-------------------------------------------------------------------------------
 
 '''Builds a GDAL vrt that visualizes the size of tiles in an MRF index'''
