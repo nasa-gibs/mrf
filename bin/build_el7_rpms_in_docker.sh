@@ -20,6 +20,7 @@ yum install -y \
 
 mkdir -p /build
 rsync -av --exclude .git /source/ /build/
+chown -R root:root /build
 
 (
   set -evx
