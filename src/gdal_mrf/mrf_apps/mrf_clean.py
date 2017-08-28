@@ -33,14 +33,14 @@ def index_name(mrf_name):
     bname, ext = os.path.splitext(mrf_name)
     return bname + os.extsep + "idx"
 
-
-def write_idx(didx, lidx):
-    'Write a chunk of the index file or just extend the file'
-    if sum(i[1] for i in lidx):
-        didx.write(struct.pack(">{0}Q".format(2 * len(lidx)), *sum(lidx, ())))
+def write_idx(f, l):
+    'Write a chunk of the index from list l to file f'
+    if sum(i[1] for i in l):
+        f.write(struct.pack(">{0}Q".format(2 * len(l)), *sum(l, [])))
     else:
-        didx.seek(16 * len(lidx), os.SEEK_CUR)
+        f.seek(16 * len(l), os.SEEK_CUR)
 
+# empty_file content is used to initialize the data file
 def main(source, destination, empty_file = None):
     '''Copies the active tile from a source to a destination MRF'''
     sidx = open(index_name(source), "rb")
@@ -48,14 +48,12 @@ def main(source, destination, empty_file = None):
     # Create the output files
     didx = open(index_name(destination),"wb")
     dfile = open(destination, "wb")
-    doffset = dfile.tell()
     if empty_file:
         dfile.write(open(empty_file,"rb").read())
-        doffset = dfile.tell()
+    doffset = dfile.tell()
 
-    lidx = []
+    lidx = [] # buffer index records in a list, to avoid writing zero blocks
     # Copy every tile in sequence
-    # Not the fastest, but the simplest
     for tile in iter(lambda: sidx.read(16), ''):
         offset, size = struct.unpack(">2Q", tile)
         if size:
@@ -77,4 +75,3 @@ def main(source, destination, empty_file = None):
 
 if __name__ == '__main__':
     main(*sys.argv[1:])
-
