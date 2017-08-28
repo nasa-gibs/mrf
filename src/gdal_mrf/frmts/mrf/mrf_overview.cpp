@@ -28,7 +28,7 @@
 #include "marfa.h"
 #include <vector>
 
-CPL_CVSID("$Id: mrf_overview.cpp 35929 2016-10-25 16:09:00Z goatbar $");
+CPL_CVSID("$Id: mrf_overview.cpp 39343 2017-06-27 20:57:02Z rouault $")
 
 using std::vector;
 

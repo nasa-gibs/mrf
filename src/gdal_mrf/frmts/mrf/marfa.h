@@ -34,7 +34,7 @@
 */
 
 /******************************************************************************
- * $Id: marfa.h 38791 2017-06-02 01:28:10Z lplesea $
+ * $Id: marfa.h 39340 2017-06-27 19:59:42Z rouault $
  *
  * Project:  Meta Raster Format
  * Purpose:  MRF structures
@@ -81,6 +81,8 @@ NAMESPACE_MRF_START
 // Z_FIXED : Static huffman, faster decoder
 //
 #define ZFLAG_SMASK 0x1c0
+
+#define PADDING_BYTES 3
 
 // Force LERC to be included, normally off, detected in the makefile
 // #define LERC
@@ -327,14 +329,14 @@ public:
 
     virtual char **GetFileList() override;
 
-    void SetColorTable(GDALColorTable *pct) { poColorTable = pct; };
-    const GDALColorTable *GetColorTable() { return poColorTable; };
+    void SetColorTable(GDALColorTable *pct) { poColorTable = pct; }
+    const GDALColorTable *GetColorTable() { return poColorTable; }
     void SetNoDataValue(const char*);
     void SetMinValue(const char*);
     void SetMaxValue(const char*);
     CPLErr SetVersion(int version);
 
-    const CPLString GetFname() { return fname; };
+    const CPLString GetFname() { return fname; }
     // Patches a region of all the next overview, argument counts are in blocks
     virtual CPLErr PatchOverview(int BlockX, int BlockY, int Width, int Height,
         int srcLevel = 0, int recursive = false, int sampling_mode = SAMPLING_Avg);
@@ -411,11 +413,11 @@ protected:
     GDALRWFlag IdxMode() {
         if (!ifp.FP) IdxFP();
         return ifp.acc;
-    };
+    }
     GDALRWFlag DataMode() {
         if (!dfp.FP) DataFP();
         return dfp.acc;
-    };
+    }
     GDALDataset *GetSrcDS();
 
     /*
@@ -586,7 +588,7 @@ protected:
 class PNG_Codec {
 public:
     explicit PNG_Codec(const ILImage &image) : img(image),
-        PNGColors(NULL), PNGAlpha(NULL), PalSize(0), TransSize(0), deflate_flags(0) {};
+        PNGColors(NULL), PNGAlpha(NULL), PalSize(0), TransSize(0), deflate_flags(0) {}
 
     virtual ~PNG_Codec() {
         CPLFree(PNGColors);
@@ -624,7 +626,7 @@ protected:
 
 class JPEG_Codec {
 public:
-    explicit JPEG_Codec(const ILImage &image) : img(image), sameres(FALSE), rgb(FALSE), optimize(false) {};
+    explicit JPEG_Codec(const ILImage &image) : img(image), sameres(FALSE), rgb(FALSE), optimize(false) {}
 
     CPLErr CompressJPEG(buf_mgr &dst, buf_mgr &src);
     CPLErr DecompressJPEG(buf_mgr &dst, buf_mgr &src);
@@ -650,7 +652,7 @@ class JPEG_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
     JPEG_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level);
-    virtual ~JPEG_Band() {};
+    virtual ~JPEG_Band() {}
 
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src) override;
@@ -678,8 +680,8 @@ class Raw_Band : public GDALMRFRasterBand {
     friend class GDALMRFDataset;
 public:
     Raw_Band(GDALMRFDataset *pDS, const ILImage &image, int b, int level) :
-        GDALMRFRasterBand(pDS, image, b, int(level)) {};
-    virtual ~Raw_Band() {};
+        GDALMRFRasterBand(pDS, image, b, int(level)) {}
+    virtual ~Raw_Band() {}
 protected:
     virtual CPLErr Decompress(buf_mgr &dst, buf_mgr &src) override;
     virtual CPLErr Compress(buf_mgr &dst, buf_mgr &src) override;

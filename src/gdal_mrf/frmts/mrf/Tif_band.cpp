@@ -45,7 +45,7 @@
 
 #include "marfa.h"
 
-CPL_CVSID("$Id: Tif_band.cpp 35250 2016-08-30 04:20:18Z goatbar $");
+CPL_CVSID("$Id: Tif_band.cpp 39353 2017-06-27 22:24:50Z rouault $")
 
 NAMESPACE_MRF_START
 
@@ -154,6 +154,24 @@ static CPLErr DecompressTIF(buf_mgr &dst, buf_mgr &src, const ILImage &img)
         VSIUnlink(fname);
         return CE_Failure;
     }
+    int nBlockXSize, nBlockYSize;
+    poTiff->GetRasterBand(1)->GetBlockSize(&nBlockXSize, &nBlockYSize);
+    const GDALDataType eGTiffDT = poTiff->GetRasterBand(1)->GetRasterDataType();
+    const int nDTSize = GDALGetDataTypeSizeBytes(eGTiffDT);
+    if( poTiff->GetRasterXSize() != img.pagesize.x ||
+        poTiff->GetRasterYSize() != img.pagesize.y ||
+        poTiff->GetRasterCount() != img.pagesize.c ||
+        nBlockXSize != img.pagesize.x ||
+        nBlockYSize != img.pagesize.y ||
+        img.dt != eGTiffDT ||
+        static_cast<vsi_l_offset>(nBlockXSize) * nBlockYSize * nDTSize * img.pagesize.c != dst.size )
+    {
+        CPLError(CE_Failure,CPLE_AppDefined,
+            "MRF: TIFF inconsistant with MRF parameters");
+        GDALClose(poTiff);
+        VSIUnlink(fname);
+        return CE_Failure;
+    }
 
     CPLErr ret;
     // Bypass the GDAL caching
@@ -204,11 +222,11 @@ TIF_Band::TIF_Band( GDALMRFDataset *pDS, const ILImage &image,
     if (q >2) q-=2;
     papszOptions = CSLAddNameValue(papszOptions, "ZLEVEL",
                                    CPLString().Printf("%d", q));
-};
+}
 
 TIF_Band::~TIF_Band()
 {
     CSLDestroy(papszOptions);
-};
+}
 
 NAMESPACE_MRF_END

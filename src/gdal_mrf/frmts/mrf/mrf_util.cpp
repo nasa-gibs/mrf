@@ -44,7 +44,7 @@
 #include <zlib.h>
 #include <algorithm>
 
-CPL_CVSID("$Id: mrf_util.cpp 38203 2017-05-09 18:34:27Z lplesea $");
+CPL_CVSID("$Id: mrf_util.cpp 39355 2017-06-27 22:33:39Z rouault $")
 
 // LERC is not ready for big endian hosts for now
 #if defined(LERC) && defined(WORDS_BIGENDIAN)
@@ -503,7 +503,7 @@ int CheckFileSize(const char *fname, GIntBig sz, GDALAccess eAccess) {
 #endif
     VSIFCloseL(ifp);
     return !ret;
-};
+}
 
 // Similar to compress2() but with flags to control zlib features
 // Returns true if it worked

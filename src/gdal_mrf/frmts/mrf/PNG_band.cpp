@@ -51,7 +51,7 @@ CPL_C_START
 #endif
 CPL_C_END
 
-CPL_CVSID("$Id: PNG_band.cpp 35897 2016-10-24 11:54:24Z goatbar $");
+CPL_CVSID("$Id: PNG_band.cpp 39343 2017-06-27 20:57:02Z rouault $")
 
 NAMESPACE_MRF_START
 

@@ -56,7 +56,7 @@
 #include <algorithm>
 #include <vector>
 
-CPL_CVSID("$Id: marfa_dataset.cpp 38842 2017-06-04 00:20:03Z rouault $");
+CPL_CVSID("$Id: marfa_dataset.cpp 39768 2017-08-07 11:34:09Z rouault $")
 
 using std::vector;
 using std::string;
@@ -749,6 +749,7 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
 
     // Basic checks
     if (!node || image.size.x < 1 || image.size.y < 1 ||
+        image.size.z < 0 || image.size.c < 0 ||
         !GDALCheckBandCount(image.size.c, FALSE)) {
         CPLError(CE_Failure, CPLE_AppDefined, "Raster size missing or invalid");
         return CE_Failure;
@@ -863,6 +864,16 @@ static CPLErr Init_Raster(ILImage &image, GDALMRFDataset *ds, CPLXMLNode *defima
     }
 
     // Order of increment
+    if( image.pagesize.c != image.size.c && image.pagesize.c != 1 )
+    {
+        // Fixes heap buffer overflow in GDALMRFRasterBand::ReadInterleavedBlock()
+        // See https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=2884
+        CPLError(CE_Failure, CPLE_NotSupported,
+                 "GDAL MRF: image.pagesize.c = %d and image.size.c = %d",
+                 image.pagesize.c, image.size.c);
+        return CE_Failure;
+    }
+
     image.order = OrderToken(CPLGetXMLValue(defimage, "Order",
         (image.pagesize.c != image.size.c) ? "BAND" : "PIXEL"));
     if (image.order == IL_ERR_ORD) {
@@ -1137,7 +1148,7 @@ io_error:
     CPLError(CE_Failure, CPLE_FileIO,
         "GDAL MRF: %s : %s", strerror(errno), current.datfname.c_str());
     return NULL;
-};
+}
 
 // Builds an XML tree from the current MRF.  If written to a file it becomes an MRF
 CPLXMLNode * GDALMRFDataset::BuildConfig()
@@ -1606,7 +1617,9 @@ GDALDataset *GDALMRFDataset::CreateCopy(const char *pszFilename,
     if (!poDS)
       return NULL;
 
-    poDS->oOvManager.Initialize(poDS, poDS->GetPhysicalFilename(), poDS->GetFileList());
+    char** papszFileList = poDS->GetFileList();
+    poDS->oOvManager.Initialize(poDS, poDS->GetPhysicalFilename(), papszFileList);
+    CSLDestroy(papszFileList);
 
     CPLErr err = CE_None;
     // Have PAM copy all, but skip the mask

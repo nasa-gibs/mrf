@@ -42,7 +42,7 @@
 
 #include "marfa.h"
 
-CPL_CVSID("$Id: Raw_band.cpp 34811 2016-07-28 15:15:05Z goatbar $");
+CPL_CVSID("$Id: Raw_band.cpp 39343 2017-06-27 20:57:02Z rouault $")
 
 NAMESPACE_MRF_START
 
@@ -55,6 +55,8 @@ inline CPLErr NONE(buf_mgr &dst, buf_mgr &src)
 
 CPLErr Raw_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 {
+    if( src.size > dst.size )
+        return CE_Failure;
     return NONE(dst,src);
 }
 

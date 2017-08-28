@@ -46,9 +46,10 @@
 
 CPL_C_START
 #include <jpeglib.h>
+#include <jerror.h>
 CPL_C_END
 
-CPL_CVSID("$Id: JPEG_band.cpp 35897 2016-10-24 11:54:24Z goatbar $");
+CPL_CVSID("$Id: JPEG_band.cpp 39814 2017-08-14 15:36:47Z rouault $")
 
 NAMESPACE_MRF_START
 
@@ -103,16 +104,16 @@ static void stub_source_dec(j_decompress_ptr /*cinfo*/) {}
 */
 static boolean fill_input_buffer_dec(j_decompress_ptr cinfo)
 {
-    if (0 != cinfo->src->bytes_in_buffer)
-        return TRUE;
     CPLError(CE_Failure, CPLE_AppDefined, "Invalid JPEG stream");
+    cinfo->err->msg_code = JERR_INPUT_EMPTY;
+    cinfo->err->error_exit((j_common_ptr)(cinfo));
     return FALSE;
 }
 
 /**
 *\brief: Do nothing stub function for JPEG library, not called
 */
-static void skip_input_data_dec(j_decompress_ptr /*cinfo*/, long /*l*/) {};
+static void skip_input_data_dec(j_decompress_ptr /*cinfo*/, long /*l*/) {}
 
 // Destination should be already set up
 static void init_or_terminate_destination(j_compress_ptr /*cinfo*/) {}
@@ -225,6 +226,35 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     return CE_None;
 }
 
+/************************************************************************/
+/*                          ProgressMonitor()                           */
+/************************************************************************/
+
+/* Avoid the risk of denial-of-service on crafted JPEGs with an insane */
+/* number of scans. */
+/* See http://www.libjpeg-turbo.org/pmwiki/uploads/About/TwoIssueswiththeJPEGStandard.pdf */
+static void ProgressMonitor(j_common_ptr cinfo)
+{
+    if (cinfo->is_decompressor)
+    {
+        const int scan_no =
+            reinterpret_cast<j_decompress_ptr>(cinfo)->input_scan_number;
+        const int MAX_SCANS = 100;
+        if (scan_no >= MAX_SCANS)
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                     "Scan number %d exceeds maximum scans (%d)",
+                     scan_no, MAX_SCANS);
+
+            MRFJPEGErrorStruct* psErrorStruct =
+                (MRFJPEGErrorStruct* ) cinfo->client_data;
+
+            // return control to the setjmp point
+            longjmp(psErrorStruct->setjmpBuffer, 1);
+        }
+    }
+}
+
 /**
 *\brief In memory decompression of JPEG file
 *
@@ -272,6 +302,48 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 
     cinfo.src = &src;
     jpeg_read_header(&cinfo, TRUE);
+
+    /* In some cases, libjpeg needs to allocate a lot of memory */
+    /* http://www.libjpeg-turbo.org/pmwiki/uploads/About/TwoIssueswiththeJPEGStandard.pdf */
+    if( jpeg_has_multiple_scans(&(cinfo)) )
+    {
+        /* In this case libjpeg will need to allocate memory or backing */
+        /* store for all coefficients */
+        /* See call to jinit_d_coef_controller() from master_selection() */
+        /* in libjpeg */
+        vsi_l_offset nRequiredMemory = 
+            static_cast<vsi_l_offset>(cinfo.image_width) *
+            cinfo.image_height * cinfo.num_components *
+            ((cinfo.data_precision+7)/8);
+        /* BLOCK_SMOOTHING_SUPPORTED is generally defined, so we need */
+        /* to replicate the logic of jinit_d_coef_controller() */
+        if( cinfo.progressive_mode )
+            nRequiredMemory *= 3;
+
+#ifndef GDAL_LIBJPEG_LARGEST_MEM_ALLOC
+#define GDAL_LIBJPEG_LARGEST_MEM_ALLOC (100 * 1024 * 1024)
+#endif
+
+        if( nRequiredMemory > GDAL_LIBJPEG_LARGEST_MEM_ALLOC &&
+            CPLGetConfigOption("GDAL_ALLOW_LARGE_LIBJPEG_MEM_ALLOC", NULL) == NULL )
+        {
+                CPLError(CE_Failure, CPLE_NotSupported,
+                    "Reading this image would require libjpeg to allocate "
+                    "at least " CPL_FRMT_GUIB " bytes. "
+                    "This is disabled since above the " CPL_FRMT_GUIB " threshold. "
+                    "You may override this restriction by defining the "
+                    "GDAL_ALLOW_LARGE_LIBJPEG_MEM_ALLOC environment variable, "
+                    "or recompile GDAL by defining the "
+                    "GDAL_LIBJPEG_LARGEST_MEM_ALLOC macro to a value greater "
+                    "than " CPL_FRMT_GUIB,
+                    static_cast<GUIntBig>(nRequiredMemory),
+                    static_cast<GUIntBig>(GDAL_LIBJPEG_LARGEST_MEM_ALLOC),
+                    static_cast<GUIntBig>(GDAL_LIBJPEG_LARGEST_MEM_ALLOC));
+                jpeg_destroy_decompress(&cinfo);
+                return CE_Failure;
+        }
+    }
+
     // Use float, it is actually faster than the ISLOW method by a tiny bit
     cinfo.dct_method = JDCT_FLOAT;
 
@@ -286,12 +358,22 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     if (nbands == 1 && cinfo.num_components != nbands)
         cinfo.out_color_space = JCS_GRAYSCALE;
 
-    int linesize = cinfo.image_width * nbands * ((cinfo.data_precision == 8) ? 1 : 2);
-
-    jpeg_start_decompress(&cinfo);
+    const int datasize = ((cinfo.data_precision == 8) ? 1 : 2);
+    if( cinfo.image_width > static_cast<unsigned>(INT_MAX / (nbands * datasize)) )
+    {
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG decompress buffer overflow");
+        jpeg_destroy_decompress(&cinfo);
+        return CE_Failure;
+    }
+    int linesize = cinfo.image_width * nbands * datasize;
 
     // We have a mismatch between the real and the declared data format
     // warn and fail if output buffer is too small
+    if (linesize > static_cast<int>(INT_MAX / cinfo.image_height)) {
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG decompress buffer overflow");
+        jpeg_destroy_decompress(&cinfo);
+        return CE_Failure;
+    }
     if (linesize*cinfo.image_height != dst.size) {
         CPLError(CE_Warning, CPLE_AppDefined, "MRF: read JPEG size is wrong");
         if (linesize*cinfo.image_height > dst.size) {
@@ -300,6 +382,13 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
             return CE_Failure;
         }
     }
+
+    struct jpeg_progress_mgr sJProgress;
+    cinfo.progress = &sJProgress;
+    sJProgress.progress_monitor = ProgressMonitor;
+
+    jpeg_start_decompress(&cinfo);
+
     // Decompress, two lines at a time is what libjpeg does
     while (cinfo.output_scanline < cinfo.image_height) {
         char *rp[2];
@@ -307,7 +396,11 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
         rp[1] = rp[0] + linesize;
         // if this fails, it calls the error handler
         // which will report an error
-        jpeg_read_scanlines(&cinfo, JSAMPARRAY(rp), 2);
+        if( jpeg_read_scanlines(&cinfo, JSAMPARRAY(rp), 2) == 0 )
+        {
+            jpeg_destroy_decompress(&cinfo);
+            return CE_Failure;
+        }
     }
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
