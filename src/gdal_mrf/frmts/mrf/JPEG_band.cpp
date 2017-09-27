@@ -49,18 +49,47 @@ CPL_C_START
 #include <jerror.h>
 CPL_C_END
 
-CPL_CVSID("$Id: JPEG_band.cpp 39814 2017-08-14 15:36:47Z rouault $")
+#define PACKER
+#include "BitMask2D.h"
+#include "Packer_RLE.h"
+
+CPL_CVSID("$Id: JPEG_band.cpp 39961 2017-08-29 21:16:51Z lplesea $")
 
 NAMESPACE_MRF_START
 
-typedef struct MRFJPEGErrorStruct
+
+/*
+ * The MRF JPEG codec implements the Zen (Zero ENhanced) JPEG extension
+ * This extension, when supported by the decompressor, preserves the zero or non-zero state of all pixels
+ * which allows zero pixels to be used as a non-data mask
+ * Clients which don't support the Zen extension will read it as a normal JPEG
+ *
+ * On page writes, a mask of all fully zero pixels is built
+ * If the mask has some zero pixels, it is written in a JPEG APP3 "Zen" marker
+ * If the mask has no zero pixels, a zero length APP3 marker is inserted
+ * 
+ * On page reads, after the JPEG decompression, if a mask or a zero length APP3 marker is detected, 
+ * the masked pixels with value of zero are set to non-zero (1 in the first band), 
+ * while the non-masked ones are set to zero
+ * 
+ */
+
+typedef BitMap2D<> BitMask;
+
+// Values for mask_state flag
+enum { NO_MASK = 0, MASK_LOADED, MASK_FULL };
+
+// The Zen chunk signature
+static char CHUNK_NAME[] = "Zen";
+static size_t CHUNK_NAME_SIZE = strlen(CHUNK_NAME) + 1;
+
+
+typedef struct MRFJPEGStruct
 {
     jmp_buf     setjmpBuffer;
-    MRFJPEGErrorStruct()
-    {
-        memset(&setjmpBuffer, 0, sizeof(setjmpBuffer));
-    }
-} MRFJPEGErrorStruct;
+    BitMask *mask;
+    int mask_state;
+} MRFJPEGStruct;
 
 /**
 *\brief Called when jpeg wants to report a warning
@@ -82,14 +111,14 @@ static void emitMessage(j_common_ptr cinfo, int msgLevel)
 
 static void errorExit(j_common_ptr cinfo)
 {
-    MRFJPEGErrorStruct* psErrorStruct = (MRFJPEGErrorStruct* ) cinfo->client_data;
+    MRFJPEGStruct* psJPEGStruct = (MRFJPEGStruct* ) cinfo->client_data;
     // format the warning message
     char buffer[JMSG_LENGTH_MAX];
 
     cinfo->err->format_message(cinfo, buffer);
     CPLError(CE_Failure, CPLE_AppDefined, "%s", buffer);
     // return control to the setjmp point
-    longjmp(psErrorStruct->setjmpBuffer, 1);
+    longjmp(psJPEGStruct->setjmpBuffer, 1);
 }
 
 /**
@@ -124,10 +153,29 @@ static boolean empty_output_buffer(j_compress_ptr /*cinfo*/) {
     return FALSE;
 }
 
+// Returns the number of zero pixels in the page, as well as clearing those bits in the mask
+template<typename T> int update_mask(BitMask &mask, T *src, int nc) {
+    int zeros = 0;
+    int h = mask.getHeight();
+    int w = mask.getWidth();
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            bool is_zero = true;
+            for (int c = 0; c < nc; c++)
+                if (*src++ != 0)
+                    is_zero = false;
+            if (is_zero) {
+                zeros++;
+                mask.clear(x, y);
+            }
+        }
+    return zeros;
+};
+
 /*
 *\brief Compress a JPEG page in memory
 *
-* It handles byte or 12 bit data, grayscale, RGB, CMYK, multispectral
+* It handles byte or 12 bit data, grayscale, RGB, YUV, and multispectral
 *
 * Returns the compressed size in dest.size
 */
@@ -141,7 +189,7 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     // The cinfo should stay open and reside in the DS, since it can be left initialized
     // It saves some time because it has the tables initialized
     struct jpeg_compress_struct cinfo;
-    MRFJPEGErrorStruct sErrorStruct;
+    MRFJPEGStruct sJPEGStruct;
     struct jpeg_error_mgr sJErr;
     ILSize sz = img.pagesize;
 
@@ -152,11 +200,14 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     jmgr.empty_output_buffer = empty_output_buffer;
     jmgr.term_destination = init_or_terminate_destination;
 
+    memset(&sJPEGStruct, 0, sizeof(sJPEGStruct));
+    memset(&cinfo, 0, sizeof(cinfo));
+
     // Look at the source of this, some interesting tidbits
     cinfo.err = jpeg_std_error(&sJErr);
     sJErr.error_exit = errorExit;
     sJErr.emit_message = emitMessage;
-    cinfo.client_data = (void *)&(sErrorStruct);
+    cinfo.client_data = (void *)&(sJPEGStruct);
     jpeg_create_compress(&cinfo);
     cinfo.dest = &jmgr;
 
@@ -203,22 +254,88 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
 
     int linesize = cinfo.image_width * cinfo.input_components * ((cinfo.data_precision == 8) ? 1 : 2);
     JSAMPROW *rowp = (JSAMPROW *)CPLMalloc(sizeof(JSAMPROW)*sz.y);
+    if (!rowp) {
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG compression error");
+        jpeg_destroy_compress(&cinfo);
+        return CE_Failure;
+    }
+
     for (int i = 0; i < sz.y; i++)
         rowp[i] = (JSAMPROW)(src.buffer + i*linesize);
 
-    if (setjmp(sErrorStruct.setjmpBuffer)) {
+    if (setjmp(sJPEGStruct.setjmpBuffer)) {
         CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG compression error");
         jpeg_destroy_compress(&cinfo);
         CPLFree(rowp);
         return CE_Failure;
     }
 
+    // Build a bitmaps of the black pixels
+    // If there are any black pixels, write a compressed mask in APP3 "C3Mask" chunk
+
+    // Mask is initialized to all pixels valid
+    BitMask mask(sz.x, sz.y);
+    storage_manager mbuffer = { CHUNK_NAME, CHUNK_NAME_SIZE };
+
+    int nzeros = (cinfo.data_precision == 8) ?
+        update_mask(mask, reinterpret_cast<GByte *>(src.buffer), sz.c) :
+        update_mask(mask, reinterpret_cast<GUInt16 *>(src.buffer), sz.c);
+
+    if (nzeros != 0) { // build the Zen chunk
+        mbuffer.size = 2 * mask.size() + CHUNK_NAME_SIZE;
+        mbuffer.buffer = reinterpret_cast<char *>(CPLMalloc(mbuffer.size));
+        if (!mbuffer.buffer) {
+            jpeg_destroy_compress(&cinfo);
+            CPLFree(rowp);
+            CPLError(CE_Failure, CPLE_OutOfMemory, "MRF: JPEG Zen mask compression");
+            return CE_Failure;
+        }
+
+        // Preserve the actual start of the buffer
+        char *buffer_start = mbuffer.buffer;
+        memcpy(buffer_start, CHUNK_NAME, CHUNK_NAME_SIZE);
+
+        // store the mask after the signature
+        mbuffer.buffer += CHUNK_NAME_SIZE;
+        mbuffer.size -= CHUNK_NAME_SIZE;
+
+        RLEC3Packer c3;
+        mask.set_packer(&c3);
+        if (!mask.store(&mbuffer)) {
+            CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG Zen mask compression");
+            return CE_Failure;
+        }
+
+        // Change the buffer to include the signature
+        mbuffer.buffer = buffer_start;
+        mbuffer.size += CHUNK_NAME_SIZE;
+
+        // Check that the size fits in one JPEG chunk
+        if (mbuffer.size + 2 + CHUNK_NAME_SIZE > 65535) {
+            // Should split it in multiple chunks, for now mark this tile as all data and emit a warning
+            CPLError(CE_Warning, CPLE_NotSupported, "MRF: JPEG Zen mask too large");
+            CPLFree(mbuffer.buffer);
+            mbuffer.buffer = CHUNK_NAME;
+            mbuffer.size = CHUNK_NAME_SIZE;
+        }
+    }
+
+    // Everything is ready
     jpeg_start_compress(&cinfo, TRUE);
+    // Write the Zen app chunk
+    jpeg_write_marker(&cinfo, JPEG_APP0 + 3,
+      reinterpret_cast<JOCTET *>(mbuffer.buffer),
+      static_cast<unsigned int>(mbuffer.size));
+
     jpeg_write_scanlines(&cinfo, rowp, sz.y);
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
 
     CPLFree(rowp);
+
+    // Free the compressed mask buffer, if we allocated it
+    if (mbuffer.size != CHUNK_NAME_SIZE)
+      CPLFree(mbuffer.buffer);
 
     // Figure out the size
     dst.size -= jmgr.free_in_buffer;
@@ -246,14 +363,107 @@ static void ProgressMonitor(j_common_ptr cinfo)
                      "Scan number %d exceeds maximum scans (%d)",
                      scan_no, MAX_SCANS);
 
-            MRFJPEGErrorStruct* psErrorStruct =
-                (MRFJPEGErrorStruct* ) cinfo->client_data;
+            MRFJPEGStruct* psJPEGStruct =
+                (MRFJPEGStruct* ) cinfo->client_data;
 
             // return control to the setjmp point
-            longjmp(psErrorStruct->setjmpBuffer, 1);
+            longjmp(psJPEGStruct->setjmpBuffer, 1);
         }
     }
 }
+
+// JPEG marker processor, for the C3Mask maker
+// Can't return error, only works if the source is all read
+static boolean MaskProcessor(j_decompress_ptr pcinfo) {
+    struct jpeg_source_mgr *src = pcinfo->src;
+    if (src->bytes_in_buffer < 2)
+        ERREXIT(pcinfo, JERR_CANT_SUSPEND);
+    // Big endian length, two bytes
+    int len = (*src->next_input_byte++) << 8;
+    len += *src->next_input_byte++;
+    src->bytes_in_buffer -= 2;
+    len -= 2; // The lenght includes the two bytes we just read
+    // Check that it is safe to read that much
+    if (src->bytes_in_buffer < static_cast<size_t>(len))
+        ERREXIT(pcinfo, JERR_CANT_SUSPEND);
+    MRFJPEGStruct *psJPEG = reinterpret_cast<MRFJPEGStruct *>(pcinfo->client_data);
+    BitMask *mask = psJPEG->mask;
+    // caller doesn't want a mask or wrong chunk, skip the chunk and return
+    if (!mask || static_cast<size_t>(len) < CHUNK_NAME_SIZE
+        || !EQUALN(reinterpret_cast<const char *>(src->next_input_byte), CHUNK_NAME, CHUNK_NAME_SIZE)) {
+        src->bytes_in_buffer -= len;
+        src->next_input_byte += len;
+        return true;
+    }
+
+    // Skip the signature and load the mask
+    src->bytes_in_buffer -= CHUNK_NAME_SIZE;
+    src->next_input_byte += CHUNK_NAME_SIZE;
+    len -= static_cast<int>(CHUNK_NAME_SIZE);
+    if (len == 0) { // No mask content means mask is all full, just return
+        psJPEG->mask_state = MASK_FULL;
+        return true;
+    }
+
+    // It is OK to use const cast, the mask doesn't touch the buffer
+    storage_manager msrc = {
+        const_cast<char *>(reinterpret_cast<const char *>(src->next_input_byte)),
+        static_cast<size_t>(len)
+    };
+
+    if (!mask->load(&msrc)) { // Fatal error return, mask is not valid
+        ERREXIT(pcinfo, JERR_CANT_SUSPEND);
+    }
+
+    src->bytes_in_buffer -= len;
+    src->next_input_byte += len;
+    psJPEG->mask_state = MASK_LOADED;
+    return true;
+}
+
+// Returns the number of zero pixels, as well as clearing those bits int the mask
+template<typename T> void apply_mask(MRFJPEGStruct &sJ, T *s, int nc) {
+    if (NO_MASK == sJ.mask_state)
+        return;
+
+    BitMask *mask = sJ.mask;
+    int w = mask->getWidth();
+    int h = mask->getHeight();
+
+    if (MASK_LOADED == sJ.mask_state) { // Partial map
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (mask->isSet(x, y)) {
+                    // Need to make sure the pixel is not empty, accumulate the values
+                    int val = 0;
+                    for (int c = 0; c < nc; c++)
+                        val += s[c];
+                    // If the output value is all zero, make the first component (red) non-zero
+                    if (val == 0)
+                        *s = static_cast<T>(1);
+                    s += nc;
+                }
+                else
+                {
+                    for (int c = 0; c < nc; c++)
+                        *s++ = 0;
+                }
+            }
+    }
+    else if (MASK_FULL == sJ.mask_state) {
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                int val = 0;
+                for (int c = 0; c < nc; c++)
+                    val += s[c];
+                if (0 == val)
+                    *s = static_cast<T>(1);
+                s += nc;
+            }
+    }
+    // NOT REACHED
+};
 
 /**
 *\brief In memory decompression of JPEG file
@@ -272,17 +482,23 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     int nbands = img.pagesize.c;
     // Locals, clean up after themselves
     jpeg_decompress_struct cinfo;
-    MRFJPEGErrorStruct sErrorStruct;
+    MRFJPEGStruct sJPEGStruct;
     struct jpeg_error_mgr sJErr;
+    BitMask mask(img.pagesize.x, img.pagesize.y);
+    RLEC3Packer packer;
+    mask.set_packer(&packer);
 
     memset(&cinfo, 0, sizeof(cinfo));
+    memset(&sJPEGStruct, 0, sizeof(sJPEGStruct));
+    // Pass the mask address to the decompressor
+    sJPEGStruct.mask = &mask;
 
     struct jpeg_source_mgr src;
 
     cinfo.err = jpeg_std_error( &sJErr );
     sJErr.error_exit = errorExit;
     sJErr.emit_message = emitMessage;
-    cinfo.client_data = (void *) &(sErrorStruct);
+    cinfo.client_data = (void *) &(sJPEGStruct);
 
     src.next_input_byte = (JOCTET *)isrc.buffer;
     src.bytes_in_buffer = isrc.size;
@@ -294,7 +510,9 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 
     jpeg_create_decompress(&cinfo);
 
-    if (setjmp(sErrorStruct.setjmpBuffer)) {
+    jpeg_set_marker_processor(&cinfo, JPEG_APP0 + 3, MaskProcessor);
+
+    if (setjmp(sJPEGStruct.setjmpBuffer)) {
         CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error reading JPEG page");
         jpeg_destroy_decompress(&cinfo);
         return CE_Failure;
@@ -384,8 +602,8 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     }
 
     struct jpeg_progress_mgr sJProgress;
-    cinfo.progress = &sJProgress;
     sJProgress.progress_monitor = ProgressMonitor;
+    cinfo.progress = &sJProgress;
 
     jpeg_start_decompress(&cinfo);
 
@@ -404,6 +622,13 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     }
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
+
+    // Apply the mask
+    if (datasize == 1)
+      apply_mask(sJPEGStruct, reinterpret_cast<char *>(dst.buffer), img.pagesize.c);
+    else
+      apply_mask(sJPEGStruct, reinterpret_cast<GUInt16 *>(dst.buffer), img.pagesize.c);
+
     return CE_None;
 }
 
@@ -465,6 +690,7 @@ JPEG_Band::JPEG_Band( GDALMRFDataset *pDS, const ILImage &image,
     else
         codec.optimize = true; // Required for 12bit
 }
+
 #endif
 
 NAMESPACE_MRF_END
