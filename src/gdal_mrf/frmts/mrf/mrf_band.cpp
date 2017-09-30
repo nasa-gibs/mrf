@@ -51,7 +51,7 @@
 #include <assert.h>
 #include "../zlib/zlib.h"
 
-CPL_CVSID("$Id: mrf_band.cpp 39961 2017-08-29 21:16:51Z lplesea $")
+CPL_CVSID("$Id: mrf_band.cpp 40272 2017-09-29 21:43:42Z lplesea $")
 
 using std::vector;
 using std::string;
@@ -1053,3 +1053,4 @@ GDALRasterBand* GDALMRFRasterBand::GetOverview(int n)
 }
 
 NAMESPACE_MRF_END
+

@@ -20,15 +20,15 @@ Contributors:  Lucian Plesea
 
 NAMESPACE_MRF_START
 typedef struct storage_manager {
-	char *buffer;
-	size_t size;
+    char *buffer;
+    size_t size;
 } storage_manager;
-
+   
 // A base class that provides import and export functions based on storage managers
 // Default implementation is a straight copy
 class Packer {
 public:
-    virtual ~Packer() {};
+    virtual ~Packer() {}
     virtual int load(storage_manager *src, storage_manager *dst)
     {
         if (dst->size < src->size)

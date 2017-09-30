@@ -39,26 +39,7 @@
  * once directly and once through inclusion from JPEG12_band.cpp
  * LIBJPEG_12_H is defined if both 8 and 12 bit JPEG will be supported
  * JPEG12_ON    is defined for the 12 bit versions
- */
-
-#include "marfa.h"
-#include <setjmp.h>
-
-CPL_C_START
-#include <jpeglib.h>
-#include <jerror.h>
-CPL_C_END
-
-#define PACKER
-#include "BitMask2D.h"
-#include "Packer_RLE.h"
-
-CPL_CVSID("$Id: JPEG_band.cpp 39961 2017-08-29 21:16:51Z lplesea $")
-
-NAMESPACE_MRF_START
-
-
-/*
+ *
  * The MRF JPEG codec implements the Zen (Zero ENhanced) JPEG extension
  * This extension, when supported by the decompressor, preserves the zero or non-zero state of all pixels
  * which allows zero pixels to be used as a non-data mask
@@ -74,22 +55,44 @@ NAMESPACE_MRF_START
  * 
  */
 
+#include "marfa.h"
+#include <setjmp.h>
+
+CPL_C_START
+#include <jpeglib.h>
+#include <jerror.h>
+CPL_C_END
+
+#define PACKER
+#include "BitMask2D.h"
+#include "Packer_RLE.h"
+
+CPL_CVSID("$Id: JPEG_band.cpp 40272 2017-09-29 21:43:42Z lplesea $")
+
+NAMESPACE_MRF_START
+
 typedef BitMap2D<> BitMask;
 
 // Values for mask_state flag
+
 enum { NO_MASK = 0, MASK_LOADED, MASK_FULL };
 
-// The Zen chunk signature
-static char CHUNK_NAME[] = "Zen";
-static size_t CHUNK_NAME_SIZE = strlen(CHUNK_NAME) + 1;
-
+extern char CHUNK_NAME[];
+extern size_t CHUNK_NAME_SIZE;
 
 typedef struct MRFJPEGStruct
 {
     jmp_buf     setjmpBuffer;
     BitMask *mask;
     int mask_state;
-} MRFJPEGStruct;
+
+    MRFJPEGStruct()
+    {
+        memset(&setjmpBuffer, 0, sizeof(setjmpBuffer));
+        mask = NULL;
+        mask_state = NO_MASK;
+    }
+} MRFJPEGErrorStruct;
 
 /**
 *\brief Called when jpeg wants to report a warning
@@ -170,7 +173,7 @@ template<typename T> int update_mask(BitMask &mask, T *src, int nc) {
             }
         }
     return zeros;
-};
+}
 
 /*
 *\brief Compress a JPEG page in memory
@@ -281,48 +284,48 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
         update_mask(mask, reinterpret_cast<GByte *>(src.buffer), sz.c) :
         update_mask(mask, reinterpret_cast<GUInt16 *>(src.buffer), sz.c);
 
+    // In case we need to build a Zen chunk
+    char *buffer = NULL; 
+
     if (nzeros != 0) { // build the Zen chunk
         mbuffer.size = 2 * mask.size() + CHUNK_NAME_SIZE;
-        mbuffer.buffer = reinterpret_cast<char *>(CPLMalloc(mbuffer.size));
-        if (!mbuffer.buffer) {
+        buffer = reinterpret_cast<char *>(CPLMalloc(mbuffer.size));
+        if (!buffer) {
             jpeg_destroy_compress(&cinfo);
             CPLFree(rowp);
             CPLError(CE_Failure, CPLE_OutOfMemory, "MRF: JPEG Zen mask compression");
             return CE_Failure;
         }
 
-        // Preserve the actual start of the buffer
-        char *buffer_start = mbuffer.buffer;
-        memcpy(buffer_start, CHUNK_NAME, CHUNK_NAME_SIZE);
-
-        // store the mask after the signature
-        mbuffer.buffer += CHUNK_NAME_SIZE;
+        memcpy(buffer, CHUNK_NAME, CHUNK_NAME_SIZE);
+        mbuffer.buffer = buffer + CHUNK_NAME_SIZE;
         mbuffer.size -= CHUNK_NAME_SIZE;
 
         RLEC3Packer c3;
         mask.set_packer(&c3);
         if (!mask.store(&mbuffer)) {
             CPLError(CE_Failure, CPLE_AppDefined, "MRF: JPEG Zen mask compression");
+            CPLFree(rowp);
+            CPLFree(buffer);
             return CE_Failure;
         }
 
-        // Change the buffer to include the signature
-        mbuffer.buffer = buffer_start;
+        // Change the buffer pointer to include the signature, on output the size is the compressed size
+        mbuffer.buffer = buffer;
         mbuffer.size += CHUNK_NAME_SIZE;
 
         // Check that the size fits in one JPEG chunk
         if (mbuffer.size + 2 + CHUNK_NAME_SIZE > 65535) {
             // Should split it in multiple chunks, for now mark this tile as all data and emit a warning
             CPLError(CE_Warning, CPLE_NotSupported, "MRF: JPEG Zen mask too large");
-            CPLFree(mbuffer.buffer);
-            mbuffer.buffer = CHUNK_NAME;
-            mbuffer.size = CHUNK_NAME_SIZE;
+            mbuffer.size = CHUNK_NAME_SIZE; // Write just the signature
         }
     }
 
     // Everything is ready
     jpeg_start_compress(&cinfo, TRUE);
-    // Write the Zen app chunk
+
+    // Always write the Zen app chunk, App3
     jpeg_write_marker(&cinfo, JPEG_APP0 + 3,
       reinterpret_cast<JOCTET *>(mbuffer.buffer),
       static_cast<unsigned int>(mbuffer.size));
@@ -332,10 +335,7 @@ CPLErr JPEG_Codec::CompressJPEG(buf_mgr &dst, buf_mgr &src)
     jpeg_destroy_compress(&cinfo);
 
     CPLFree(rowp);
-
-    // Free the compressed mask buffer, if we allocated it
-    if (mbuffer.size != CHUNK_NAME_SIZE)
-      CPLFree(mbuffer.buffer);
+    CPLFree(buffer);     // Safe to call on null
 
     // Figure out the size
     dst.size -= jmgr.free_in_buffer;
@@ -372,8 +372,55 @@ static void ProgressMonitor(j_common_ptr cinfo)
     }
 }
 
-// JPEG marker processor, for the C3Mask maker
-// Can't return error, only works if the source is all read
+// Returns the number of zero pixels, as well as clearing those bits int the mask
+template<typename T> void apply_mask(MRFJPEGStruct &sJ, T *s, int nc) {
+    if (NO_MASK == sJ.mask_state)
+        return;
+
+    BitMask *mask = sJ.mask;
+    int w = mask->getWidth();
+    int h = mask->getHeight();
+
+    if (MASK_LOADED == sJ.mask_state) { // Partial map
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (mask->isSet(x, y)) {
+                    // Need to make sure the pixel is not empty, accumulate the values
+                    int val = 0;
+                    for (int c = 0; c < nc; c++)
+                        val += s[c];
+                    // If the output value is all zero, make the first component (red) non-zero
+                    if (0 == val)
+                        *s = static_cast<T>(1);
+                    s += nc;
+                }
+                else
+                {
+                    // Force all components to zero
+                    for (int c = 0; c < nc; c++)
+                        *s++ = 0;
+                }
+            }
+    }
+    else if (MASK_FULL == sJ.mask_state) {
+        // All non-zero
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                int val = 0;
+                for (int c = 0; c < nc; c++)
+                    val += s[c];
+                // Make the first component non-zero
+                if (0 == val)
+                    *s = static_cast<T>(1);
+                s += nc;
+            }
+    }
+}
+
+
+// JPEG marker processor, for the Zen app3 marker
+// Can't return error, only works if the JPEG mask is all in the buffer
 static boolean MaskProcessor(j_decompress_ptr pcinfo) {
     struct jpeg_source_mgr *src = pcinfo->src;
     if (src->bytes_in_buffer < 2)
@@ -381,9 +428,10 @@ static boolean MaskProcessor(j_decompress_ptr pcinfo) {
     // Big endian length, two bytes
     int len = (*src->next_input_byte++) << 8;
     len += *src->next_input_byte++;
+    // The length includes the two bytes we just read
     src->bytes_in_buffer -= 2;
-    len -= 2; // The lenght includes the two bytes we just read
-    // Check that it is safe to read that much
+    len -= 2;
+    // Check that it is safe to read the rest
     if (src->bytes_in_buffer < static_cast<size_t>(len))
         ERREXIT(pcinfo, JERR_CANT_SUSPEND);
     MRFJPEGStruct *psJPEG = reinterpret_cast<MRFJPEGStruct *>(pcinfo->client_data);
@@ -420,50 +468,6 @@ static boolean MaskProcessor(j_decompress_ptr pcinfo) {
     psJPEG->mask_state = MASK_LOADED;
     return true;
 }
-
-// Returns the number of zero pixels, as well as clearing those bits int the mask
-template<typename T> void apply_mask(MRFJPEGStruct &sJ, T *s, int nc) {
-    if (NO_MASK == sJ.mask_state)
-        return;
-
-    BitMask *mask = sJ.mask;
-    int w = mask->getWidth();
-    int h = mask->getHeight();
-
-    if (MASK_LOADED == sJ.mask_state) { // Partial map
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                if (mask->isSet(x, y)) {
-                    // Need to make sure the pixel is not empty, accumulate the values
-                    int val = 0;
-                    for (int c = 0; c < nc; c++)
-                        val += s[c];
-                    // If the output value is all zero, make the first component (red) non-zero
-                    if (val == 0)
-                        *s = static_cast<T>(1);
-                    s += nc;
-                }
-                else
-                {
-                    for (int c = 0; c < nc; c++)
-                        *s++ = 0;
-                }
-            }
-    }
-    else if (MASK_FULL == sJ.mask_state) {
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++) {
-                int val = 0;
-                for (int c = 0; c < nc; c++)
-                    val += s[c];
-                if (0 == val)
-                    *s = static_cast<T>(1);
-                s += nc;
-            }
-    }
-    // NOT REACHED
-};
 
 /**
 *\brief In memory decompression of JPEG file
@@ -510,8 +514,6 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 
     jpeg_create_decompress(&cinfo);
 
-    jpeg_set_marker_processor(&cinfo, JPEG_APP0 + 3, MaskProcessor);
-
     if (setjmp(sJPEGStruct.setjmpBuffer)) {
         CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error reading JPEG page");
         jpeg_destroy_decompress(&cinfo);
@@ -519,6 +521,7 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
     }
 
     cinfo.src = &src;
+    jpeg_set_marker_processor(&cinfo, JPEG_APP0 + 3, MaskProcessor);
     jpeg_read_header(&cinfo, TRUE);
 
     /* In some cases, libjpeg needs to allocate a lot of memory */
@@ -635,6 +638,11 @@ CPLErr JPEG_Codec::DecompressJPEG(buf_mgr &dst, buf_mgr &isrc)
 // This part gets compiled only once
 #if !defined(JPEG12_ON)
 
+// The Zen chunk signature
+char CHUNK_NAME[] = "Zen";
+size_t CHUNK_NAME_SIZE = strlen(CHUNK_NAME) + 1;
+
+
 // Type dependent dispachers
 CPLErr JPEG_Band::Decompress(buf_mgr &dst, buf_mgr &src)
 {
@@ -690,7 +698,6 @@ JPEG_Band::JPEG_Band( GDALMRFDataset *pDS, const ILImage &image,
     else
         codec.optimize = true; // Required for 12bit
 }
-
 #endif
 
 NAMESPACE_MRF_END

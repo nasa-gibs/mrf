@@ -200,3 +200,4 @@ int RLEC3Packer::store(storage_manager *src, storage_manager *dst)
 }
 
 NAMESPACE_MRF_END
+

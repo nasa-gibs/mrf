@@ -41,7 +41,7 @@ NAMESPACE_MRF_START
 // N is the number, M is the number of refining iterations
 template<int N, int M = 4> struct Sqrt {
     static const int value = 
-	(Sqrt<N, M - 1>::value + N / Sqrt<N, M - 1>::value) / 2;
+        (Sqrt<N, M - 1>::value + N / Sqrt<N, M - 1>::value) / 2;
 };
 
 // End condition
@@ -76,94 +76,87 @@ public:
     // Initialized to all bits set
     BitMap2D(unsigned int width, unsigned int height) : _w(width), _h(height)
     {
-	// Prevent creation of bitmasks using any other types
+        // Prevent creation of bitmasks using any other types
 
         // Uncomment these statements to enforce only 64 and 16 bit units
         // They work but generate warnings on some compilers
-	// Is_Same<T, unsigned long long>::type a;
-	// Is_Same<T, unsigned short>::type b;
-	// if (!(a.value || b.value))
-	//   throw std::out_of_range("Only bitmap units of unsigned 16 and 64 bits work");
+        // Is_Same<T, unsigned long long>::type a;
+        // Is_Same<T, unsigned short>::type b;
+        // if (!(a.value || b.value))
+        //   throw std::out_of_range("Only bitmap units of unsigned 16 and 64 bits work");
 
-	// Precalculate row size in storage units, for speed
-	_lw = Chunks<TGSIZE>(_w);
-	init(~(T)0);
+        // Precalculate row size in storage units, for speed
+        _lw = Chunks<TGSIZE>(_w);
+        // Defaults to all set
+        init(~(T)0);
+#if defined(PACKER)
+        _packer = NULL;
+#endif
     }
 
     int getWidth() const { return _w; }
     int getHeight() const { return _h; }
 
     // Size in bytes
-    int size() const {
-	return _lw * Chunks<TGSIZE>(_h) * sizeof(T); 
+    size_t size() const {
+        return _bits.size() * sizeof(T); 
     }
 
     // Returns the condition of a specific bit
     bool isSet(int x, int y) const {
-	return 0 != (_bits[_idx(x, y)] & _bitmask(x, y));
+        return 0 != (_bits[_idx(x, y)] & _bitmask(x, y));
     }
 
     void set(int x, int y) {
-	_bits[_idx(x, y)] |= _bitmask(x, y);
+        _bits[_idx(x, y)] |= _bitmask(x, y);
     }
 
     void clear(int x, int y) {
-	_bits[_idx(x, y)] &= ~_bitmask(x, y);
+        _bits[_idx(x, y)] &= ~_bitmask(x, y);
     }
 
     // Set a location bit to true or false
     void assign(int x, int y, bool val = true) {
-	if (val) set(x,y);
+        if (val) set(x,y);
         else clear(x,y);
     }
 
     // Flip a bit
     void flip(int x, int y) {
-	_bits[_idx(x, y)] ^= _bitmask(x, y);
+        _bits[_idx(x, y)] ^= _bitmask(x, y);
     }
 
-    // Set all units to same bit pattern
-    // Use init(~(T)0)) for all ones
+    // Set all units to same bit pattern by unit
+    // Use init(~(T)0)) for all set
     void init(T val) {
-	_bits.assign(size() / sizeof(T), val);
+        _bits.assign(Chunks<TGSIZE>(_w) * Chunks<TGSIZE>(_h), val);
     }
 
+ // Support for store and load
 #if defined(PACKER)
 
-    // Set a new packer, the default is copy
     void set_packer(Packer *packer) { _packer = packer; }
 
     int store(storage_manager *dst) {
         int result;
-        storage_manager src = {
-            reinterpret_cast<char *>(&_bits[0]),
-            static_cast<size_t>(size())
-        };
-
+        storage_manager src = { reinterpret_cast<char *>(&_bits[0]), size() };
         // Store the bytes in little endian format
         swab();
-	if (_packer)
-	    result = _packer->store(&src, dst);
-	else {
-	    Packer copy_packer;
-	    result = copy_packer.store(&src, dst);
-	}
+        if (_packer)
+            result = _packer->store(&src, dst);
+        else
+            result = Packer().store(&src, dst);
         swab();
         return result;
     }
 
     int load(storage_manager *src) {
         int result;
-        storage_manager dst = {
-            reinterpret_cast<char *>(&_bits[0]), 
-            static_cast<size_t>(size())
-        };
-	if (_packer)
-	    result = _packer->load(src, &dst);
-	else {
-	    Packer copy_packer;
-	    result = copy_packer.load(src, &dst);
-	}
+        storage_manager dst = { reinterpret_cast<char *>(&_bits[0]), size() };
+        if (_packer)
+            result = _packer->load(src, &dst);
+        else
+            result = Packer().load(src, &dst);
         swab();
         return result;
     }
@@ -172,33 +165,29 @@ public:
 private:
     // unit index
     unsigned int _idx(int x, int y) const {
-	return  _lw * (y / TGSIZE) + x / TGSIZE;
+        return  _lw * (y / TGSIZE) + x / TGSIZE;
     }
 
     // one bit mask within a unit
-    T _bitmask(int x, int y) const {
-	return static_cast<T>(1) <<
-	    (TGSIZE * (y % TGSIZE) + x % TGSIZE);
+    static T _bitmask(int x, int y) {
+        return static_cast<T>(1) << (TGSIZE * (y % TGSIZE) + x % TGSIZE);
     }
 
 #if defined(PACKER)
-    // Swap bytes of storage units within the bitmap to low endian
-#if defined(CPL_MSB)
-    void swab() {
-        if (sizeof(T) == 8) {
-            for (i = 0; i < size() / sizeof(T), i++)
-                CPL_SWAP64PTR(&_bits[i]);
-        }
-        else { // Only 8 or 2 byte types are supported
-            for (i = 0; i < size() / sizeof(T), i++)
-                CPL_SWAP16PTR(&_bits[i]);
-        }
-    }
+// Swap bytes of storage units within the bitmap to low endian
+#if defined(CPL_LSB)
+    static void swab() {}
 #else
-    void swab() {};
+    void swab() {
+        for (size_t i = 0; i < _bits.size(); i++)
+            if (sizeof(T) == sizeof(GUIntBig))
+                CPL_SWAP64PTR(reinterpret_cast<GUIntBig *>(&_bits[i]))
+            else
+                CPL_SWAP16PTR(reinterpret_cast<GUInt16 *> (&_bits[i]));
+    }
 #endif
 
-    // Class that provides export and import capabilities
+    // Class that provides export and import capabilities, not owned
     Packer *_packer;
 #endif
 
