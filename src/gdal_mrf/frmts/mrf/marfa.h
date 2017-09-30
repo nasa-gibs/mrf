@@ -34,7 +34,7 @@
 */
 
 /******************************************************************************
- * $Id: marfa.h 39340 2017-06-27 19:59:42Z rouault $
+ * $Id: marfa.h 39961 2017-08-29 21:16:51Z lplesea $
  *
  * Project:  Meta Raster Format
  * Purpose:  MRF structures
@@ -543,7 +543,6 @@ protected:
     // The info about the current image, to enable R-sets
     ILImage img;
     std::vector<GDALMRFRasterBand *> overviews;
-    int overview;
 
     VSILFILE *IdxFP() { return poDS->IdxFP(); }
     GDALRWFlag IdxMode() { return poDS->IdxMode(); }

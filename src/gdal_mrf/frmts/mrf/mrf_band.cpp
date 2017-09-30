@@ -51,7 +51,7 @@
 #include <assert.h>
 #include "../zlib/zlib.h"
 
-CPL_CVSID("$Id: mrf_band.cpp 39343 2017-06-27 20:57:02Z rouault $")
+CPL_CVSID("$Id: mrf_band.cpp 40272 2017-09-29 21:43:42Z lplesea $")
 
 using std::vector;
 using std::string;
@@ -204,8 +204,7 @@ GDALMRFRasterBand::GDALMRFRasterBand( GDALMRFDataset *parent_dataset,
     // Bring the quality to 0 to 9
     deflate_flags(image.quality / 10),
     m_l(ov),
-    img(image),
-    overview(0)
+    img(image)
 {
     nBand = band;
     eDataType = parent_dataset->current.dt;
@@ -1054,3 +1053,4 @@ GDALRasterBand* GDALMRFRasterBand::GetOverview(int n)
 }
 
 NAMESPACE_MRF_END
+
