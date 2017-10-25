@@ -1,6 +1,6 @@
 %global gdal_version 2.1.4
-%global gdal_release 1%{?dist}
-%global mrf_version 1.1.2
+%global gdal_release 2%{?dist}
+%global mrf_version 1.1.3
 %global mrf_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -35,6 +35,7 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
 BuildRequires:  geos-devel >= 3.3.2
+BuildRequires:  numpy
 Requires:	proj-devel
 Requires:	gcc-c++
 Requires:	python-devel
