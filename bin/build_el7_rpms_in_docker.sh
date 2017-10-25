@@ -16,7 +16,8 @@ yum install -y \
   jasper-devel-1.900.1-29.el7 \
   rsync \
   wget \
-  yum-utils
+  yum-utils \
+  numpy
 
 mkdir -p /build
 rsync -av --exclude .git /source/ /build/

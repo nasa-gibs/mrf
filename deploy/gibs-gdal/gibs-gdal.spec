@@ -35,7 +35,6 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  python-setuptools
 BuildRequires:  geos-devel >= 3.3.2
-BuildRequires:  numpy
 Requires:	proj-devel
 Requires:	gcc-c++
 Requires:	python-devel

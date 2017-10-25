@@ -15,7 +15,7 @@ For more information, visit https://earthdata.nasa.gov/gibs
 ## Preconditions
 
 
-The MRF driver for GDAL requires the use of GDAL (version 2.2 or newer recommended).  GDAL is included with the RPM release.
+The MRF driver for GDAL requires the use of GDAL (version 2.1 or newer recommended).  GDAL is included with the RPM release.
 
 ## RPM Installation
 
@@ -28,7 +28,7 @@ tar -zxvf mrf-*.tar.gz
 
 Install GIBS GDAL with the MRF driver:
 ```
-sudo yum -y install gibs-gdal-1.*
+sudo yum -y install gibs-gdal-2.*
 ```
 
 Alternatively: The GDAL plugin for MRF is available if using the included version of GDAL is not desired (note: Python bindings are not supported with the plugin).
@@ -55,20 +55,20 @@ The MRF driver links with the rest of GDAL and has to be compiled with the same 
 
 Download GDAL source:
 ```
-wget http://download.osgeo.org/gdal/1.11.4/gdal1114.zip
+wget http://download.osgeo.org/gdal/2.1.4/gdal214.zip
 ```
 
 Unpack GDAL source:
 ```
 mkdir src
-mv gdal1114.zip src/
+mv gdal214.zip src/
 cd src/
-unzip gdal1114.zip
+unzip gdal214.zip
 ```
 
 Go to the GDAL source directory:
 ```
-cd gdal-1.11.4/
+cd gdal-2.1.4/
 ```
 
 Configure GDAL source install:
@@ -128,8 +128,10 @@ gdalinfo --format MRF
 Format Details:
   Short Name: MRF
   Long Name: Meta Raster Format
+  Supports: Raster
   Help Topic: frmt_marfa.html
-  Supports: Create() - Create writeable dataset.
+  Supports: Open() - Open existing dataset.
+  Supports: Create() - Create writable dataset.
   Supports: CreateCopy() - Create dataset by copying another.
   Supports: Virtual IO - eg. /vsimem/
   Creation Datatypes: Byte UInt16 Int16 Int32 UInt32 Float32 Float64
@@ -139,6 +141,7 @@ Format Details:
     <Value>JPEG</Value>
     <Value>PNG</Value>
     <Value>PPNG</Value>
+    <Value>JPNG</Value>
     <Value>TIF</Value>
     <Value>DEFLATE</Value>
     <Value>NONE</Value>
@@ -158,12 +161,19 @@ Format Details:
   <Option name="CACHEDSOURCE" type="string" description="The source raster, if this is a cache" />
   <Option name="UNIFORM_SCALE" type="int" description="Scale of overlays in MRF, usually 2" />
   <Option name="NOCOPY" type="boolean" description="Leave created MRF empty, default=no" />
+  <Option name="DATANAME" type="string" description="Data file name" />
+  <Option name="INDEXNAME" type="string" description="Index file name" />
+  <Option name="SPACING" type="int" description="Leave this many unused bytes before each tile, default=0" />
   <Option name="PHOTOMETRIC" type="string-select" default="DEFAULT" description="Band interpretation, may affect block encoding">
     <Value>MULTISPECTRAL</Value>
     <Value>RGB</Value>
     <Value>YCC</Value>
   </Option>
 </CreationOptionList>
+
+<OpenOptionList>
+  <Option name="NOERRORS" type="boolean" description="Ignore decompression errors" default="FALSE" />
+</OpenOptionList>
 ```
 
 ## Building a gibs-gdal Docker image
@@ -175,7 +185,7 @@ available "centos:7" image.  The script takes an optional tag name to be applied
 to the created image.
 
 ```
-./bin/build_el7_docker_image.sh gibs-gdal:abc123
+./bin/build_el7_docker_image.sh gibs-gdal:2.1.4-1
 ```
 
 ## Sample Usage
