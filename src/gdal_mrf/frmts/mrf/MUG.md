@@ -34,7 +34,7 @@ Note that neither the index, nor the data file contain any information about the
 
 # Referring to an MRF
 
-The normal reference to a specific MRF raster is to use to the metadata file name.  The metadata file can have any extension, the file format detection in GDAL is done by matching the first ten characters in the file, which have the value `"<MRF\_META>"`.  For example this command will work if the test.mrf is an MRF metadata file.
+The normal reference to a specific MRF raster is to use to the metadata file name.  The metadata file can have any extension, the file format detection in GDAL is done by matching the first ten characters in the file, which have the value `"<MRF_META>"`.  For example this command will work if the test.mrf is an MRF metadata file.
 
 `gdalinfo test.mrf`
 
@@ -76,13 +76,13 @@ For example, this command will explicitly open the first overview level:
 
 ## Inserting data in MRF
 
-Using an MRF specific utility, mrf\_insert, it is possible to modify a part of an MRF and regenerate only the affected portions of the overviews.  This facility makes it possible to build very large datasets efficiently, operating on small areas at a time.
+Using an MRF specific utility, mrf_insert, it is possible to modify a part of an MRF and regenerate only the affected portions of the overviews.  This facility makes it possible to build very large datasets efficiently, operating on small areas at a time.
 
 This functionality relies on the internal MRF resampling (-avg described above), so it will only work for averaging mode and powers of two between levels.
 
-Set create option APPEND\_SUBDATASET to true avoid deleting the MRF header file.
+Set create option APPEND_SUBDATASET to true avoid deleting the MRF header file.
 
-Since a Caching or Cloning MRF may be used at the same time by different processes, the MRF driver contains code that allows it to be written by multiple processes safely.  This feature might be useful for other types of MRF, for example when mrf\_insert is used to update different areas of the same file, or when multiple third dimension MRF Z-Slices are written to at the same time.  To turn on this feature, manually add a boolean attribute called mp\_safe with the value **on** to the Raster node of the MRF metadata.  It is not on by default since it slows down the write operations somewhat.  This feature has only been tested on Windows and Linux, and it depends on the specific operating and file system implementation, there might be configurations in which this operation fails.
+Since a Caching or Cloning MRF may be used at the same time by different processes, the MRF driver contains code that allows it to be written by multiple processes safely.  This feature might be useful for other types of MRF, for example when mrf_insert is used to update different areas of the same file, or when multiple third dimension MRF Z-Slices are written to at the same time.  To turn on this feature, manually add a boolean attribute called mp_safe with the value **on** to the Raster node of the MRF metadata.  It is not on by default since it slows down the write operations somewhat.  This feature has only been tested on Windows and Linux, and it depends on the specific operating and file system implementation, there might be configurations in which this operation fails.
 
 # Types of tile compressions supported by MRF
 
@@ -97,9 +97,9 @@ As the name suggest, the RAW format directly stores the tile array, in a row maj
 DEFLATE is a generic compression algorithm, implemented in the open source zlib library.  In MRF it can be used in two ways, as a stand-alone tile packing mechanism and also as a second packing step to other compression formats.  The second meaning is activated by adding DEFLATE:on to the free form list OPTIONS.  Raw compression with the DEFLATE option is equivalent to the DEFLATE compression format, even though the content of the metadata file is different.  These two commands should generate MRFs with identical size data files, although the tile order may differ.
 
 ```
-gdal\_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on" input.tif raw\_and\_deflate.mrf
+gdal_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 
-gdal\_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
+gdal_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
 ```
 
 The zlib compression level is calculated from the QUALITY setting as level = floor(Quality/10).  The default is 8, which is very good compression albeit slow.  A quality setting of 60 is recommended as a tradeoff between compression speed and size.   Level zero, corresponding to quality values under 10, means no compression.
@@ -108,21 +108,21 @@ The DEFLATE compression will generate zlib compatible tile headers by default.  
 
 The following command will generate an MRF in which every tile is a gzip stream:
 
-`gdal\_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on GZ:on" input.tif gzipped.mrf`
+`gdal_translate –of MRF –co COMPRESS=RAW -co OPTIONS="DEFLATE:on GZ:on" input.tif gzipped.mrf`
 
 Which is equivalent to:
 
-`gdal\_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on" input.tif gzipped.mrf`
+`gdal_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on" input.tif gzipped.mrf`
 
-The strategy used for compression by zlib can also be controlled.  It only affects the algorithm used during the compression.  The generated stream can always be decompressed.  For exact details on what the strategy flags refer to the zlib documentation.  The free form option is Z\_STRATEGY, and the valid values are:
+The strategy used for compression by zlib can also be controlled.  It only affects the algorithm used during the compression.  The generated stream can always be decompressed.  For exact details on what the strategy flags refer to the zlib documentation.  The free form option is Z_STRATEGY, and the valid values are:
 
-Z\_FILTERED: Skips the optional filtering of the input stream
+Z_FILTERED: Skips the optional filtering of the input stream
 
-Z\_HUFFMAN\_ONLY:  Only the Huffman encoding part of DEFLATE is performed
+Z_HUFFMAN_ONLY:  Only the Huffman encoding part of DEFLATE is performed
 
-Z\_RLE: Somewhat like an RLE, within the limits of DEFLATE
+Z_RLE: Somewhat like an RLE, within the limits of DEFLATE
 
-Z\_FIXED:  Fixed Huffman tables
+Z_FIXED:  Fixed Huffman tables
 
 The compression speed and the size of the output will change significantly if these options are used.
 
@@ -132,33 +132,33 @@ PNG is a lossless compression image format which uses the DEFLATE algorithm inte
 
 The PNG format itself supports up to sixteen bit unsigned integer data types.  In the MRF, only the eight and sixteen bit formats are used.  However, the MRF itself can have a signed sixteen bit data type (Int16), in which case the 16bit unsigned values stored in the PNG are interpreted as signed.
 
-The QUALITY setting controls the DEFLATE stage of the PNG, with the same meaning as the ones described in the DEFLATE compression.  Similarly, the Z\_STRATEGY band option controls the zlib stage of PNG.  Choosing Z\_RLE or Z\_HUFFMAN\_ONLY will result in much faster compression, at the expense of size, Z\_HUFFMAN\_ONLY being the fastest.  Z\_FIXED and Z\_FILTERED have much less effect.  The effect of the strategy setting is much stronger than the QUALITY value setting.
+The QUALITY setting controls the DEFLATE stage of the PNG, with the same meaning as the ones described in the DEFLATE compression.  Similarly, the Z_STRATEGY band option controls the zlib stage of PNG.  Choosing Z_RLE or Z_HUFFMAN_ONLY will result in much faster compression, at the expense of size, Z_HUFFMAN_ONLY being the fastest.  Z_FIXED and Z_FILTERED have much less effect.  The effect of the strategy setting is much stronger than the QUALITY value setting.
 
-Example of gdal\_translate options for PNG
+Example of gdal_translate options for PNG
 
-`-of MRF –co COMPRESS=PNG –co OPTIONS="Z\_STRATEGY=Z\_RLE" –co QUALITY=50`
+`-of MRF –co COMPRESS=PNG –co OPTIONS="Z_STRATEGY=Z_RLE" –co QUALITY=50`
 
 ## LERC Compression
 
 Limited Error Raster Compression (LERC) is an Esri compression format.  The main benefit of using LERC is extremely fast compression and decompression when compared with PNG and even JPEG, as well as excellent compression for data types larger than eight bit.  LERC is a single band compression, with an explicit NoData mask.  This means that for MRF with LERC compression only band interleave is supported.  LERC also supports a datamask, which in MRF is enabled when the NoData value is defined.  The LERC built in NoData support makes it a great choice for storing sparse data.
 
-LERC can be either lossy or lossless.  LERC maximum error value (LERC\_PREC) is a floating point number that controls the quantization of the input data, thus the accuracy of the data.  LERC may modify the input values but the change is always less or equal to the LERC maximum error value.  The quanta or precision of the output data values will thus be twice the LERC\_PREC value.  If the LERC maximum error is zero or too small for any space savings to be obtained by quantization, the input data values are not modified, and LERC becomes a lossless compression format.  There are two versions of LERC compression supported in MRF, LERC and LERC V2 (default).  LERC supports integer and floating point data types with up to 24 bits of precision.  LERC V2 supports more data types with higher precision and is somewhat faster.  LERC V2 also includes different compression methods that sometimes results in significantly better compression than LERC.  Yet for most cases, the compression achieved will be very similar.
+LERC can be either lossy or lossless.  LERC maximum error value (LERC_PREC) is a floating point number that controls the quantization of the input data, thus the accuracy of the data.  LERC may modify the input values but the change is always less or equal to the LERC maximum error value.  The quanta or precision of the output data values will thus be twice the LERC_PREC value.  If the LERC maximum error is zero or too small for any space savings to be obtained by quantization, the input data values are not modified, and LERC becomes a lossless compression format.  There are two versions of LERC compression supported in MRF, LERC and LERC V2 (default).  LERC supports integer and floating point data types with up to 24 bits of precision.  LERC V2 supports more data types with higher precision and is somewhat faster.  LERC V2 also includes different compression methods that sometimes results in significantly better compression than LERC.  Yet for most cases, the compression achieved will be very similar.
 
-For integer types the default LERC\_PREC value is 0.5, corresponding to lossless compression.  For floating point types the LERC\_PREC defaults to 0.001 (.002 value resolution).  The compression achieved by LERC heavily depends on the LERC\_PREC value, which should be carefully selected for each particular dataset.
+For integer types the default LERC_PREC value is 0.5, corresponding to lossless compression.  For floating point types the LERC_PREC defaults to 0.001 (.002 value resolution).  The compression achieved by LERC heavily depends on the LERC_PREC value, which should be carefully selected for each particular dataset.
 
 To set a custom LERC precision value, use the free form MRF OPTIONS mechanism, the option name being "OPTIONS".  To set the LERC precision for a new MRF, use the create option like this:
 
-`-co OPTIONS="LERC\_PREC=0.005"`
+`-co OPTIONS="LERC_PREC=0.005"`
 
 To use LERC instead of the default LERC2, add V1=ON to the options string, like this:
 
-`-co OPTIONS="LERC\_PREC=0.01 V1=ON"`
+`-co OPTIONS="LERC_PREC=0.01 V1=ON"`
 
 MRF tiles compressed with LERC can be further encoded with zlib (DEFLATE), which sometimes results in better compression at a slight expense of speed.  DEFLATE speed is asymmetric, decompression being faster than compression, so it does not affect read speeds as much as it does writes.  To add DEFLATE to LERC, add "DEFLATE:ON" to the list of options.  This example sets both the LERC precision and the extra DEFLATE option:
 
-`-co OPTIONS="LERC\_PREC=0.01 DEFLATE=ON"`
+`-co OPTIONS="LERC_PREC=0.01 DEFLATE=ON"`
 
-Once set, the LERC\_PREC value will be used for all subsequent writes into the respective MRF.
+Once set, the LERC_PREC value will be used for all subsequent writes into the respective MRF.
 
 ## JPEG Compression
 
@@ -198,7 +198,7 @@ This is the name for the basic storage format MRF, where all the three files are
 
 ## Split MRF
 
-The three files that compose an MRF (metadata, index and data) can be distributed across different storage systems.  This is accomplished by having two extra XML nodes in the MRF metadata file, each containing GDAL accessible file names for the index or respectively for the data file.  These types of files are not created by gdal\_translate and need to be created by manually editing the metadata file.  The two nodes to be added are `<IndexFile>` and `<DataFile>`.  They are added as sub-nodes of the `<Raster>` node.  The content is simply a path to where the data or the index file can be found.  The Split MRF can be used for example to accelerate access, by keeping the metadata files and possibly the index file on a faster storage (local SSD) while having the large data files on a HDD or a NAS.  Other than the file location, there is no difference between the Static and the Split MRF.  The IndexFile and DataFile nodes can also contain an optional attribute called **offset** , with a numerical value.  This value will be added to the normal, calculated file offsets for all access to the respective files.  This feature can be exploited to combine the data and index files of an MRF.
+The three files that compose an MRF (metadata, index and data) can be distributed across different storage systems.  This is accomplished by having two extra XML nodes in the MRF metadata file, each containing GDAL accessible file names for the index or respectively for the data file.  These types of files are not created by gdal_translate and need to be created by manually editing the metadata file.  The two nodes to be added are `<IndexFile>` and `<DataFile>`.  They are added as sub-nodes of the `<Raster>` node.  The content is simply a path to where the data or the index file can be found.  The Split MRF can be used for example to accelerate access, by keeping the metadata files and possibly the index file on a faster storage (local SSD) while having the large data files on a HDD or a NAS.  Other than the file location, there is no difference between the Static and the Split MRF.  The IndexFile and DataFile nodes can also contain an optional attribute called **offset** , with a numerical value.  This value will be added to the normal, calculated file offsets for all access to the respective files.  This feature can be exploited to combine the data and index files of an MRF.
 
 ## Caching MRF
 
@@ -208,11 +208,11 @@ MRF can also be used as an intermediary format, to cache data another raster fil
 
 #### CACHEDSOURCE Create Option
 
-The MRF GDAL driver only supports the CreateCopy, so the simplest way to instantiate a caching MRF is using the gdal\_translate.  In addition to the normal MRF create options, the creation of a caching MRF dataset requires the presence of the " **CACHEDSOURCE**" option, whose value is the file name of the raster dataset to be cached.  Only local files are supported, in any format readable by GDAL.  The file name should be absolute, except for the case where the parent raster file is located in the same exact folder as the caching MRF metadata file.
+The MRF GDAL driver only supports the CreateCopy, so the simplest way to instantiate a caching MRF is using the gdal_translate.  In addition to the normal MRF create options, the creation of a caching MRF dataset requires the presence of the " **CACHEDSOURCE**" option, whose value is the file name of the raster dataset to be cached.  Only local files are supported, in any format readable by GDAL.  The file name should be absolute, except for the case where the parent raster file is located in the same exact folder as the caching MRF metadata file.
 
 An example of creating a caching MRF:
 
-`gdal\_translate –of MRF –co **CACHEDSOURCE= H12003\_MB\_1m\_MLLW\_14of16.tif** \data\LERC\_test\H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\tst.mrf`
+`gdal_translate –of MRF –co **CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif** /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 In the command above, the presence of the CACHEDSOURCE option flags the file as a caching MRF and gets stored in the MRF metadata file.  The value is the file name without the absolute path, which means that the caching mrf metadata file will always reside in the same location as the parent dataset file.
 
@@ -222,17 +222,17 @@ The command above will create the caching MRF metadata, data and index files and
 
 To initialize a caching MRF but not store any data in it, use the Boolean create option **NOCOPY** = **True**.  For example:
 
-`gdal\_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC\_PREC=0.01" -co **NOCOPY=True** -co CACHEDSOURCE=H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC=0.01" -co **NOCOPY=True** -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
-The combined use of the CACHEDSOURCE and the NOCOPY options should be the most common use.  Normally, the source raster as used on the gdal\_translate command line and the value of the CACHEDSOURCE are identical.  The source raster is used as the source of data and metadata during the gdal\_translate execution.   The CACHEDSOURCE raster is used later, when reading from the caching MRF, if the data is not present.  While this syntax seems clumsy, it is required due to the structure of gdal\_translate, and it also offers the possibility to initialize a caching MRF using a local file while caching a different, possibly remote raster.
+The combined use of the CACHEDSOURCE and the NOCOPY options should be the most common use.  Normally, the source raster as used on the gdal_translate command line and the value of the CACHEDSOURCE are identical.  The source raster is used as the source of data and metadata during the gdal_translate execution.   The CACHEDSOURCE raster is used later, when reading from the caching MRF, if the data is not present.  While this syntax seems clumsy, it is required due to the structure of gdal_translate, and it also offers the possibility to initialize a caching MRF using a local file while caching a different, possibly remote raster.
 
 The example above, in addition to the precedent one, sets the caching MRF compression to LERC, sets the blocksize to be used, sets the LERC max error via the freeform option and sets the NOCOPY to true.  This will leave the caching MRF initialized but empty.  When raster blocks are then read from the MRF, data is read from the CACHEDSOURCE raster and stored in the caching MRF.  On subsequent reads, if the data already exists in the caching MRF it is no longer read from the parent dataset.
 
-#### UNIFORM\_ SCALE Create Option
+#### UNIFORM_SCALE Create Option
 
 The MRF (caching or normal) can be created with the full set of internal overlays.  This is especially useful when creating a caching MRF.
 
-`gdal\_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC\_PREC:0.01" -co **UNIFORM\_ SCALE=2** -co NOCOPY=True -co CACHEDSOURCE=H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\H12003\_MB\_1m\_MLLW\_14of16.tif \data\LERC\_test\tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC:0.01" -co **UNIFORM_SCALE=2** -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 Note that the overlays will be written with data read at the corresponding scale from the parent dataset, thus they might be different from the ones that could be created via gdaladdo command.  However, gdaladdo will still work on the caching MRF, especially if the base level is fully populated already.  Exercise this option with caution, the current implementation of the overlay building reads the destination tile before writing to it.  In the case of a caching MRF, this will result in fetching the tile from the parent source, storing a copy in the caching MRF, then reading the higher resolution source from the MRF, scaling by 2 and writing the tile again into the caching MRF.
 
@@ -248,13 +248,13 @@ Turning off the **local cache writes** while still requesting data from the sour
 
 Turning off the **new content fetch** is useful for reading only the local cache, or when the source is no longer available.  It avoids the latency and penalty of trying and failing to access the source.  To turn off the source fetching, make the existing MRF **index file** read only.  Turning off the new content fetch will implicitly turn off local cache writes, since there is no new content to be written.  If a caching MRF uses the same file for both data and index, this will be the behavior.
 
-Sometimes it is useful to temporarily stop the caching MRF from storing data locally while preserving data access to the remote data source.  This can be achieved by setting the environment variable **MRF\_BYPASSCACHING** to **TRUE**.   This variable can also be set as a gdal configuration option.  All caching and cloning MRF files opened while this variable is set to true are affected, it is not possible to selectively choose which caching MRFs are affected.
+Sometimes it is useful to temporarily stop the caching MRF from storing data locally while preserving data access to the remote data source.  This can be achieved by setting the environment variable **MRF_BYPASSCACHING** to **TRUE**.   This variable can also be set as a gdal configuration option.  All caching and cloning MRF files opened while this variable is set to true are affected, it is not possible to selectively choose which caching MRFs are affected.
 
 The performance of the caching MRF depends on a multitude of factors, including the page sizes of both the caching MRF and the remote files.  Good performance is achieved when the caching MRF and the remote file have the same page size.  A particular case is when the remote is pixel interleaved but the caching MRF is band interleaved (as in the case of LERC compression).  In this case, the remote page may be read and decompressed multiple times, once for each and every output band.  Only if the GDAL block cache is large enough to hold all the blocks this will not happen and the blocks will be reused.  If the source page size is not efficient for the user application, it is recommended that the source data be reformatted ahead of time with a suitable page size, possibly as MRF.
 
 ## Cloning MRF
 
-As a further optimization, if the source dataset of a caching MRF is itself an MRF, and caching MRF have the identical structure with the source one (image size, projection, page size, compression …), the caching MRF can eliminate the page transcoding, copying the already compressed pages from the source MRF.  This type of MRF is called a Cloning MRF, since it is an almost identical copy of the source MRF.  Creating a clone MRF cannot be done using gdal\_translate, since it is not possible to insure that the source has the same properties as the caching MRF.  Instead, a cloning MRF should be created by copying the cloned MRF metadata file to where the cloning MRF should reside and adding the following lines to the top level node:
+As a further optimization, if the source dataset of a caching MRF is itself an MRF, and caching MRF have the identical structure with the source one (image size, projection, page size, compression …), the caching MRF can eliminate the page transcoding, copying the already compressed pages from the source MRF.  This type of MRF is called a Cloning MRF, since it is an almost identical copy of the source MRF.  Creating a clone MRF cannot be done using gdal_translate, since it is not possible to insure that the source has the same properties as the caching MRF.  Instead, a cloning MRF should be created by copying the cloned MRF metadata file to where the cloning MRF should reside and adding the following lines to the top level node:
 
 ```
 <CachedSource>
@@ -276,7 +276,7 @@ The number of versions is not limited.  The index file will grow as versions are
 
 ## Third dimension MRF
 
-A raster is usually a 2D dataset, characterized by the size in the X and Y dimensions and the number of color bands or channels.  MRF supports an optional third dimension, dimension Z.  An MRF with the Z size N contains N 2D rasters, all with the same size in X and Y, same number of bands, stored with the same exact parameters.  Each of the N 2D rasters is identified by the Z index, an integer from 0 to N-1.  In GDAL only one of the 2D rasters is available at a time, determined at the time of the file opening, with Z index zero being the default.  In other words, a normal, 2D MRF is a 3D MRF with the Z size of 1. The Z dimension is not visible in GDAL, other than the ZSIZE and ZSLICE metadata items in the IMAGE\_STRUCTURE metadata domain.
+A raster is usually a 2D dataset, characterized by the size in the X and Y dimensions and the number of color bands or channels.  MRF supports an optional third dimension, dimension Z.  An MRF with the Z size N contains N 2D rasters, all with the same size in X and Y, same number of bands, stored with the same exact parameters.  Each of the N 2D rasters is identified by the Z index, an integer from 0 to N-1.  In GDAL only one of the 2D rasters is available at a time, determined at the time of the file opening, with Z index zero being the default.  In other words, a normal, 2D MRF is a 3D MRF with the Z size of 1. The Z dimension is not visible in GDAL, other than the ZSIZE and ZSLICE metadata items in the IMAGE_STRUCTURE metadata domain.
 
 While the third dimension MRF seems similar to the versioned MRF, it is structurally different, and there are other differences:
 
@@ -297,18 +297,18 @@ It is also possible to select a specific overview of a specific Z index, for exa
 
 #### Creating and writing to a 3rd dimension MRF
 
-To create an MRF with the Z size different from one, the ZSIZE create option has to be set at creation time.  This gdal\_translate command will create an MRF with the Z size of 10, getting the size and other parameters from the source.tif file and leaving the output MRF empty.
+To create an MRF with the Z size different from one, the ZSIZE create option has to be set at creation time.  This gdal_translate command will create an MRF with the Z size of 10, getting the size and other parameters from the source.tif file and leaving the output MRF empty.
 
-`gdal\_translate –of MRF –co ZSIZE=10 –co NOCOPY=true source.tif TenSlice.mrf`
+`gdal_translate –of MRF –co ZSIZE=10 –co NOCOPY=true source.tif TenSlice.mrf`
 
-If the NOCOPY parameter is not set, the data from source.tif will also be copied in the slice index zero of the TenSlice.mrf.  The UNIFORM\_SCALE parameter can also be used, reserving space but not populating the overviews.  Using the Z index selection names, gdaladdo can also be used to reserve the index space for the overviews and populate them, for any valid Z index value.
+If the NOCOPY parameter is not set, the data from source.tif will also be copied in the slice index zero of the TenSlice.mrf.  The UNIFORM_SCALE parameter can also be used, reserving space but not populating the overviews.  Using the Z index selection names, gdaladdo can also be used to reserve the index space for the overviews and populate them, for any valid Z index value.
 
-Once the 3rd dimension MRF exists, the full resolution image at a Z index different than one can be inserted using gdal\_translate.  Note that the create options have to be identical with the ones used to initially create the MRF.  Also, if the input images have to have the same exact size and most of the other parameters, except for the ones explicitly overwritten by the create options.  For example, content from a JPEG and a DEFLATE geotiff can be copied into the same 3rd dimension MRF, but the MRF compression has to be explicitly set in the gdal\_translate command.  If this condition is not met, the output MRF may be corrupted.  This is because the MRF metadata file will be recreated by every gdal\_translate command and no tests are done to insure that the content is the same.
+Once the 3rd dimension MRF exists, the full resolution image at a Z index different than one can be inserted using gdal_translate.  Note that the create options have to be identical with the ones used to initially create the MRF.  Also, if the input images have to have the same exact size and most of the other parameters, except for the ones explicitly overwritten by the create options.  For example, content from a JPEG and a DEFLATE geotiff can be copied into the same 3rd dimension MRF, but the MRF compression has to be explicitly set in the gdal_translate command.  If this condition is not met, the output MRF may be corrupted.  This is because the MRF metadata file will be recreated by every gdal_translate command and no tests are done to insure that the content is the same.
 
 The following commands will copy a source3.tif into the z index 3 of the mrf created above, followed by populating the overviews for the slice:
 
 ```
-gdal\_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
+gdal_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
 
 gdaladdo –r avg TenSlice.mrf:MRF:Z3
 ```
@@ -317,7 +317,7 @@ The MRF driver also recognizes and reads a lerc compressed data-file, if it is o
 
 ## Overwriting an MRF
 
-When overwriting an MRF, GDAL normally tries to erase the files if they exist.  To avoid having the data or the index file erased un-intentionally, the MRF driver does not do this.  This means that if a file exists and is used repeatedly as a destination for gdal\_translate, the data file will keep growing and the index file will keep its old content, which is the desired behavior.  This can create problems in certain cases, for example when the same file name is reused for images of different size or structure, or when the MRF itself is corrupt.  Crashes may occur in some of these situations.  In these cases, the index and data file should be erased by hand, outside of the GDAL infrastructure.
+When overwriting an MRF, GDAL normally tries to erase the files if they exist.  To avoid having the data or the index file erased un-intentionally, the MRF driver does not do this.  This means that if a file exists and is used repeatedly as a destination for gdal_translate, the data file will keep growing and the index file will keep its old content, which is the desired behavior.  This can create problems in certain cases, for example when the same file name is reused for images of different size or structure, or when the MRF itself is corrupt.  Crashes may occur in some of these situations.  In these cases, the index and data file should be erased by hand, outside of the GDAL infrastructure.
 
 # APPENDIX A, MRF Metadata Schema
 
@@ -327,11 +327,8 @@ The MRF index is a vector of tile records.  A tile index record is sixteen bytes
 
 ```
 typedef struct {
-
- uint16\_t offset;
-
- uint16\_t size;
-
+ uint16_t offset;
+ uint16_t size;
 } tidx;
 ```
 
@@ -351,7 +348,7 @@ For cloning MRFs, the index of the local cache data is followed immediately by a
 
 # APPENDIX C, Create Options
 
-In GDAL, a list of key-value string pairs can be used to pass various options to the target driver.  Using the gdal\_translate utility, these options are passed using the –co Key=Value syntax.  Most of the names of the options supported by MRF have been chosen to match the ones used by TIFF.  The create options supported by MRF are:
+In GDAL, a list of key-value string pairs can be used to pass various options to the target driver.  Using the gdal_translate utility, these options are passed using the –co Key=Value syntax.  Most of the names of the options supported by MRF have been chosen to match the ones used by TIFF.  The create options supported by MRF are:
 
 | Key | Default Value | Description |
 | --- | --- | --- |
@@ -366,7 +363,7 @@ In GDAL, a list of key-value string pairs can be used to pass various options to
 | PHOTOMETRIC |   | Sets the interpretation of the bands and controls some of the compression algorithms |
 |SPACING | 0 | Reserve this many bytes before each tile data |
 | NOCOPY | False | Create an empty MRF, do not copy input |
-| UNIFORM\_SCALE |   | Flags the MRF as containing overviews, with a given numerical scale factor between successive overviews |
+| UNIFORM_SCALE |   | Flags the MRF as containing overviews, with a given numerical scale factor between successive overviews |
 | CACHEDSOURCE |   | GDAL raster reference to be cached in the caching MRF being created |
 
 
@@ -377,7 +374,7 @@ In addition to the normal create options, MRF also supports a set of options tha
 
 The free-form option list is passed as a single string value for the create option called OPTIONS.  The value is a free form string containing white space separated key value pairs.  GDAL list parsing is being used when reading, either the equal sign "=" or the colon ":" can be used as the separator between key and value.
 
-When using gdal\_translate utility, the free form option syntax will be:
+When using gdal_translate utility, the free form option syntax will be:
 
 `-co OPTIONS="Key1=Value1 Key2=Value2 …"`
 
@@ -386,9 +383,9 @@ When using gdal\_translate utility, the free form option syntax will be:
 | DEFLATE | False | Most | Apply zlib DEFLATE as a final packing stage |
 | GZ | False | DEFLATE | GZIP headers |
 | RAWZ | False | DEFLATE | No headers |
-| Z\_STRATEGY |   | PNG, DEFLATE | DEFLATE algorithmic choiceZ\_HUFFMAN\_ONLY, Z\_FILTERED, Z\_RLE, Z\_FIXED |
-| V2 | False | LERC | Uses LERC V2 compression |
-| LERC\_PREC | 0.5 for integer types0.001  for floating point | LERC | Maximum value change allowed |
+| Z_STRATEGY |   | PNG, DEFLATE | DEFLATE algorithmic choice: Z_HUFFMAN_ONLY, Z_FILTERED, Z_RLE, Z_FIXED |
+| V1 | False | LERC | Uses LERC V1 compression, default is V2 |
+| LERC_PREC | 0.5 for integer types; 0.001  for floating point | LERC | Maximum value change allowed |
 | OPTIMIZE | False | JPEG | Optimize the Huffman tables for each tile.  Always true for JPEG12 |
 
 # APPENDIX E, Open Options
