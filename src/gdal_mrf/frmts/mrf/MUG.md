@@ -212,7 +212,7 @@ The MRF GDAL driver only supports the CreateCopy, so the simplest way to instant
 
 An example of creating a caching MRF:
 
-`gdal_translate –of MRF –co **CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif** /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
+`gdal_translate –of MRF –co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 In the command above, the presence of the CACHEDSOURCE option flags the file as a caching MRF and gets stored in the MRF metadata file.  The value is the file name without the absolute path, which means that the caching mrf metadata file will always reside in the same location as the parent dataset file.
 
@@ -222,7 +222,7 @@ The command above will create the caching MRF metadata, data and index files and
 
 To initialize a caching MRF but not store any data in it, use the Boolean create option **NOCOPY** = **True**.  For example:
 
-`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC=0.01" -co **NOCOPY=True** -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC=0.01" -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 The combined use of the CACHEDSOURCE and the NOCOPY options should be the most common use.  Normally, the source raster as used on the gdal_translate command line and the value of the CACHEDSOURCE are identical.  The source raster is used as the source of data and metadata during the gdal_translate execution.   The CACHEDSOURCE raster is used later, when reading from the caching MRF, if the data is not present.  While this syntax seems clumsy, it is required due to the structure of gdal_translate, and it also offers the possibility to initialize a caching MRF using a local file while caching a different, possibly remote raster.
 
@@ -232,7 +232,7 @@ The example above, in addition to the precedent one, sets the caching MRF compre
 
 The MRF (caching or normal) can be created with the full set of internal overlays.  This is especially useful when creating a caching MRF.
 
-`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC:0.01" -co **UNIFORM_SCALE=2** -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC:0.01" -co UNIFORM_SCALE=2 -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
 
 Note that the overlays will be written with data read at the corresponding scale from the parent dataset, thus they might be different from the ones that could be created via gdaladdo command.  However, gdaladdo will still work on the caching MRF, especially if the base level is fully populated already.  Exercise this option with caution, the current implementation of the overlay building reads the destination tile before writing to it.  In the case of a caching MRF, this will result in fetching the tile from the parent source, storing a copy in the caching MRF, then reading the higher resolution source from the MRF, scaling by 2 and writing the tile again into the caching MRF.
 
