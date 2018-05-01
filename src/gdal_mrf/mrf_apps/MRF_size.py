@@ -39,8 +39,8 @@ import sys
 import os.path as path
 
 def usage():
-    print 'Takes one argument, an MRF file name, ' +\
-        'builds a .vrt that contains the tile size info'
+    print ('Takes one argument, an MRF file name, ' +\
+        'builds a .vrt that contains the tile size info')
 
 def XMLprettify(elem, level=0):
     'XML prettifier'
@@ -87,10 +87,10 @@ class MRF(object):
         try:
             root = XML.parse(name).getroot()
         except:
-            raise Exception, "Can't parse " + name
+            raise "Can't parse " + name
 
         if root.tag != 'MRF_META':
-            raise Exception, name + ' is not an MRF metadata file'
+            raise name + ' is not an MRF metadata file'
 
         self.name = name
         #Get the basic raster info
@@ -109,8 +109,8 @@ class MRF(object):
 
 def VRT_Size(mrf):
     'Builds and returns a gdal VRT XML tree'
-    xsz = 1 + (mrf.size.x-1) / mrf.pagesize.x
-    ysz = 1 + (mrf.size.y-1) / mrf.pagesize.y
+    xsz = int (1 + (mrf.size.x-1) / mrf.pagesize.x)
+    ysz = int (1 + (mrf.size.y-1) / mrf.pagesize.y)
     root = XML.Element('VRTDataset', {
         'rasterXSize':str(xsz),
         'rasterYSize':str(ysz)
@@ -121,7 +121,7 @@ def VRT_Size(mrf):
     gt[1] *= mrf.pagesize.x
     gt[5] *= mrf.pagesize.y
     XML.SubElement(root,'GeoTransform').text = ",".join((str(x) for x in gt))
-    bands = mrf.size.c / mrf.pagesize.c
+    bands = int(mrf.size.c / mrf.pagesize.c)
     for band in range(bands):
         xband = XML.SubElement(root, 'VRTRasterBand', {
             'band':str(band+1),
