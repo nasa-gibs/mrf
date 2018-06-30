@@ -26,10 +26,9 @@ Contributors:  Thomas Maurer
 
 // ---- includes ------------------------------------------------------------ ;
 
-#include <vector>
-#include <cassert>
-#include <cstdlib>
-#include "Image.h"
+#include <cstring>
+#include <stdlib.h>
+#include "./Image.h"
 
 NAMESPACE_LERC_START
 
@@ -46,78 +45,33 @@ template< class Element >
 class TImage : public Image
 {
 public:
-  TImage() : data_(NULL) {}
-  TImage(const TImage& tImg) : data_(NULL) { *this = tImg;  }
-  virtual ~TImage() {
-      clear();
-  }
+  TImage() : data_(0)  {}
+  TImage(const TImage& tImg) : data_(0)  { type_ = tImg.type_;  *this = tImg; }
+  virtual ~TImage()                      { clear(); }
 
   /// assignment
-  TImage& operator=(const TImage& tImg);
+  virtual TImage& operator=(const TImage& tImg);
 
   bool resize(int width, int height);
   virtual void clear();
 
   /// get data
-  Element getPixel(int row, int col) const;
-  const Element& operator() (int row, int col) const;
-  const Element* getData() const;
+  Element getPixel(int row, int col) const            { return data_[row * width_ + col]; }
+  const Element& operator() (int row, int col) const  { return data_[row * width_ + col]; }
+  const Element* getData() const                      { return data_; }
 
   /// set data
-  void setPixel(int row, int col, Element element);
-  Element& operator() (int row, int col);
-  Element* getData();
+  void setPixel(int row, int col, Element element)    { data_[row * width_ + col] = element; }
+  Element& operator() (int row, int col)              { return data_[row * width_ + col]; }
+  Element* getData()                                  { return data_; }
 
   /// compare
   bool operator == (const Image& img) const;
-  bool operator != (const Image& img) const	{ return !operator==(img); }
+  bool operator != (const Image& img) const           { return !operator==(img); };
 
 protected:
   Element* data_;
 };
-
-// -------------------------------------------------------------------------- ;
-// -------------------------------------------------------------------------- ;
-
-template< class Element >
-inline Element TImage< Element >::getPixel(int i, int j) const
-{
-  assert(isInside(i, j));
-  return data_[i * width_ + j];
-}
-
-template< class Element >
-inline const Element& TImage< Element >::operator () (int i, int j) const
-{
-  assert(isInside(i, j));
-  return data_[i * width_ + j];
-}
-
-template< class Element >
-inline const Element* TImage< Element >::getData() const
-{
-  return data_;
-}
-
-template< class Element >
-inline void TImage< Element >::setPixel(int i, int j, Element element)
-{
-  assert(isInside(i, j));
-  data_[i * width_ + j] = element;
-}
-
-template< class Element >
-inline Element& TImage< Element >::operator () (int i, int j)
-{
-  assert(isInside(i, j));
-  return data_[i * width_ + j];
-}
-
-template< class Element >
-inline Element* TImage< Element >::getData()
-{
-  return data_;
-}
 
 // -------------------------------------------------------------------------- ;
 
@@ -134,7 +88,7 @@ bool TImage< Element >::resize(int width, int height)
   width_ = 0;
   height_ = 0;
 
-  data_ = (Element*) malloc(width * height * sizeof(Element));
+  data_ = (Element*)malloc(width * height * sizeof(Element));
   if (!data_)
     return false;
 
@@ -150,7 +104,7 @@ template< class Element >
 void TImage< Element >::clear()
 {
   free(data_);
-  data_ = NULL;
+  data_ = 0;
   width_ = 0;
   height_ = 0;
 }
@@ -165,14 +119,15 @@ TImage< Element >& TImage< Element >::operator = (const TImage& tImg)
 
   // only for images of the same type!
   // conversions are implemented in the derived classes
-  assert(type_ == tImg.getType());
 
   if (!resize(tImg.getWidth(), tImg.getHeight()))
     return *this;    // return empty image if resize fails
 
-  memcpy(getData(), tImg.getData(), getSize() * sizeof(Element));
-
-  Image::operator=(tImg);
+  if (data_ && tImg.data_)
+  {
+    memcpy(data_, tImg.data_, getSize() * sizeof(Element));
+    Image::operator=(tImg);
+  }
 
   return *this;
 }
@@ -182,7 +137,7 @@ TImage< Element >& TImage< Element >::operator = (const TImage& tImg)
 template< class Element >
 bool TImage< Element >::operator == (const Image& img) const
 {
-  if (! Image::operator == (img)) return false;
+  if (!Image::operator == (img)) return false;
 
   const Element* ptr0 = getData();
   const Element* ptr1 = ((const TImage&)img).getData();
@@ -193,6 +148,8 @@ bool TImage< Element >::operator == (const Image& img) const
 
   return true;
 }
+
+// -------------------------------------------------------------------------- ;
 
 NAMESPACE_LERC_END
 #endif

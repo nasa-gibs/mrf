@@ -24,7 +24,8 @@ Contributors:  Thomas Maurer
 #ifndef RLE_H
 #define RLE_H
 
-#include "Defines.h"
+#include <cstddef>
+#include "./Defines.h"
 
 NAMESPACE_LERC_START
 
@@ -35,7 +36,7 @@ NAMESPACE_LERC_START
  *    (n + 1) * 3 / 32767 + 2  ~= 0.00009
  *
  *  worst case resize factor (no stretch of same bytes):
- *    n + 4 + 2 * (n - 1) / 32767 ~= 1.00006
+ *    n + (n + 1) * 2 / 32767 + 2  ~= 1.00006
  */
 
 class RLE
@@ -49,15 +50,14 @@ public:
   // when done, call
   // delete[] *arrRLE;
   bool compress(const Byte* arr, size_t numBytes,
-                Byte** arrRLE, size_t& numBytesRLE, bool verify = false) const;
+    Byte** arrRLE, size_t& numBytesRLE, bool verify = false) const;
 
   // when done, call
   // delete[] *arr;
-  // cppcheck-suppress functionStatic
-  bool decompress(const Byte* arrRLE, size_t nRemainingSize, Byte** arr, size_t& numBytes) const;
+  static bool decompress(const Byte* arrRLE, Byte** arr, size_t& numBytes);
 
   // arr already allocated, just fill
-  static bool decompress(const Byte* arrRLE, size_t nRemainingSize, Byte* arr, size_t arrSize);
+  static bool decompress(const Byte* arrRLE, Byte* arr);
 
 protected:
   int m_minNumEven;
@@ -65,8 +65,6 @@ protected:
   static void writeCount(short cnt, Byte** ppCnt, Byte** ppDst);
   static short readCount(const Byte** ppCnt);
 };
-
-// -------------------------------------------------------------------------- ;
 
 NAMESPACE_LERC_END
 #endif
