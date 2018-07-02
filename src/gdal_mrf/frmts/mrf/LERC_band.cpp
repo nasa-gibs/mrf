@@ -60,6 +60,8 @@ static Lerc::DataType GetGDALDataType(GDALDataType gdtype) {
     return dt;
 }
 
+static bool IsLittleEndianSystem()  { int n = 1;  return (1 == *((Byte*)&n)) && (4 == sizeof(int)); }
+
 // Populate a bitmask based on comparison with the image no data value
 template <typename T> static void UnMask(BitMask &bitMask, T *arr, const ILImage &img)
 {
@@ -113,9 +115,14 @@ CPLErr LERC_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     const Byte *ptr = reinterpret_cast<Byte *>(src.buffer);
     Lerc::LercInfo lercInfo;
 
+    if (!IsLittleEndianSystem()) {
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF_LERC: Does not support big endian system");
+        return CE_Failure;
+    }
+
     if (ErrCode::Ok != Lerc::GetLercInfo(ptr, static_cast<unsigned int>(src.size), lercInfo)) {
-    	CPLError(CE_Failure, CPLE_AppDefined, "MRF_LERC: get lerc info failure");
-    	return CE_Failure;
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF_LERC: get lerc info failure");
+        return CE_Failure;
     }
 
     CPLDebug("MRF_LERC", "lerc info, version: %d, dt: %d, cols: %d, rows: %d, nBands: %d,"
@@ -143,11 +150,11 @@ CPLErr LERC_Band::Decompress(buf_mgr &dst, buf_mgr &src)
     BitMask bitMask(img.pagesize.x, img.pagesize.y);
     // first try Lerc2, then try Lerc1
     if (ErrCode::Ok != Lerc::Decode(ptr,
-    	static_cast<unsigned int>(nRemaingBytes),
-    	&bitMask,
-    	lercInfo.nCols, lercInfo.nRows, 1,
-    	lercInfo.dt,
-    	dst.buffer)
+        static_cast<unsigned int>(nRemaingBytes),
+        &bitMask,
+        lercInfo.nCols, lercInfo.nRows, 1,
+        lercInfo.dt,
+        dst.buffer)
     ) {
         CPLError(CE_Failure, CPLE_AppDefined, "MRF: Error during LERC2 decompression");
         return CE_Failure;
@@ -179,6 +186,12 @@ CPLErr LERC_Band::Compress(buf_mgr &dst, buf_mgr &src)
         CPLError(CE_Failure, CPLE_AppDefined, "MRF_LERC: Version 1 is not supported");
         return CE_Failure;
     }
+
+    if (!IsLittleEndianSystem()) {
+        CPLError(CE_Failure, CPLE_AppDefined, "MRF_LERC: Does not support big endian system");
+        return CE_Failure;
+    }
+
 
     int nBands = 1;
     int w = img.pagesize.x;

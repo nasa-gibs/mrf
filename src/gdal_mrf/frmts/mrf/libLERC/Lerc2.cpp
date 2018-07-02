@@ -155,7 +155,7 @@ bool Lerc2::WriteHeader(Byte** ppByte, const struct HeaderInfo& hd)
   ptr += len;
 
   // memcpy(ptr, (char *)(Lerc2::kCurrVersion), sizeof(int));
-  ptr[0] = Lerc2::kCurrVersion;
+  *((int *)ptr) = Lerc2::kCurrVersion;
   ptr += sizeof(int);
 
   unsigned int checksum = 0;
