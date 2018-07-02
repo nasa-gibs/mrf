@@ -20,16 +20,17 @@ http://github.com/Esri/lerc/
 
 Contributors:  Thomas Maurer
 */
-#include "RLE.h"
+
+#include "./RLE.h"
 #include <cstring>
 
-NAMESPACE_LERC_START
+using namespace LercNS;
 
 // -------------------------------------------------------------------------- ;
 
 size_t RLE::computeNumBytesRLE(const Byte* arr, size_t numBytes) const
 {
-  if (arr == NULL || numBytes == 0)
+  if (arr == 0 || numBytes == 0)
     return 0;
 
   const Byte* ptr = arr;
@@ -49,6 +50,7 @@ size_t RLE::computeNumBytesRLE(const Byte* arr, size_t numBytes) const
       }
       else    // switch to odd mode
       {
+        cntEven++;
         sum += 2 + 1;
         bOdd = true;
         cntOdd = 0;
@@ -110,7 +112,7 @@ size_t RLE::computeNumBytesRLE(const Byte* arr, size_t numBytes) const
   }
   else
   {
-    /* cntEven++; */
+    cntEven++;
     sum += 2 + 1;
   }
 
@@ -122,7 +124,7 @@ size_t RLE::computeNumBytesRLE(const Byte* arr, size_t numBytes) const
 bool RLE::compress(const Byte* arr, size_t numBytes,
                    Byte** arrRLE, size_t& numBytesRLE, bool verify) const
 {
-  if (arr == NULL || numBytes == 0)
+  if (arr == 0 || numBytes == 0)
     return false;
 
   numBytesRLE = computeNumBytesRLE(arr, numBytes);
@@ -134,6 +136,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
   const Byte* srcPtr = arr;
   Byte* cntPtr = *arrRLE;
   Byte* dstPtr = cntPtr + 2;
+  size_t sum = 0;
   size_t cntOdd = 0;
   size_t cntEven = 0;
   size_t cntTotal = 0;
@@ -152,6 +155,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
       {
         cntEven++;
         writeCount(-(short)cntEven, &cntPtr, &dstPtr);    // - sign for even cnts
+        sum += 2 + 1;
         bOdd = true;
         cntOdd = 0;
         cntEven = 0;
@@ -184,6 +188,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
           if (cntOdd > 0)
           {
             writeCount((short)cntOdd, &cntPtr, &dstPtr);    // + sign for odd cnts
+            sum += 2 + cntOdd;
           }
           bOdd = false;
           cntOdd = 0;
@@ -196,12 +201,14 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
     if (cntOdd == 32767)    // prevent short counters from overflow
     {
       writeCount((short)cntOdd, &cntPtr, &dstPtr);
+      sum += 2 + 32767;
       cntOdd = 0;
     }
     if (cntEven == 32767)
     {
       *dstPtr++ = *srcPtr;
       writeCount(-(short)cntEven, &cntPtr, &dstPtr);
+      sum += 2 + 1;
       cntEven = 0;
     }
 
@@ -215,20 +222,23 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
   {
     cntOdd++;
     writeCount((short)cntOdd, &cntPtr, &dstPtr);
+    sum += 2 + cntOdd;
   }
   else
   {
     cntEven++;
     writeCount(-(short)cntEven, &cntPtr, &dstPtr);
+    sum += 2 + 1;
   }
 
   writeCount(-32768, &cntPtr, &dstPtr);    // write end of stream symbol
+  sum += 2;
 
   if (verify)
   {
-    Byte* arr2 = NULL;
+    Byte* arr2 = 0;
     size_t numBytes2 = 0;
-    if (!decompress(*arrRLE, numBytesRLE, &arr2, numBytes2) || numBytes2 != numBytes)
+    if (!decompress(*arrRLE, &arr2, numBytes2) || numBytes2 != numBytes)
     {
       delete[] arr2;
       return false;
@@ -244,7 +254,7 @@ bool RLE::compress(const Byte* arr, size_t numBytes,
 
 // -------------------------------------------------------------------------- ;
 
-bool RLE::decompress(const Byte* arrRLE, size_t nRemainingSizeIn, Byte** arr, size_t& numBytes) const
+bool RLE::decompress(const Byte* arrRLE, Byte** arr, size_t& numBytes)
 {
   if (!arrRLE)
     return false;
@@ -252,104 +262,50 @@ bool RLE::decompress(const Byte* arrRLE, size_t nRemainingSizeIn, Byte** arr, si
   // first count the encoded bytes
   const Byte* srcPtr = arrRLE;
   size_t sum = 0;
-  size_t nRemainingSize = nRemainingSizeIn;
-  if( nRemainingSize < 2 )
-  {
-    LERC_BRKPNT();
-    return false;
-  }
   short cnt = readCount(&srcPtr);
-  nRemainingSize -= 2;
   while (cnt != -32768)
   {
-    sum += (cnt < 0) ? -cnt : cnt;
-    size_t nInc = (cnt > 0) ? cnt : 1;
-    if( nRemainingSize < nInc )
-    {
-        LERC_BRKPNT();
-        return false;
-    }
-    srcPtr += nInc;
-    nRemainingSize -= nInc;
-    if( nRemainingSize < 2 )
-    {
-      LERC_BRKPNT();
-      return false;
-    }
+    sum += cnt < 0 ? -cnt : cnt;
+    srcPtr += cnt > 0 ? cnt : 1;
     cnt = readCount(&srcPtr);
-    nRemainingSize -= 2;
   }
 
   numBytes = sum;
-  if( numBytes == 0 )
+
+  if (numBytes == 0)
   {
-    *arr = NULL;
-    return true;
+    *arr = 0;
+    return false;
   }
+
   *arr = new Byte[numBytes];
   if (!*arr)
     return false;
 
-  return decompress(arrRLE, nRemainingSizeIn, *arr, numBytes);
+  return decompress(arrRLE, *arr);
 }
 
 // -------------------------------------------------------------------------- ;
 
-bool RLE::decompress(const Byte* arrRLE, size_t nRemainingSize, Byte* arr, size_t arrSize)
+bool RLE::decompress(const Byte* arrRLE, Byte* arr)
 {
   if (!arrRLE || !arr)
     return false;
 
   const Byte* srcPtr = arrRLE;
-  size_t arrIdx = 0;
-  if( nRemainingSize < 2 )
-  {
-    LERC_BRKPNT();
-    return false;
-  }
+  Byte* dstPtr = arr;
   short cnt = readCount(&srcPtr);
-  nRemainingSize -= 2;
   while (cnt != -32768)
   {
-    int i = (cnt < 0) ? -cnt: cnt ;
+    int i = cnt < 0 ? -cnt : cnt;
     if (cnt > 0)
-    {
-      if( nRemainingSize < static_cast<size_t>(i) )
-      {
-        LERC_BRKPNT();
-        return false;
-      }
-      nRemainingSize -= i;
-      if( arrIdx + i > arrSize )
-      {
-        LERC_BRKPNT();
-        return false;
-      }
-      while (i--) arr[arrIdx++] = *srcPtr++;
-    }
+      while (i--) *dstPtr++ = *srcPtr++;
     else
     {
-      if( nRemainingSize < 1 )
-      {
-        LERC_BRKPNT();
-        return false;
-      }
-      nRemainingSize -= 1;
       Byte b = *srcPtr++;
-      if( arrIdx + i > arrSize )
-      {
-        LERC_BRKPNT();
-        return false;
-      }
-      while (i--) arr[arrIdx++] = b;
-    }
-    if( nRemainingSize < 2 )
-    {
-        LERC_BRKPNT();
-        return false;
+      while (i--) *dstPtr++ = b;
     }
     cnt = readCount(&srcPtr);
-    nRemainingSize -= 2;
   }
 
   return true;
@@ -378,4 +334,3 @@ short RLE::readCount(const Byte** ppCnt)
 
 // -------------------------------------------------------------------------- ;
 
-NAMESPACE_LERC_END

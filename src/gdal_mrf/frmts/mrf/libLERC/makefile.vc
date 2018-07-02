@@ -1,14 +1,20 @@
 GDAL_ROOT	=	..\..\..
 !INCLUDE $(GDAL_ROOT)\nmake.opt
 
+OBJ = \
+	BitMask.o\
+	BitStuffer.o\
+	BitStuffer2.o\
+	CntZImage.o\
+	Huffman.o\
+	RLE.o\
+	Lerc2.o\
+	Lerc.o
 
-OBJ	= \
-	BitMask.obj BitMask2.obj BitStuffer.obj BitStuffer2.obj \
-	CntZImage.obj Huffman.obj Lerc2.obj RLE.obj
 
 HEADERS = \
 	BitMask.h Huffman.h BitStuffer.h CntZImage.h Defines.h Image.h \
-	TImage.hpp Lerc2.h BitStuffer2.h BitMask2.h RLE.h
+	TImage.hpp Lerc2.h BitStuffer2.h BitMask2.h RLE.h Lerc.h
 
 LIBLERC = libLERC.obj
 
