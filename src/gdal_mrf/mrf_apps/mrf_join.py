@@ -21,7 +21,7 @@ import sys
 import functools
 import array
 
-def main(argv):
+def mrf_join(argv):
     '''Input file given as list, the last one is the output
  Given the data file names, including the extension, which should be the same 
  for all files, the .idx and the .mrf extensions are assumed.
@@ -29,11 +29,14 @@ def main(argv):
  Tile from inputs are added in the order in which they appear on the command line, 
  except the output file, if it exists, which ends up first.
     '''
-    assert len(argv) > 2, "Takes a list of input mrf data files to be concatenated, the last is the output, which will be created if needed"
+    assert len(argv) > 2,\
+       "Takes a list of input mrf data files to be concatenated, the last is the output, which will be created if needed"
     ofname, ext = os.path.splitext(argv[-1])
-    assert ext not in ('.mrf', '.idx'), "Takes data file names as input"
+    assert ext not in ('.mrf', '.idx'),\
+       "Takes data file names as input"
     for f in input_list:
-        assert os.path.splitext(f)[1] == ext, "All input files should have the same extension"
+        assert os.path.splitext(f)[1] == ext,\
+            "All input files should have the same extension"
 
     if not os.path.isfile(ofname + ext): # Create the output using the first file info
         ffname = os.path.splitext(input_list[0])[0]
@@ -45,6 +48,11 @@ def main(argv):
             idx_file.truncate(os.path.getsize(ffname + '.idx'))
         with open(ofname + ext, "wb") as data_file:
             pass
+
+    idxsize = os.path.getsize(ofname )
+    for f in input_list:
+        assert os.path.getsize(os.path.splitext(f)[0] + '.idx') == idxsize,\
+            "All input files should have the same index size"
 
     # At this point the output exist, loop over the inputs
     for input_file in argv[:-1]:
@@ -77,9 +85,9 @@ def main(argv):
                     except EOFError:
                         # This has to be the last non-zero chunk, size matches the output file read
                         assert len(inidx) == len(outidx), \
-                            "Index files should have same size, got {} and {}".format(len(inidx), len(outidx))
+                            "Error reading from index file {}".format(fname + '.idx')
 
-                    # Got the pieces, test for empty input, in which case the output is unchanged
+                    # If the input block has no tiles, no changes are needed
                     if inidx.count(0) == len(outidx):
                         continue
 
@@ -93,9 +101,9 @@ def main(argv):
                             outidx[i + 1] = inidx[i + 1]  # Tile size
                     outidx.byteswap() # Swap values back to big endian before writing
 
-                    # Write it in the same place
+                    # Write it in the same place it was read from
                     ofile.seek(- len(outidx) * outidx.itemsize, io.SEEK_CUR)
                     outidx.tofile(ofile)
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    mrf_join(sys.argv[1:])
