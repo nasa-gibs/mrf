@@ -395,3 +395,4 @@ In GDAL 2.x API, a list of key-value string pairs can be used to pass various op
 |Key|Default Value|Description|
 | --- | --- | --- |
 | DATATYPE | Byte | Sets data type for reading raw LERC V1 files|
+| NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt areas|
