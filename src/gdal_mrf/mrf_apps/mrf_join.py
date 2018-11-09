@@ -18,7 +18,6 @@
 import os
 import io
 import sys
-import functools
 import array
 
 def mrf_join(argv):
@@ -63,7 +62,7 @@ def mrf_join(argv):
         # Copy the data file at the end of the current file, in 1MB chunks
         with open(ofname + ext, 'ab') as ofile:
             with open(fname + ext, 'rb') as ifile:
-                for chunk in iter(functools.partial(ifile.read, 1024 * 1024), b""):
+                for chunk in iter(lambda : ifile.read(1024 * 1024), b""):
                     ofile.write(chunk)
 
         # Now for the hard job, tile by tile, adjust the index and write it
@@ -72,7 +71,7 @@ def mrf_join(argv):
                 while True: # Process index files, block at a time
                     # Read as quads, to avoid individual conversions
                     outidx = array.array('Q')
-                    inidx = array.array('Q')
+                    inidx  = array.array('Q')
 
                     try: # Read a chunk of the output
                         outidx.fromfile(ofile, 512 // outidx.itemsize)
@@ -92,16 +91,19 @@ def mrf_join(argv):
                         continue
 
                     # Got some input content, there is work to do
-                    # Index is big endian, swap it to little
-                    inidx.byteswap()
-                    outidx.byteswap()
+                    if sys.byteorder is 'little': # MRF index is big endian
+                        inidx.byteswap()
+                        outidx.byteswap()
+
                     for i in range(0, len(inidx), 2):
                         if inidx[i + 1] is not 0: # Only modify tiles in input
                             outidx[i] = inidx[i] + offset # Add the starting offset to every tile
                             outidx[i + 1] = inidx[i + 1]  # Tile size
-                    outidx.byteswap() # Swap values back to big endian before writing
 
-                    # Write it in the same place it was read from
+                    if sys.byteorder is 'little':
+                        outidx.byteswap()
+
+                    # Write it where it was read from
                     ofile.seek(- len(outidx) * outidx.itemsize, io.SEEK_CUR)
                     outidx.tofile(ofile)
 
