@@ -44,6 +44,7 @@ def mrf_join(argv):
     ofname, ext = os.path.splitext(argv[-1])
     assert ext not in ('.mrf', '.idx'),\
        "Takes data file names as input"
+    input_list = argv[:-1]
     for f in input_list:
         assert os.path.splitext(f)[1] == ext,\
             "All input files should have the same extension"
@@ -59,10 +60,10 @@ def mrf_join(argv):
         with open(ofname + ext, "wb") as data_file:
             pass
 
-    idxsize = os.path.getsize(ofname )
+    idxsize = os.path.getsize(ofname + '.idx')
     for f in input_list:
         assert os.path.getsize(os.path.splitext(f)[0] + '.idx') == idxsize,\
-            "All input files should have the same index size"
+            "All input index files should have the same size {}, {} does not".format(idxsize, f)
 
     # At this point the output exist, loop over the inputs
     for input_file in argv[:-1]:
