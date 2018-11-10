@@ -348,7 +348,7 @@ For cloning MRFs, the index of the local cache data is followed immediately by a
 
 To print the content of the index in a human readable form, the following command can be used on UNIX.  The first number is the offset, the second one the size of each tile
 ```
-dd -t u8 --endian big <input_file>
+od -t u8 --endian big <input_file>
 ```
 
 # APPENDIX C, Create Options
