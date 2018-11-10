@@ -347,9 +347,9 @@ If there are overviews, the tile index vectors for the overviews immediately fol
 For cloning MRFs, the index of the local cache data is followed immediately by a copy of the cloned MRF index.  The content of both may be updated during reads.
 
 To print the content of the index in a human readable form, the following command can be used on UNIX:  
-'''
+```
 dd -t u8 --endian big <input_file>
-'''
+```
 
 # APPENDIX C, Create Options
 
