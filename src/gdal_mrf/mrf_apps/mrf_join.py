@@ -67,6 +67,7 @@ def mrf_join(argv):
 
     # At this point the output exist, loop over the inputs
     for input_file in argv[:-1]:
+        print("Processing {}".format(input_file))
         fname = os.path.splitext(input_file)[0]
         # Offset to adjust start of tiles in this input
         offset = os.path.getsize(ofname + ext)
@@ -98,21 +99,21 @@ def mrf_join(argv):
                         assert len(inidx) == len(outidx), \
                             "Error reading from index file {}".format(fname + '.idx')
 
-                    # If the input block has no tiles, no changes are needed
+                    # If the input block is all zeros, no need to write it
                     if inidx.count(0) == len(outidx):
                         continue
 
                     # Got some input content, there is work to do
-                    if sys.byteorder is 'little': # MRF index is big endian
+                    if sys.byteorder != 'big': # MRF index is big endian
                         inidx.byteswap()
                         outidx.byteswap()
 
                     for i in range(0, len(inidx), 2):
-                        if inidx[i + 1] is not 0: # Only modify tiles in input
+                        if inidx[i + 1] != 0: # Copy existing tiles indices
                             outidx[i] = inidx[i] + offset # Add the starting offset to every tile
-                            outidx[i + 1] = inidx[i + 1]  # Tile size
+                            outidx[i + 1] = inidx[i + 1]
 
-                    if sys.byteorder is 'little':
+                    if sys.byteorder != 'big':
                         outidx.byteswap()
 
                     # Write it where it was read from
