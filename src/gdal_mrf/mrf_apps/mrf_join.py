@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 #
+# Name: mrf_join
+# Purpose:
+
+'''Joins multiple MRF files with the same structure into a single one'''
+
+# Created: 11/08/2018
+# Updated: 
+#
+# Author: Lucian Plesea
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,12 +23,13 @@
 # limitations under the License.
 #
 
-'''Joins multiple MRF files with the same structure into a single one'''
-
 import os
 import io
 import sys
 import array
+
+# hexversion >> 16 >= 0x306 (for 3.6 or later)
+assert sys.hexversion >> 24 >= 0x3, "Python 3 required"
 
 def mrf_join(argv):
     '''Input file given as list, the last one is the output
