@@ -346,6 +346,11 @@ If there are overviews, the tile index vectors for the overviews immediately fol
 
 For cloning MRFs, the index of the local cache data is followed immediately by a copy of the cloned MRF index.  The content of both may be updated during reads.
 
+To print the content of the index in a human readable form, the following command can be used on UNIX:  
+'''
+dd -t u8 --endian big <input_file>
+'''
+
 # APPENDIX C, Create Options
 
 In GDAL, a list of key-value string pairs can be used to pass various options to the target driver.  Using the gdal_translate utility, these options are passed using the –co Key=Value syntax.  Most of the names of the options supported by MRF have been chosen to match the ones used by TIFF.  The create options supported by MRF are:
