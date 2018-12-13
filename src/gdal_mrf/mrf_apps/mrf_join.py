@@ -27,9 +27,17 @@ import os
 import io
 import sys
 import array
+import argparse
+import glob
 
 # hexversion >> 16 >= 0x306 (for 3.6 or later)
 assert sys.hexversion >> 24 >= 0x3, "Python 3 required"
+
+def appendfile(srcname, dstname):
+    with open(dstname, 'ab') as ofile:
+        with open(srcname, 'rb') as ifile:
+            for chunk in iter(lambda : ifile.read(1024 * 1024), b""):
+                ofile.write(chunk)
 
 def mrf_join(argv):
     '''Input file given as list, the last one is the output
@@ -73,10 +81,7 @@ def mrf_join(argv):
         offset = os.path.getsize(ofname + ext)
 
         # Copy the data file at the end of the current file, in 1MB chunks
-        with open(ofname + ext, 'ab') as ofile:
-            with open(fname + ext, 'rb') as ifile:
-                for chunk in iter(lambda : ifile.read(1024 * 1024), b""):
-                    ofile.write(chunk)
+        appendfile(ofname + ext, fname + ext)
 
         # Now for the hard job, tile by tile, adjust the index and write it
         with open(ofname + '.idx', 'r+b') as ofile:
@@ -120,5 +125,140 @@ def mrf_join(argv):
                     ofile.seek(- len(outidx) * outidx.itemsize, io.SEEK_CUR)
                     outidx.tofile(ofile)
 
+# Integer division of x/y, rounded up
+def rupdiv(x, y):
+    return 1 + (x - 1) // y
+
+def getpcount(size, pagesize):
+    return rupdiv(size['x'], pagesize['x'])\
+         * rupdiv(size['y'], pagesize['y'])\
+         * rupdiv(size['c'], pagesize['c'])
+
+def getmrfinfo(fname):
+    import xml.etree.ElementTree as ET
+    tree = ET.parse(fname)
+    root = tree.getroot()
+    assert root.tag == "MRF_META", "{} is not an MRF".format(fname)
+    info = {}
+    info['size'] = { key : int(val) for (key, val) in 
+                    root.find("./Raster/Size").attrib.items() }
+
+    if root.find("./Raster/PageSize"):
+        info['pagesize'] = { key : int(val) for (key, val) in 
+                        root.find("./Raster/PageSize").attrib.items() }
+    else:
+        info['pagesize'] = {
+            'x' : 512,
+            'y' : 512,
+            'c' : info['size']['c'] if 'c' in info['size'] else 1
+        }
+
+    if root.find("./Rsets") is not None:
+        assert root.find("./Rsets").get('model') == 'uniform', "Only uniform model rsets are supported"
+        try:
+            info['scale'] = int(root.find("./Rsets").get('scale'))
+        except:
+            info['scale'] = 2
+
+    # compute the pagecount per level, level 0 always exists
+    sz = info['size']
+    info['pages'] = [getpcount(sz, info['pagesize'])]
+
+    if 'scale' in info:
+        scale = info['scale']
+        # This is either 1 or the number of bands
+        bandpages = rupdiv(info['size']['c'], info['pagesize']['c'])
+        while info['pages'][-1] != bandpages:
+            sz['x'] = rupdiv(sz['x'], scale)
+            sz['y'] = rupdiv(sz['y'], scale)
+            info['pages'].append(getpcount(sz, info['pagesize']))
+    info['totalpages'] = sum(info['pages'])
+
+    return info
+
+# Creates the file if it doesn't exist, then truncates it to the given size
+def ftruncate(fname, size = 0):
+    try:
+        with open(fname, "r+b") as f:
+            assert os.path.getsize(fname) <= size, "Output index file exists and has the wrong size"
+            f.truncate(size)
+    except:
+        with open(fname, "wb") as f:
+            f.truncate(size)
+
+def mrf_append(inputs, output, outsize, startidx = 0):
+    ofname, ext = os.path.splitext(output)
+    assert ext not in ('.mrf', '.idx'),\
+       "Takes data file names as arguments"
+    for f in inputs:
+        assert os.path.splitext(f)[1] == ext,\
+            "All input files should have the same extension as the output"
+    # Get the template mrf information from the first input
+    mrfinfo = getmrfinfo(os.path.splitext(inputs[1])[0] + ".mrf")
+    inidxsize = 16 * mrfinfo['totalpages']
+    outidxsize = outsize * inidxsize
+    # Make sure the output is the right size
+    ftruncate(ofname + ".idx", outidxsize)
+    if not os.path.isfile(output):
+        # Try to create it
+        with open(output, "wb") as o:
+            pass
+
+    for fn in inputs:
+        # Create the output file if not there and get its current size
+        with open(output, "a+b") as o:
+            dataoffset = os.path.getsize(output)
+
+        fname, iext = os.path.splitext(fn)
+        assert iext == ext, \
+            "File {} should have extension {}".format(fn, ext)
+        assert os.path.getsize(fname + ".idx") == inidxsize, \
+            "Index for file {} has invalid size, expected {}".format(fn, inidxsize)
+        appendfile(fn, output)
+        with open(fname + ".idx", "rb") as inidx:
+            with open(ofname + ".idx", "r+b") as outidx:
+                for level in range(len(mrfinfo['pages'])):
+                    outidxoffset = startidx * mrfinfo['pages'][level]
+                    if level > 0:
+                        outidxoffset += sum(mrfinfo['pages'][0:level]) * outsize
+                    outidx.seek(16 * outidxoffset, io.SEEK_SET)
+                    # Copy tile by tile, don't write zeros
+                    for tnum in range(mrfinfo['pages'][level]):
+                        tinfo = array.array('Q')
+                        tinfo.fromfile(inidx, 2)
+                        # If the input block is all zeros, no need to write it
+                        if tinfo.count(0) == len(tinfo):
+                            outidx.seek(16, io.SEEK_CUR)
+                            continue
+                        if sys.byteorder != 'big':
+                            tinfo.byteswap()
+                        tinfo[0] += dataoffset
+                        if sys.byteorder != 'big':
+                            tinfo.byteswap()
+                        tinfo.tofile(outidx)
+        startidx += 1
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-o", "--output")
+    parser.add_argument("-z", "--zsize", type = int)
+    parser.add_argument("-s", "--slice", type = int)
+    parser.add_argument("fnames", action = "store")
+    args = parser.parse_args()
+    fnames = args.fnames
+    # On windows, call the glob expliticly
+    if not isinstance(fnames, (list, tuple)):
+        fnames = glob.glob(fnames)
+
+    if args.zsize is not None:
+        assert args.output is not None, "-z option requires an explicit output file name"
+        slice = args.slice if args.slice is not None else 0
+        return mrf_append(fnames, args.output, args.zsize, slice)
+
+    # Default action is mrf_join, takes the output as the last argument
+    if args.output is not None:
+        fnames.append(args.output)
+    mrf_join(fnames)
+
 if __name__ == "__main__":
-    mrf_join(sys.argv[1:])
+    main()
