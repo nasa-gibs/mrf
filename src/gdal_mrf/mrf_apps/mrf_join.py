@@ -6,7 +6,7 @@
 '''Joins multiple MRF files with the same structure into a single one'''
 
 # Created: 11/08/2018
-# Updated: 
+# Updated: 12/14/2018 - Added Z dimension append mode
 #
 # Author: Lucian Plesea
 #
@@ -174,7 +174,7 @@ def getmrfinfo(fname):
             info['pages'].append(getpcount(sz, info['pagesize']))
     info['totalpages'] = sum(info['pages'])
 
-    return info
+    return info, tree
 
 # Creates the file if it doesn't exist, then truncates it to the given size
 def ftruncate(fname, size = 0):
@@ -186,6 +186,13 @@ def ftruncate(fname, size = 0):
         with open(fname, "wb") as f:
             f.truncate(size)
 
+def write_mrf(tree, zsz, fname):
+    root = tree.getroot()
+    assert root.tag == "MRF_META", "Invalid tree, not an mrf"
+    size = root.find("./Raster/Size")
+    size.set('z', str(zsz))
+    tree.write(fname)
+
 def mrf_append(inputs, output, outsize, startidx = 0):
     ofname, ext = os.path.splitext(output)
     assert ext not in ('.mrf', '.idx'),\
@@ -194,7 +201,12 @@ def mrf_append(inputs, output, outsize, startidx = 0):
         assert os.path.splitext(f)[1] == ext,\
             "All input files should have the same extension as the output"
     # Get the template mrf information from the first input
-    mrfinfo = getmrfinfo(os.path.splitext(inputs[1])[0] + ".mrf")
+    mrfinfo, tree = getmrfinfo(os.path.splitext(inputs[1])[0] + ".mrf", ofname + ".mrf")
+
+    # Create the output .mrf if it doesn't exist
+    if not os.path.isfile(ofname + ".mrf"):
+        write_mrf(tree, outsize, ofname + ".mrf")
+
     inidxsize = 16 * mrfinfo['totalpages']
     outidxsize = outsize * inidxsize
     # Make sure the output is the right size
