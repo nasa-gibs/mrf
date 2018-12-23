@@ -255,7 +255,7 @@ def main():
     parser.add_argument("-o", "--output")
     parser.add_argument("-z", "--zsize", type = int)
     parser.add_argument("-s", "--slice", type = int)
-    parser.add_argument("fnames", action = "store")
+    parser.add_argument("fnames", nargs='+')
     args = parser.parse_args()
     fnames = args.fnames
     # On windows, call the glob expliticly
