@@ -81,7 +81,7 @@ def mrf_join(argv):
         offset = os.path.getsize(ofname + ext)
 
         # Copy the data file at the end of the current file, in 1MB chunks
-        appendfile(ofname + ext, fname + ext)
+        appendfile(fname + ext, ofname + ext)
 
         # Now for the hard job, tile by tile, adjust the index and write it
         with open(ofname + '.idx', 'r+b') as ofile:
