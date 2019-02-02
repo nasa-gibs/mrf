@@ -358,13 +358,15 @@ bool state::patch() {
 static int Usage()
 
 {
-    printf("Usage: mrf_insert [-r {Avg, NearNb}]\n"
-	"                  [-q] [--help-general] source_file(s) target_file\n"
-	"\n"
-	"  -start_level <N> : first level to insert into (0)"
-	"  -end_level <N> : last level to insert into (last)"
-	"  -r : choice of resampling method (default: average)\n"
-	"  -q : turn off progress display\n");
+    printf(
+"Usage: mrf_insert [-r {Avg, NNb}]\n"
+"\t\t[-q] [--help-general] source_file(s) target_file\n"
+"\n"
+"\t-start_level <N> : first level to insert into (0)\n"
+"\t-end_level <N> : last level to insert into (last)\n"
+"\t-r : choice of resampling method (default: average)\n"
+"\t-q : turn off progress display\n");
+
     return 1;
 }
 
