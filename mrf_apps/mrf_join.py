@@ -47,7 +47,7 @@ def mrf_join(argv, forceoffset = None):
  Tile from inputs are added in the order in which they appear on the command line, 
  except the output file, if it exists, which ends up first.
     '''
-    assert len(argv) > 2,\
+    assert len(argv) >= 2,\
        "Takes a list of input mrf data files to be concatenated, the last is the output, which will be created if needed"
     ofname, ext = os.path.splitext(argv[-1])
     assert ext not in ('.mrf', '.idx'),\
@@ -280,7 +280,7 @@ def main():
         fnames.append(args.output)
     if args.forceoffset is not None:
         assert len(fnames) == 2, "Forced offset works only with one input"
-    mrf_join(fnames, force = args.forceoffset)
+    mrf_join(fnames, forceoffset = args.forceoffset)
 
 if __name__ == "__main__":
     main()
