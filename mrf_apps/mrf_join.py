@@ -39,7 +39,7 @@ def appendfile(srcname, dstname):
             for chunk in iter(lambda : ifile.read(1024 * 1024), b""):
                 ofile.write(chunk)
 
-def mrf_join(argv):
+def mrf_join(argv, forceoffset = None):
     '''Input file given as list, the last one is the output
  Given the data file names, including the extension, which should be the same 
  for all files, the .idx and the .mrf extensions are assumed.
@@ -77,11 +77,12 @@ def mrf_join(argv):
     for input_file in argv[:-1]:
         print("Processing {}".format(input_file))
         fname = os.path.splitext(input_file)[0]
-        # Offset to adjust start of tiles in this input
-        offset = os.path.getsize(ofname + ext)
-
-        # Copy the data file at the end of the current file, in 1MB chunks
-        appendfile(fname + ext, ofname + ext)
+        offset = forceoffset
+        if offset is None:
+            # Offset to adjust start of tiles in this input
+            offset = os.path.getsize(ofname + ext)
+            # Copy the data file at the end of the current file, in 1MB chunks
+            appendfile(input_file, ofname + ext)
 
         # Now for the hard job, tile by tile, adjust the index and write it
         with open(ofname + '.idx', 'r+b') as ofile:
@@ -109,7 +110,7 @@ def mrf_join(argv):
                         continue
 
                     # Got some input content, there is work to do
-                    if sys.byteorder != 'big': # MRF index is big endian
+                    if sys.byteorder != 'big': # MRF index is always big endian
                         inidx.byteswap()
                         outidx.byteswap()
 
@@ -252,9 +253,15 @@ def mrf_append(inputs, output, outsize, startidx = 0):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--output")
-    parser.add_argument("-z", "--zsize", type = int)
-    parser.add_argument("-s", "--slice", type = int)
+    parser.add_argument("-o", "--output",
+                        help = "Output file name, otherwise the last file name is the output")
+    parser.add_argument("-z", "--zsize", type = int,
+                        help = "The output is a 3rd dimension MRF into which inputs are inserted as slices")
+    parser.add_argument("-s", "--slice", type = int,
+                        help = "Used only with -z, which is the first target slice, defaults to 0")
+    parser.add_argument("-f", "--forceoffset", type = int,
+                        help = "Provide an offset to be used when adding one input index to the output. Data files are ignored")
+
     parser.add_argument("fnames", nargs='+')
     args = parser.parse_args()
     fnames = args.fnames
@@ -264,13 +271,16 @@ def main():
 
     if args.zsize is not None:
         assert args.output is not None, "-z option requires an explicit output file name"
+        assert args.forceoffset is None, "-z option can't use a forced offset"
         slice = args.slice if args.slice is not None else 0
         return mrf_append(fnames, args.output, args.zsize, slice)
 
     # Default action is mrf_join, takes the output as the last argument
     if args.output is not None:
         fnames.append(args.output)
-    mrf_join(fnames)
+    if args.forceoffset is not None:
+        assert len(fnames) == 2, "Forced offset works only with one input"
+    mrf_join(fnames, force = args.forceoffset)
 
 if __name__ == "__main__":
     main()
