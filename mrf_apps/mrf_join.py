@@ -51,7 +51,7 @@ def mrf_join(argv, forceoffset = None):
        "Takes a list of input mrf data files to be concatenated, the last is the output, which will be created if needed"
     ofname, ext = os.path.splitext(argv[-1])
     assert ext not in ('.mrf', '.idx'),\
-       "Takes data file names as input"
+       "Takes data file names as input, not the .mrf or .idx"
     input_list = argv[:-1]
     for f in input_list:
         assert os.path.splitext(f)[1] == ext,\
@@ -65,8 +65,10 @@ def mrf_join(argv, forceoffset = None):
                 omrf_file.write(mrf_file.read())
         with open(ofname + '.idx', "wb") as idx_file:
             idx_file.truncate(os.path.getsize(ffname + '.idx'))
-        with open(ofname + ext, "wb") as data_file:
-            pass
+        # Only create the data file if forceoffset is not given
+        if forceoffset is None:
+            with open(ofname + ext, "wb") as data_file:
+                pass
 
     idxsize = os.path.getsize(ofname + '.idx')
     for f in input_list:
@@ -252,14 +254,17 @@ def mrf_append(inputs, output, outsize, startidx = 0):
         startidx += 1
 
 def main():
+    def auto_int(x):
+        return int(x, 0)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--output",
                         help = "Output file name, otherwise the last file name is the output")
-    parser.add_argument("-z", "--zsize", type = int,
+    parser.add_argument("-z", "--zsize", type = auto_int,
                         help = "The output is a 3rd dimension MRF into which inputs are inserted as slices")
-    parser.add_argument("-s", "--slice", type = int,
+    parser.add_argument("-s", "--slice", type = auto_int,
                         help = "Used only with -z, which is the first target slice, defaults to 0")
-    parser.add_argument("-f", "--forceoffset", type = int,
+    parser.add_argument("-f", "--forceoffset", type = auto_int,
                         help = "Provide an offset to be used when adding one input index to the output. Data files are ignored")
 
     parser.add_argument("fnames", nargs='+')
