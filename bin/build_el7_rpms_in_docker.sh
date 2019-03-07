@@ -13,11 +13,11 @@ set -evx
 yum install -y epel-release
 yum install -y \
   @buildsys-build \
-  jasper-devel-1.900.1-29.el7 \
-  rsync \
+  ccache \
   wget \
-  yum-utils \
-  numpy
+  rpmdevtools \
+  mock \
+  python-pip
 
 mkdir -p /build
 rsync -av --exclude .git /source/ /build/

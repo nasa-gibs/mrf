@@ -1,7 +1,5 @@
-%global gdal_version 2.1.4
-%global gdal_release 2%{?dist}
-%global mrf_version 1.1.3
-%global mrf_release 1%{?dist}
+%global gdal_version 2.4.0
+%global gdal_release 1%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -13,39 +11,27 @@ License:	MIT
 URL:		http://www.gdal.org/
 Source0:	gibs-gdal-%{gdal_version}.tar.bz2
 Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar.gz
-Source2:	https://pypi.python.org/packages/source/n/numpy/numpy-1.10.4.tar.gz
 
-BuildRequires:	libtool pkgconfig
-BuildRequires:	python-devel xerces-c-devel
-BuildRequires:	libpng-devel libungif-devel
+BuildRequires:  make
+BuildRequires:	libtool
+BuildRequires:  pkgconfig
+BuildRequires:	python-devel
+BuildRequires:	libpng12-devel 
+BuildRequires:	libungif-devel
 BuildRequires:	libjpeg-devel
 BuildRequires:	libtiff-devel
 BuildRequires:	jpackage-utils
-BuildRequires:	jasper-devel cfitsio-devel libdap-devel librx-devel 
-BuildRequires:	hdf-static hdf-devel
-BuildRequires:	unixODBC-devel mysql-devel sqlite-devel 
+BuildRequires:	jasper-devel 
 BuildRequires:	zlib-devel
-BuildRequires:	proj-devel netcdf-devel hdf5-devel ogdi-devel 
-BuildRequires:	libgeotiff-devel
 BuildRequires:	curl-devel
-BuildRequires:	perl(ExtUtils::MakeMaker)
 BuildRequires:	chrpath
 BuildRequires:	swig 
 BuildRequires:	doxygen
 BuildRequires:	expat-devel
-BuildRequires:  python-setuptools
 BuildRequires:  geos-devel >= 3.3.2
-Requires:	proj-devel
 Requires:	gcc-c++
 Requires:	python-devel
-Requires:	python-pycxx-devel
 Requires:	geos >= 3.3.2
-Conflicts:  numpy < 1.10.4
-
-Provides:	gdal = %{gdal_version}-%{gdal_release}
-Obsoletes:	gdal < 1.11
-Provides:	gdal-python = %{gdal_version}-%{gdal_release}
-Obsoletes:	gdal-python < 1.11
 	
 %description
 The GDAL library provides support to handle multiple GIS file formats.
@@ -61,11 +47,18 @@ Requires:	%{name} = %{gdal_version}-%{gdal_release}
 %description devel
 Development libraries for the GDAL library
 
+%package apps
+Summary:	MRF apps
+Group:		Development/Libraries               
+Requires:	%{name} = %{gdal_version}-%{gdal_release}
+
+%description apps
+MRF apps for GIBS GDAL
+
 %prep
 %setup -q
 mkdir upstream
 cp %{SOURCE1} upstream
-cp %{SOURCE2} upstream
 
 %build
 make gdal PREFIX=/usr
@@ -100,13 +93,9 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root,-)
-%doc build/gdal/COMMITERS 
-%doc build/gdal/LICENSE.TXT 
-%doc build/gdal/NEWS 
-%doc build/gdal/PROVENANCE.TXT
-%doc build/gdal/VERSION
 %{_bindir}/*
 %exclude %{_bindir}/gdal-config
+%exclude %{_bindir}/*mrf*
 %{_libdir}/*.so.*
 %{_datadir}/gdal
 %{_mandir}/man1/*.1*
@@ -116,8 +105,6 @@ rm -rf %{buildroot}
 %{python_sitearch}/osr*
 %{python_sitearch}/osgeo
 %{_libdir}/pkgconfig/gdal.pc
-%dir /usr/lib/gdalplugins
-%{_datadir}/numpy
 
 %files devel
 %defattr(-,root,root,-)
@@ -127,16 +114,26 @@ rm -rf %{buildroot}
 %{_libdir}/*.la
 %{_libdir}/*.so
 
-%post 
-cd %{_datadir}/numpy/
-python setup.py build
-python setup.py install
+%files apps
+%defattr(-,root,root,-)
+%{_bindir}/mrf_insert
+%{_bindir}/mrf_clean.py
+%{_bindir}/mrf_join.py
+%{_bindir}/mrf_read_data.py
+%{_bindir}/mrf_read_idx.py
+%{_bindir}/mrf_read.py
+%{_bindir}/mrf_size.py
+%{_bindir}/tiles2mrf.py
+
+%post
 /sbin/ldconfig
 
 %postun -p /sbin/ldconfig
 
-
 %changelog
+* Thu Mar 7 2019 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.0-1
+- Update to GDAL 2.4.0 and added apps
+
 * Thu Jul 6 2017 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.1.4-1
 - New upstream GDAL version
 
