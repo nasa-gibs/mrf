@@ -17,6 +17,7 @@ yum install -y \
   wget \
   rpmdevtools \
   mock \
+  rsync \
   python-pip
 
 mkdir -p /build
@@ -31,7 +32,6 @@ chown -R root:root /build
 )
 
 cp /build/dist/gibs-gdal-*.rpm /dist/
-chown "${DOCKER_UID}:${DOCKER_GID}" /dist/gibs-gdal-*.rpm
 EOS
 chmod +x dist/build_rpms.sh
 

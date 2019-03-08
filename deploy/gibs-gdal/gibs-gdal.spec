@@ -30,7 +30,6 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  geos-devel >= 3.3.2
 Requires:	gcc-c++
-Requires:	python-devel
 Requires:	geos >= 3.3.2
 	
 %description

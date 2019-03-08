@@ -11,7 +11,8 @@ TAG="$1"
 
 mkdir -p docker/el7/rpms
 cp dist/gibs-gdal-*.el7.*.rpm docker/el7/rpms/
-rm -f docker/el7/rpms/gibs-gdal-*.el7.*.src.rpm
+rm -f docker/el7/rpms/gibs-gdal-*.src.rpm
+rm -f docker/el7/rpms/gibs-gdal-debuginfo-*.rpm
 
 (
   set -e
