@@ -28,6 +28,7 @@ BuildRequires:	chrpath
 BuildRequires:	swig 
 BuildRequires:	doxygen
 BuildRequires:	expat-devel
+BuildRequires:  numpy
 BuildRequires:  geos-devel >= 3.3.2
 Requires:	gcc-c++
 Requires:	geos >= 3.3.2
