@@ -7,18 +7,23 @@
  *
  * The MRF packed format consist of a header of size 16 * ((49151 + isize) / 49152), followed
  * by the 512 byte blocks of the original MRF index that do hold value
- * The output index will be a few bytes over 1:3072 (0.03255%) of the original virtual size, 
+ * The output index will be 1:3072 (0.03255%) of the original virtual size, rounded up to 16,
  * plus the actual content blocks.
  *
- * This is because the header is formed of 96 bit masks for every 96 blocks of 512 bytes each, 
+ * This is because the header is formed of 96 bit masks for every 96 blocks of 512 bytes of input, 
  * plus a 32 bit running count of previously existing blocks. Thus, every 96 input blocks will 
  * use 16 bytes.  Since the size of the header can be calculated based on the MRF size
  * it is used as a check that the header is correct.  Also the total number of set bits in the 
  * header has to be equal to the number of blocks in the file, which results in another check
  * 
+ * The header line structure has 4 32bit unsigned integers, in big endian format
+ * |start_count | bits 0 to 32 | bits 33 to 63 | bits 64 to 95 |
+ * Where start_count is the total count of the bits set in the previous lines
+ * 
  */
 
 #include <string>
+#include <cstring>
 #include <vector>
 #include <fstream>
 #include <iostream>
@@ -26,6 +31,17 @@
 #include <cstdio>
 
  // #include <cinttypes>
+// Undefine for big endian architectures
+#define LITTLE_ENDIAN
+
+#if defined(LITTLE_ENDIAN)
+// Byte swap a 32bit int
+static inline uint32_t big(uint32_t val) {
+    return (val >> 24) | (val >> 8 & 0xff00) | (val << 8 & 0xff0000) | (val << 24);
+}
+#else
+#define big(x) (x)
+#endif
 
 #if defined(_WIN32)
 #define FSEEK _fseeki64
@@ -72,6 +88,7 @@ struct options {
 
 static options parse(int argc, char **argv) {
     options opt;
+    memset(&opt, 0, sizeof(opt));
     for (int i = 1; i < argc; i++) {
         string arg(argv[i]);
         if (0 == arg.find_first_of("-")) {
@@ -174,6 +191,16 @@ int pack(const options &opt) {
 
 #define BIT_FLIP(line, i) header[line + 1 + i / 32] |= 1 << (i % 32)
 
+#if defined(LITTLE_ENDIAN)
+#define FIX_LINE {\
+    header[line + 1] = big(header[line + 1]);\
+    header[line + 2] = big(header[line + 2]);\
+    header[line + 3] = big(header[line + 3]);\
+}
+#else
+#define FIX_LINE {}
+#endif
+
     // Check all full blocks, transferring them as needed
     while (--in_block_count) {
         if (BSZ != fread(buffer, 1, BSZ, in_idx)) {
@@ -195,10 +222,11 @@ int pack(const options &opt) {
         if (bit_pos % 96 == 0) {
             // Start a new line, store the running count
             bit_pos = 0;
+            FIX_LINE;
             line += 4;
             // If there is another line, initialize running count
             if (line < header.size())
-                header[line] = static_cast<uint32_t>(count);
+                header[line] = big(static_cast<uint32_t>(count));
         }
     }
 
@@ -223,15 +251,19 @@ int pack(const options &opt) {
 
             BIT_FLIP(line, bit_pos);
         }
+
+        FIX_LINE;
+        line += 4; // Points right at the end of the header
     }
 
 #undef BIT_FLIP
+#undef FIX_LINE
 
     if (!opt.quiet)
         cout << "Index packed from " << in_size << " to " << FTELL(out_idx) << endl;
 
     // line should point to the last line or the one after the last
-    if (!(header.size() == line || header.size() == line + 4))
+    if (!(header.size() == line))
         cerr << "Something is wrong, line is " << line << " header is " << header.size() << endl;
 
     // Done, write the header at the begining of the file
@@ -241,6 +273,7 @@ int pack(const options &opt) {
         cerr << "Error writing output header\n";
         return IO_ERR;
     }
+    fclose(out_idx);
 
     return NO_ERR;
 }
