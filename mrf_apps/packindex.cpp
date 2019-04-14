@@ -23,25 +23,17 @@
  */
 
 #include <string>
-#include <cstring>
 #include <vector>
 #include <fstream>
 #include <iostream>
 #include <cassert>
 #include <cstdio>
 
- // #include <cinttypes>
-// Undefine for big endian architectures
-#define LITTLE_ENDIAN
+// For memset only
+#include <cstring>
 
-#if defined(LITTLE_ENDIAN)
-// Byte swap a 32bit int
-static inline uint32_t big(uint32_t val) {
-    return (val >> 24) | (val >> 8 & 0xff00) | (val << 8 & 0xff0000) | (val << 24);
-}
-#else
-#define big(x) (x)
-#endif
+ // Undefine for big endian architectures
+#define LITTLE_ENDIAN
 
 #if defined(_WIN32)
 #define FSEEK _fseeki64
@@ -49,6 +41,13 @@ static inline uint32_t big(uint32_t val) {
 #else
 #define FSEEK fseek
 #define FTELL ftell
+#endif
+
+#if defined(LITTLE_ENDIAN)
+// Byte swap a 32bit int
+inline uint32_t swab(uint32_t val) {
+    return (val >> 24) | (val >> 8 & 0xff00) | (val << 8 & 0xff0000) | (val << 24);
+}
 #endif
 
 using namespace std;
@@ -189,17 +188,7 @@ int pack(const options &opt) {
     // and current bit position within that line
     int bit_pos = 0;
 
-#define BIT_FLIP(line, i) header[line + 1 + i / 32] |= 1 << (i % 32)
-
-#if defined(LITTLE_ENDIAN)
-#define FIX_LINE {\
-    header[line + 1] = big(header[line + 1]);\
-    header[line + 2] = big(header[line + 2]);\
-    header[line + 3] = big(header[line + 3]);\
-}
-#else
-#define FIX_LINE {}
-#endif
+#define BIT_SET(line, i) header[line + 1 + i / 32] |= 1 << (i % 32)
 
     // Check all full blocks, transferring them as needed
     while (--in_block_count) {
@@ -214,7 +203,7 @@ int pack(const options &opt) {
                 return IO_ERR;
             }
 
-            BIT_FLIP(line, bit_pos);
+            BIT_SET(line, bit_pos);
             count++;
         }
 
@@ -222,11 +211,10 @@ int pack(const options &opt) {
         if (bit_pos % 96 == 0) {
             // Start a new line, store the running count
             bit_pos = 0;
-            FIX_LINE;
             line += 4;
             // If there is another line, initialize running count
             if (line < header.size())
-                header[line] = big(static_cast<uint32_t>(count));
+                header[line] = static_cast<uint32_t>(count);
         }
     }
 
@@ -249,15 +237,12 @@ int pack(const options &opt) {
                 return IO_ERR;
             }
 
-            BIT_FLIP(line, bit_pos);
+            BIT_SET(line, bit_pos);
         }
-
-        FIX_LINE;
         line += 4; // Points right at the end of the header
     }
 
-#undef BIT_FLIP
-#undef FIX_LINE
+#undef BIT_SET
 
     if (!opt.quiet)
         cout << "Index packed from " << in_size << " to " << FTELL(out_idx) << endl;
@@ -265,6 +250,12 @@ int pack(const options &opt) {
     // line should point to the last line or the one after the last
     if (!(header.size() == line))
         cerr << "Something is wrong, line is " << line << " header is " << header.size() << endl;
+
+#if defined(LITTLE_ENDIAN)
+    // swap all header values to big endian
+    for (auto &v : header)
+        v = swab(v);
+#endif
 
     // Done, write the header at the begining of the file
     fclose(in_idx);
