@@ -23,7 +23,17 @@
 #include <fstream>
 #include <iostream>
 #include <cassert>
-// #include <cinttypes>
+#include <cstdio>
+
+ // #include <cinttypes>
+
+#if defined(_WIN32)
+#define FSEEK _fseeki64
+#define FTELL _ftelli64
+#else
+#define FSEEK fseek
+#define FTELL ftell
+#endif
 
 using namespace std;
 
@@ -119,17 +129,18 @@ int pack(const options &opt) {
     string in_idx_name(opt.in_idx_name);
     string out_idx_name(opt.out_idx_name);
 
-    ifstream in_idx(in_idx_name, fstream::binary);
-    ofstream out_idx(out_idx_name, fstream::binary);
 
-    if (!in_idx.is_open() || !out_idx.is_open()) {
-        cerr << "Can't open " << (in_idx.is_open() ? out_idx_name : in_idx_name) << endl;
+    FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
+    FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
+
+    if (!in_idx || !out_idx) {
+        cerr << "Can't open " << (in_idx ? out_idx_name : in_idx_name) << endl;
         return IO_ERR;
     }
 
-    in_idx.seekg(0, fstream::end);
-    auto in_size = in_idx.tellg();
-    in_idx.seekg(0);
+    FSEEK(in_idx, 0, SEEK_END);
+    auto in_size = FTELL(in_idx);
+    FSEEK(in_idx, 0, SEEK_SET);
 
     // Input has to be an index, which is always a multiple of 16 bytes
     if (in_size % 16) {
@@ -147,7 +158,7 @@ int pack(const options &opt) {
     vector<uint32_t> header(header_size / sizeof(uint32_t));
 
     // Reserve space for the header
-    out_idx.seekp(header_size, fstream::beg);
+    FSEEK(out_idx, header_size, SEEK_SET);
 
     // Running count of output blocks
     size_t count = 0;
@@ -161,14 +172,22 @@ int pack(const options &opt) {
     // and current bit position within that line
     int bit_pos = 0;
 
+#define BIT_FLIP(line, i) header[line + 1 + i / 32] |= 1 << (i % 32)
+
     // Check all full blocks, transferring them as needed
     while (--in_block_count) {
-        in_idx.read(buffer, BSZ);
+        if (BSZ != fread(buffer, 1, BSZ, in_idx)) {
+            cerr << "Error reading block from input file\n";
+            return IO_ERR;
+        }
 
         if (!check(buffer)) {
-            out_idx.write(buffer, BSZ);
-            // Flip the bit that represents this value
-            header[line + 1 + bit_pos / 32] |= 1 << (bit_pos % 32);
+            if (BSZ != fwrite(buffer, 1, BSZ, out_idx)) {
+                cerr << "Error writing to output file\n";
+                return IO_ERR;
+            }
+
+            BIT_FLIP(line, bit_pos);
             count++;
         }
 
@@ -183,29 +202,46 @@ int pack(const options &opt) {
         }
     }
 
+    auto extra_bytes = in_size % BSZ;
+
     // The very last block may be partial
-    if (in_size % BSZ) {
-        auto extra_bytes = in_size % BSZ;
-        in_idx.read(reinterpret_cast<char *>(buffer), extra_bytes);
+    if (extra_bytes) {
+        if (extra_bytes != fread(buffer, 1, extra_bytes, in_idx)) {
+            cerr << "Error reading block from input file\n";
+            return IO_ERR;
+        }
+
         // The buffer is in int64_t, so we divide by 8
         for (auto i = extra_bytes; i < BSZ; i++)
             buffer[i] = 0;
 
         if (!check(buffer)) {
-            out_idx.write(buffer, BSZ);
-            // Flip the bit in the header
-            header[line + 1 + bit_pos / 32] |= 1 << (bit_pos % 32);
+            if (extra_bytes != fwrite(buffer, 1, extra_bytes, out_idx)) {
+                cerr << "Error writing to output file\n";
+                return IO_ERR;
+            }
+
+            BIT_FLIP(line, bit_pos);
         }
     }
 
+#undef BIT_FLIP
+
     if (!opt.quiet)
-        cout << "Index packed from " << in_size << " to " << out_idx.tellp() << endl;
+        cout << "Index packed from " << in_size << " to " << FTELL(out_idx) << endl;
+
+    // line should point to the last line or the one after the last
+    if (!(header.size() == line || header.size() == line + 4))
+        cerr << "Something is wrong, line is " << line << " header is " << header.size() << endl;
 
     // Done, write the header at the begining of the file
-    in_idx.close();
-    out_idx.seekp(0);
-    out_idx.write(reinterpret_cast<char *>(header.data()), header_size);
-    out_idx.close();
+    fclose(in_idx);
+    FSEEK(out_idx, 0, SEEK_SET);
+    if (header.size() != fwrite(header.data(), sizeof(uint32_t), header.size(), out_idx)) {
+        cerr << "Error writing output header\n";
+        return IO_ERR;
+    }
+
     return NO_ERR;
 }
 
