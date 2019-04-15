@@ -30,35 +30,40 @@
  * 
  */
 
-#include <string>
-#include <vector>
-#include <fstream>
-#include <iostream>
-#include <cassert>
-#include <cstdio>
-#include <cstdlib>
-
-// For memset only
-#include <cstring>
-
 #if defined(_WIN32)
+#include <Windows.h>
+#include <io.h>
+
 #define FSEEK _fseeki64
 #define FTELL _ftelli64
 
-// Windows is always little endian, supply functions to swap bytes
-// These are defined in <cstdlib>
+ // Windows is always little endian, supply functions to swap bytes
+ // These are defined in <cstdlib>
 #define htobe16 _byteswap_ushort
 #define be16toh _byteswap_ushort
 #define htobe32 _byteswap_ulong
 #define be32toh _byteswap_ulong
 #define htobe64 _byteswap_uint64
 #define be64toh _byteswap_uint64
-
 #else
+#include <unistd.h>
 #include <endian.h>
 #define FSEEK fseek
 #define FTELL ftell
+#define SETSPARSE(X) true
 #endif
+
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+
+ // For memset only
+#include <cstring>
 
 using namespace std;
 
@@ -67,6 +72,29 @@ const int BSZ = 512;
 
 // 4 byte length signature string
 const char *SIG = "IDX";
+
+// Make file end at current offset, return true on success
+static bool MARK_END(FILE *f) {
+#if defined(_WIN32)
+    HANDLE h = (HANDLE) _get_osfhandle(_fileno(f));
+    if (h == INVALID_HANDLE_VALUE)
+        return false; // Possibly not a seekable file
+    return 0 != SetEndOfFile(h);
+#else
+    return !ftruncate(fileno(f), ftell(f));
+#endif
+}
+
+#if defined(_WIN32)
+// Set file as sparse, returns true if all went fine
+static bool SETSPARSE(FILE *f) {
+    DWORD dw;
+    HANDLE h = (HANDLE)_get_osfhandle(_fileno(f));
+    if (h = INVALID_HANDLE_VALUE)
+        return false;
+    return 0 != DeviceIoControl(h, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &dw, nullptr);
+}
+#endif
 
 // Compare a substring of src with cmp, return true if same
 // offset can be negative, in which case it is measured from the end of the src, python style
@@ -284,6 +312,30 @@ int can(const options &opt) {
     return NO_ERR;
 }
 
+// The bit state at a given position in a line, assumes native endianess
+inline bool is_on(uint32_t *values, int bit) {
+    return 0 != (values[1 + bit / 32] & (static_cast<uint32_t>(1) << bit % 32));
+}
+
+// transfer len bytes from in to out, prints an error and returns false if it erred
+// len has to be under or equal to BSZ
+inline int transfer(FILE *in_file, FILE *out_file, size_t len = BSZ) {
+    assert(len <= BSZ);
+    static char buffer[BSZ];
+
+    if (len != fread(buffer, 1, len, in_file)) {
+        cerr << "Read error\n";
+        return false;
+    }
+
+    if (len != fwrite(buffer, 1, len, out_file)) {
+        cerr << "Write error\n";
+        return false;
+    }
+
+    return true;
+}
+
 int uncan(const options &opt) {
     if (opt.file_names.size() != 2)
         return Usage("Need an input and an output name, use - to use stdin or stdout");
@@ -300,6 +352,7 @@ int uncan(const options &opt) {
 
     FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
+    SETSPARSE(out_idx);
 
     if (!in_idx || !out_idx) {
         cerr << "Can't open " << (in_idx ? out_idx_name : in_idx_name) << endl;
@@ -314,7 +367,7 @@ int uncan(const options &opt) {
 
     // Verify and unpack the header line
     if (header[0] != *reinterpret_cast<const uint32_t *>(SIG))
-        return Usage("Input is not a canned MRF index");
+        return Usage("Input is not a canned MRF index, wrong magick");
     // in 16 byte units, convert it to 4 byte units
     uint32_t header_size = 4 * be32toh(header[1]);
 
@@ -325,6 +378,92 @@ int uncan(const options &opt) {
     if (header_size != canned_size(out_size))
         return Usage("Input header is corrupt");
 
+    if (!opt.quiet)
+        cout << "Output size will be " << out_size << endl;
+
+    header_size -= 4;
+
+    // The bitmap part of the header
+    vector<uint32_t> bitmap(header_size);
+
+    if (header_size != fread(bitmap.data(), sizeof(uint32_t), header_size, in_idx)) {
+        cerr << "Error reading input bitmap\n";
+        return IO_ERR;
+    }
+
+    // Swap bitmap to host
+    for (auto &it : bitmap)
+        it = be32toh(it);
+
+    // Full output blocks, there might be one more, partial
+    uint64_t num_blocks = out_size / BSZ;
+
+    uint32_t count = 0; // The running count of output blocks with data
+    uint32_t line = 0; // increments by 4
+
+    // How many output blocks are empty
+    uint64_t empties = 0;
+
+    // Loop over input lines
+    while (num_blocks) {
+        int bits = 96;
+        if (num_blocks < 96)
+            bits = static_cast<int>(num_blocks);
+
+        // Check that the running count for the line agrees
+        if (count != bitmap[line])
+            return Usage("Input bitmap is corrupt\n");
+
+        for (int bit= 0; bit < bits; bit++, num_blocks--) {
+
+            if (!is_on(&bitmap[line], bit)) {
+                empties++;
+                continue;
+            }
+
+            // Flush
+            if (empties)
+                FSEEK(out_idx, empties * BSZ, SEEK_CUR);
+            empties = 0;
+
+            // Transfer the block from in to out
+            if (!transfer(in_idx, out_idx))
+                return IO_ERR;
+
+            count++; // Transferred one more block
+        }
+
+        line += 4;
+    }
+
+    // Flush
+    if (empties)
+        FSEEK(out_idx, empties * BSZ, SEEK_CUR);
+
+    // Might have a partial block at the end
+    int extra_bytes = out_size % BSZ;
+    if (extra_bytes) {
+        // Which line we're on
+        line = static_cast<uint32_t>((out_size / BSZ / 96) * 4);
+        int bit = (out_size / BSZ) % 96;
+        // Check the running count if the partial block is bit 0
+        if ((bit == 0) && (count != bitmap[line]))
+            return Usage("Input bitmap is corrupt\n");
+
+        if (is_on(&bitmap[line], bit)) {
+            // Transfer the partial block, we're done
+            if (!transfer(in_idx, out_idx, extra_bytes))
+                return IO_ERR;
+        }
+        else {
+            FSEEK(out_idx, extra_bytes, SEEK_CUR);
+        }
+    }
+
+    fclose(in_idx);
+    // Need to end the file at the current position, to get the right size
+    MARK_END(out_idx);
+    fclose(out_idx);
     return INTERNAL_ERR;
 }
 
