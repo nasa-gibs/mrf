@@ -57,6 +57,9 @@ using namespace std;
 // Block size used, do not modify
 const int BSZ = 512;
 
+// 4 byte length signature string
+const char *SIG = "IDX";
+
 // Compare a substring of src with cmp, return true if same
 // offset can be negative, in which case it is measured from the end of the src, python style
 static bool substr_equal(const string &src, const string &cmp, int off = 0, size_t len = 0) {
@@ -157,7 +160,7 @@ int pack(const options &opt) {
     }
 
     FSEEK(in_idx, 0, SEEK_END);
-    auto in_size = FTELL(in_idx);
+    uint64_t in_size = static_cast<uint64_t>(FTELL(in_idx));
     FSEEK(in_idx, 0, SEEK_SET);
 
     // Input has to be an index, which is always a multiple of 16 bytes
@@ -166,8 +169,8 @@ int pack(const options &opt) {
         return USAGE_ERR;
     }
 
-    // Output has a 16 bit reserved line plus the line array
-    uint64_t header_size = 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
+    // Output has a 16 bit reserved line plus the counted bitmap
+    uint64_t header_size = 16 + 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
     if (!opt.quiet)
         cout << "Header will be " << header_size << " bytes" << endl;
 
@@ -186,7 +189,8 @@ int pack(const options &opt) {
 
     // Current line start within header as a 32bit int index
     // always a multiple of 4, since there are 4 ints per line
-    int line = 0;
+    // Skip the reserved line
+    int line = 4;
     // and current bit position within that line
     int bit_pos = 0;
 
@@ -251,6 +255,19 @@ int pack(const options &opt) {
     // swap all header values to big endian
     for (auto &v : header)
         v = htobe32(v);
+
+    // Write the header line, the signature is not dependent of endianess
+    header[0] = *reinterpret_cast<const uint32_t *>(SIG);
+
+    // The initial index size, in 16byte units, big endian
+    in_size = htobe64(in_size / 16);
+    header[1] = static_cast<uint32_t>(in_size >> 32);
+    header[2] = static_cast<uint32_t>(in_size);
+
+    // Last part of the header line, the size of the header itself, in 16 byte units
+    // This imposes a size limit of 64GB for the header, which translates into 
+    // 192PB for the source index, unlikely to be ever reached
+    header[3] = static_cast<uint32_t>(htobe64(header.size() / 4));
 
     // Done, write the header at the begining of the file
     fclose(in_idx);
