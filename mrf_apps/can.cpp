@@ -469,7 +469,8 @@ int uncan(const options &opt) {
     // Need to end the file at the current position, to get the right size
     MARK_END(out_idx);
     fclose(out_idx);
-    return INTERNAL_ERR;
+
+    return NO_ERR;
 }
 
 int main(int argc, char **argv)
