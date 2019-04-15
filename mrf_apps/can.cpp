@@ -3,20 +3,28 @@
  *
  * Purpose:
  *
- * Packed Format:
+ * canned Format:
  *
- * The MRF packed format consist of a header of size 16 * ((49151 + isize) / 49152), followed
- * by the 512 byte blocks of the original MRF index that do hold value
+ * The MRF packed format consist of a header of size 16 + 16 * ((49151 + isize) / 49152)
+ * followed by the 512 byte blocks of the original MRF index that do hold non-zero values
  * The output index will be 1:3072 (0.03255%) of the original virtual size, rounded up to 16,
  * plus the actual content blocks.
  *
- * This is because the header is formed of 96 bit masks for every 96 blocks of 512 bytes of input, 
- * plus a 32 bit running count of previously existing blocks. Thus, every 96 input blocks will 
- * use 16 bytes.  Since the size of the header can be calculated based on the MRF size
- * it is used as a check that the header is correct.  Also the total number of set bits in the 
- * header has to be equal to the number of blocks in the file, which results in another check
+ * This is because the canned file header contains a bitmask that holds presence info for every
+ * 512 byte block of the input, stored in 96 block groups, stored as a 96 bit line prefixed 
+ * by a 32 bit running count of previously existing blocks. Thus, each line will use 16 bytes.
+ * The canned file starts with a 16 byte canned index metadata that describes it's structure
+ * followed by the bitmap, followed by the data blocks.
+
+ * Since the size of the header can be calculated from the input MRF index size
+ * it can be used as a check that the header is correct. Also the total number of set bits 
+ * in the header has to be equal to the number of blocks in the file
  * 
- * The header line structure has 4 32bit unsigned integers, in big endian format
+ * The canned index file metadata line contains two 32bit integers and one 64bit int
+ * all in big endian
+ * | "MRF\0" | size of bitmap in 16 byte units | original index size in 16 byte units | 
+ *
+ * The bitmap structure has 4 32bit unsigned integers, in big endian format
  * |start_count | bits 0 to 32 | bits 33 to 63 | bits 64 to 95 |
  * Where start_count is the total count of the bits set in the previous lines
  * 
@@ -83,10 +91,10 @@ inline bool check(const char *src, size_t len = BSZ) {
 
 // Program options
 struct options {
-    options() : unpack(false), quiet(false) {}
+    options() : un(false), quiet(false) {}
     vector<string> file_names;
     string error; // Empty if parsing went fine
-    bool unpack; // Pack by default
+    bool un; // reverse
     bool quiet;  // Verbose by default
 };
 
@@ -101,7 +109,7 @@ static options parse(int argc, char **argv) {
                 continue;
             }
             else if (arg == "-u") {
-                opt.unpack = true;
+                opt.un = true;
                 continue;
             }
             else if (arg == "-") { // Could be stdin or stdout file name
@@ -125,12 +133,17 @@ static options parse(int argc, char **argv) {
 
 enum ERRORS { NO_ERR = 0, USAGE_ERR, IO_ERR, INTERNAL_ERR };
 
-int Usage(const string &error) {
+static int Usage(const string &error) {
     cerr << error << endl;
     return USAGE_ERR;
 }
 
-int pack(const options &opt) {
+// Output has a 16 bit reserved line plus the counted bitmap
+static inline uint64_t canned_size(uint64_t in_size) {
+    return 16 + 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
+}
+
+int can(const options &opt) {
     if (opt.file_names.size() != 2)
         return Usage("Need an input and an output name");
 
@@ -141,7 +154,7 @@ int pack(const options &opt) {
         return Usage("Input file should have an .idx extension");
 
     if (!substr_equal(out_idx_name, ".ix", -3))
-        return Usage("Output file should have an .idx extension");
+        return Usage("Output file should have an .ix extension");
 
     FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
@@ -161,8 +174,7 @@ int pack(const options &opt) {
         return USAGE_ERR;
     }
 
-    // Output has a 16 bit reserved line plus the counted bitmap
-    uint64_t header_size = 16 + 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
+    uint64_t header_size = canned_size(in_size);
     if (!opt.quiet)
         cout << "Header will be " << header_size << " bytes" << endl;
 
@@ -251,15 +263,14 @@ int pack(const options &opt) {
     // Write the header line, the signature is not dependent of endianess
     header[0] = *reinterpret_cast<const uint32_t *>(SIG);
 
-    // The initial index size, in 16byte units, big endian
-    in_size = htobe64(in_size / 16);
-    header[1] = static_cast<uint32_t>(in_size >> 32);
-    header[2] = static_cast<uint32_t>(in_size);
-
-    // Last part of the header line, the size of the header itself, in 16 byte units
+    // Last piece of the header line, the size of the header itself, in 16 byte units
     // This imposes a size limit of 64GB for the header, which translates into 
     // 192PB for the source index, unlikely to be ever reached
-    header[3] = static_cast<uint32_t>(htobe64(header.size() / 4));
+    header[1] = static_cast<uint32_t>(htobe64(header.size() / 4));
+
+    // The initial index size, in 16byte units, big endian, this fills
+    // header[2] and header[3]
+    *reinterpret_cast<uint64_t *>(&header[2]) = htobe64(in_size / 16);
 
     // Done, write the header at the begining of the file
     fclose(in_idx);
@@ -273,9 +284,19 @@ int pack(const options &opt) {
     return NO_ERR;
 }
 
-int unpack(const options &opt) {
+int uncan(const options &opt) {
+    if (opt.file_names.size() != 2)
+        return Usage("Need an input and an output name, use - to use stdin or stdout");
+
     string in_idx_name(opt.file_names[0]);
     string out_idx_name(opt.file_names[1]);
+
+    // TODO: handle stdin and stdout as in / out
+    if (!substr_equal(in_idx_name, ".ix", -3))
+        return Usage("Input file should have an .ix extension");
+
+    if (!substr_equal(out_idx_name, ".idx", -4))
+        return Usage("Output file should have an .idx extension");
 
     FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
@@ -284,6 +305,25 @@ int unpack(const options &opt) {
         cerr << "Can't open " << (in_idx ? out_idx_name : in_idx_name) << endl;
         return IO_ERR;
     }
+
+    vector<uint32_t> header(4);
+    if (4 != fread(header.data(), sizeof(uint32_t), 4, in_idx)) {
+        cerr << "Error reading from input header\n";
+        return IO_ERR;
+    }
+
+    // Verify and unpack the header line
+    if (header[0] != *reinterpret_cast<const uint32_t *>(SIG))
+        return Usage("Input is not a canned MRF index");
+    // in 16 byte units, convert it to 4 byte units
+    uint32_t header_size = 4 * be32toh(header[1]);
+
+    // in bytes
+    uint64_t out_size = 16 * be64toh(*reinterpret_cast<uint64_t *>(&header[2]));
+
+    // Verify that the sizes make sense
+    if (header_size != canned_size(out_size))
+        return Usage("Input header is corrupt");
 
     return INTERNAL_ERR;
 }
@@ -294,7 +334,7 @@ int main(int argc, char **argv)
     if (!opt.error.empty())
         return Usage(opt.error);
 
-    if (opt.unpack)
-        return unpack(opt);
-    return pack(opt);
+    if (opt.un)
+        return uncan(opt);
+    return can(opt);
 }
