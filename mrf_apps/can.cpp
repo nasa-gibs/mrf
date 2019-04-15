@@ -50,7 +50,8 @@
 #include <endian.h>
 #define FSEEK fseek
 #define FTELL ftell
-#define SETSPARSE(X) true
+
+#define SETSPARSE(f) true
 #endif
 
 #include <string>
@@ -169,6 +170,30 @@ static int Usage(const string &error) {
 // Output has a 16 bit reserved line plus the counted bitmap
 static inline uint64_t canned_size(uint64_t in_size) {
     return 16 + 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
+}
+
+// transfer len bytes from in to out, prints an error and returns false if it erred
+// len has to be under or equal to BSZ
+inline int transfer(FILE *in_file, FILE *out_file, size_t len = BSZ) {
+    assert(len <= BSZ);
+    static char buffer[BSZ];
+
+    if (len != fread(buffer, 1, len, in_file)) {
+        cerr << "Read error\n";
+        return false;
+    }
+
+    if (len != fwrite(buffer, 1, len, out_file)) {
+        cerr << "Write error\n";
+        return false;
+    }
+
+    return true;
+}
+
+// The bit state at a given position in a line, assumes native endianess
+inline bool is_on(uint32_t *values, int bit) {
+    return 0 != (values[1 + bit / 32] & (static_cast<uint32_t>(1) << bit % 32));
 }
 
 int can(const options &opt) {
@@ -294,7 +319,7 @@ int can(const options &opt) {
     // Last piece of the header line, the size of the header itself, in 16 byte units
     // This imposes a size limit of 64GB for the header, which translates into 
     // 192PB for the source index, unlikely to be ever reached
-    header[1] = static_cast<uint32_t>(htobe64(header.size() / 4));
+    header[1] = htobe32(static_cast<uint32_t>(header.size() / 4));
 
     // The initial index size, in 16byte units, big endian, this fills
     // header[2] and header[3]
@@ -312,29 +337,6 @@ int can(const options &opt) {
     return NO_ERR;
 }
 
-// The bit state at a given position in a line, assumes native endianess
-inline bool is_on(uint32_t *values, int bit) {
-    return 0 != (values[1 + bit / 32] & (static_cast<uint32_t>(1) << bit % 32));
-}
-
-// transfer len bytes from in to out, prints an error and returns false if it erred
-// len has to be under or equal to BSZ
-inline int transfer(FILE *in_file, FILE *out_file, size_t len = BSZ) {
-    assert(len <= BSZ);
-    static char buffer[BSZ];
-
-    if (len != fread(buffer, 1, len, in_file)) {
-        cerr << "Read error\n";
-        return false;
-    }
-
-    if (len != fwrite(buffer, 1, len, out_file)) {
-        cerr << "Write error\n";
-        return false;
-    }
-
-    return true;
-}
 
 int uncan(const options &opt) {
     if (opt.file_names.size() != 2)
@@ -343,14 +345,17 @@ int uncan(const options &opt) {
     string in_idx_name(opt.file_names[0]);
     string out_idx_name(opt.file_names[1]);
 
-    // TODO: handle stdin and stdout as in / out
-    if (!substr_equal(in_idx_name, ".ix", -3))
-        return Usage("Input file should have an .ix extension");
+    // TODO: handle stdin as input
+    if (!substr_equal(in_idx_name, ".ix", -3) && (in_idx_name != "-"))
+        return Usage("Input file should have an .ix extension, or be -");
 
     if (!substr_equal(out_idx_name, ".idx", -4))
         return Usage("Output file should have an .idx extension");
 
-    FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
+    FILE *in_idx = stdin;
+    if (in_idx_name != "-")
+        in_idx = fopen(in_idx_name.c_str(), "rb");
+
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
     SETSPARSE(out_idx);
 
