@@ -83,8 +83,8 @@ inline bool check(const char *src, size_t len = BSZ) {
 
 // Program options
 struct options {
-    string in_idx_name;
-    string out_idx_name;
+    options() : unpack(false), quiet(false) {}
+    vector<string> file_names;
     string error; // Empty if parsing went fine
     bool unpack; // Pack by default
     bool quiet;  // Verbose by default
@@ -92,49 +92,33 @@ struct options {
 
 static options parse(int argc, char **argv) {
     options opt;
-    memset(&opt, 0, sizeof(opt));
+    bool optend = false;
     for (int i = 1; i < argc; i++) {
         string arg(argv[i]);
-        if (0 == arg.find_first_of("-")) {
+        if (!optend && 0 == arg.find_first_of("-")) {
             if (arg == "-q") {
                 opt.quiet = true;
                 continue;
             }
-            else
-            if (arg == "-u") {
+            else if (arg == "-u") {
                 opt.unpack = true;
                 continue;
+            }
+            else if (arg == "-") { // Could be stdin or stdout file name
+                opt.file_names.push_back(arg);
+            }
+            else if (arg == "--") { // End of options
+                optend = true;
             }
             else {
                 opt.error = string("Unknown option ") + arg;
                 return opt;
             }
         }
-        else { // file names
-            if (opt.in_idx_name.empty()) {
-                opt.in_idx_name = argv[i];
-                if (!substr_equal(opt.in_idx_name, ".idx", -4)) {
-                    opt.error = "Input file name should end in .idx";
-                    return opt;
-                }
-            }
-            else {
-                if (!opt.out_idx_name.empty()) {
-                    opt.error = "Too many files names";
-                    return opt;
-                }
-                opt.out_idx_name = argv[i];
-                if (!substr_equal(opt.out_idx_name, ".ix", -3)) {
-                    opt.error = "Input file name should end in .ix";
-                    return opt;
-                }
-            }
+        else { // File names, accumulate
+            opt.file_names.push_back(arg);
         }
     }
-
-    // Final checks
-    if (opt.in_idx_name.empty() || opt.out_idx_name.empty())
-        opt.error = "Need input and output file names";
 
     return opt;
 }
@@ -147,9 +131,17 @@ int Usage(const string &error) {
 }
 
 int pack(const options &opt) {
-    string in_idx_name(opt.in_idx_name);
-    string out_idx_name(opt.out_idx_name);
+    if (opt.file_names.size() != 2)
+        return Usage("Need an input and an output name");
 
+    string in_idx_name(opt.file_names[0]);
+    string out_idx_name(opt.file_names[1]);
+
+    if (!substr_equal(in_idx_name, ".idx", -4))
+        return Usage("Input file should have an .idx extension");
+
+    if (!substr_equal(out_idx_name, ".ix", -3))
+        return Usage("Output file should have an .idx extension");
 
     FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
@@ -282,7 +274,17 @@ int pack(const options &opt) {
 }
 
 int unpack(const options &opt) {
-    cerr << "Unpack not yet implemented\n";
+    string in_idx_name(opt.file_names[0]);
+    string out_idx_name(opt.file_names[1]);
+
+    FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
+    FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
+
+    if (!in_idx || !out_idx) {
+        cerr << "Can't open " << (in_idx ? out_idx_name : in_idx_name) << endl;
+        return IO_ERR;
+    }
+
     return INTERNAL_ERR;
 }
 
