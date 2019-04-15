@@ -28,26 +28,28 @@
 #include <iostream>
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 
 // For memset only
 #include <cstring>
 
- // Undefine for big endian architectures
-#define LITTLE_ENDIAN
-
 #if defined(_WIN32)
 #define FSEEK _fseeki64
 #define FTELL _ftelli64
+
+// Windows is always little endian, supply functions to swap bytes
+// These are defined in <cstdlib>
+#define htobe16 _byteswap_ushort
+#define be16toh _byteswap_ushort
+#define htobe32 _byteswap_ulong
+#define be32toh _byteswap_ulong
+#define htobe64 _byteswap_uint64
+#define be64toh _byteswap_uint64
+
 #else
+#include <endian.h>
 #define FSEEK fseek
 #define FTELL ftell
-#endif
-
-#if defined(LITTLE_ENDIAN)
-// Byte swap a 32bit int
-inline uint32_t swab(uint32_t val) {
-    return (val >> 24) | (val >> 8 & 0xff00) | (val << 8 & 0xff0000) | (val << 24);
-}
 #endif
 
 using namespace std;
@@ -202,13 +204,12 @@ int pack(const options &opt) {
                 cerr << "Error writing to output file\n";
                 return IO_ERR;
             }
-
             BIT_SET(line, bit_pos);
             count++;
         }
 
         bit_pos++;
-        if (bit_pos % 96 == 0) {
+        if (96 == bit_pos) {
             // Start a new line, store the running count
             bit_pos = 0;
             line += 4;
@@ -222,21 +223,17 @@ int pack(const options &opt) {
 
     // The very last block may be partial
     if (extra_bytes) {
+        memset(buffer, 0, BSZ);
         if (extra_bytes != fread(buffer, 1, extra_bytes, in_idx)) {
             cerr << "Error reading block from input file\n";
             return IO_ERR;
         }
-
-        // The buffer is in int64_t, so we divide by 8
-        for (auto i = extra_bytes; i < BSZ; i++)
-            buffer[i] = 0;
 
         if (!check(buffer)) {
             if (extra_bytes != fwrite(buffer, 1, extra_bytes, out_idx)) {
                 cerr << "Error writing to output file\n";
                 return IO_ERR;
             }
-
             BIT_SET(line, bit_pos);
         }
         line += 4; // Points right at the end of the header
@@ -251,11 +248,9 @@ int pack(const options &opt) {
     if (!(header.size() == line))
         cerr << "Something is wrong, line is " << line << " header is " << header.size() << endl;
 
-#if defined(LITTLE_ENDIAN)
     // swap all header values to big endian
     for (auto &v : header)
-        v = swab(v);
-#endif
+        v = htobe32(v);
 
     // Done, write the header at the begining of the file
     fclose(in_idx);
