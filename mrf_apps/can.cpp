@@ -68,9 +68,11 @@
 
 using namespace std;
 
+// Error codes
+enum { NO_ERR = 0, USAGE_ERR, IO_ERR, INTERNAL_ERR };
+
 // Block size used, do not modify
 const int BSZ = 512;
-
 // 4 byte length signature string
 const char *SIG = "IDX";
 
@@ -159,8 +161,6 @@ static options parse(int argc, char **argv) {
 
     return opt;
 }
-
-enum ERRORS { NO_ERR = 0, USAGE_ERR, IO_ERR, INTERNAL_ERR };
 
 static int Usage(const string &error) {
     cerr << error << endl;
