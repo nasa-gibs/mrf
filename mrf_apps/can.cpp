@@ -380,7 +380,7 @@ int uncan(const options &opt) {
     uint64_t out_size = 16 * be64toh(*reinterpret_cast<uint64_t *>(&header[2]));
 
     // Verify that the sizes make sense
-    if (header_size != canned_size(out_size))
+    if (header_size * 4 != canned_size(out_size))
         return Usage("Input header is corrupt");
 
     if (!opt.quiet)
