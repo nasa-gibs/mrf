@@ -22,7 +22,7 @@
  * 
  * The canned index file metadata line contains two 32bit integers and one 64bit int
  * all in big endian
- * | "MRF\0" | size of bitmap in 16 byte units | original index size in 16 byte units | 
+ * | "MRF\0" | size of bitmap in 16 byte units | original index size |
  *
  * The bitmap structure has 4 32bit unsigned integers, in big endian format
  * |start_count | bits 0 to 32 | bits 33 to 63 | bits 64 to 95 |
@@ -125,13 +125,20 @@ struct options {
     options() : un(false), quiet(false) {}
     vector<string> file_names;
     string error; // Empty if parsing went fine
-    bool un; // reverse
-    bool quiet;  // Verbose by default
+    bool un;      // uncanning
+    bool generic; // generic file, skip index structure checks
+    bool quiet;   // Verbose by default
 };
 
 static options parse(int argc, char **argv) {
     options opt;
     bool optend = false;
+
+    if (argc < 2) {
+        opt.error = "Usage";
+        return opt;
+    }
+
     for (int i = 1; i < argc; i++) {
         string arg(argv[i]);
         if (!optend && 0 == arg.find_first_of("-")) {
@@ -143,8 +150,15 @@ static options parse(int argc, char **argv) {
                 opt.un = true;
                 continue;
             }
+            else if (arg == "-g") {
+                opt.generic = true;
+            }
             else if (arg == "-") { // Could be stdin or stdout file name
                 opt.file_names.push_back(arg);
+            }
+            else if (arg == "-h") {
+                opt.error = "Usage";
+                return opt;
             }
             else if (arg == "--") { // End of options
                 optend = true;
@@ -168,7 +182,7 @@ static int Usage(const string &error) {
 }
 
 // Output has a 16 bit reserved line plus the counted bitmap
-static inline uint64_t canned_size(uint64_t in_size) {
+static inline uint64_t hsize(uint64_t in_size) {
     return 16 + 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
 }
 
@@ -203,11 +217,13 @@ int can(const options &opt) {
     string in_idx_name(opt.file_names[0]);
     string out_idx_name(opt.file_names[1]);
 
-    if (!substr_equal(in_idx_name, ".idx", -4))
-        return Usage("Input file should have an .idx extension");
+    if (!opt.generic) {
+        if (!substr_equal(in_idx_name, ".idx", -4))
+            return Usage("Input file should have an .idx extension");
 
-    if (!substr_equal(out_idx_name, ".ix", -3))
-        return Usage("Output file should have an .ix extension");
+        if (!substr_equal(out_idx_name, ".ix", -3))
+            return Usage("Output file should have an .ix extension");
+    }
 
     FILE *in_idx = fopen(in_idx_name.c_str(), "rb");
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
@@ -222,12 +238,12 @@ int can(const options &opt) {
     FSEEK(in_idx, 0, SEEK_SET);
 
     // Input has to be an index, which is always a multiple of 16 bytes
-    if (in_size % 16) {
+    if ( (!opt.generic) && in_size % 16) {
         cerr << "Input file is not an index file, size is not a multiple of 16\n";
         return USAGE_ERR;
     }
 
-    uint64_t header_size = canned_size(in_size);
+    uint64_t header_size = hsize(in_size);
     if (!opt.quiet)
         cout << "Header will be " << header_size << " bytes" << endl;
 
@@ -297,7 +313,7 @@ int can(const options &opt) {
             }
             BIT_SET(line, bit_pos);
         }
-        line += 4; // Points right at the end of the header
+        line += 4; // Points to the header end
     }
 
 #undef BIT_SET
@@ -321,9 +337,8 @@ int can(const options &opt) {
     // 192PB for the source index, unlikely to be ever reached
     header[1] = htobe32(static_cast<uint32_t>(header.size() / 4));
 
-    // The initial index size, in 16byte units, big endian, this fills
-    // header[2] and header[3]
-    *reinterpret_cast<uint64_t *>(&header[2]) = htobe64(in_size / 16);
+    // The initial file size, big endian, uses header[2] and header[3]
+    *reinterpret_cast<uint64_t *>(&header[2]) = htobe64(in_size);
 
     // Done, write the header at the begining of the file
     fclose(in_idx);
@@ -345,12 +360,13 @@ int uncan(const options &opt) {
     string in_idx_name(opt.file_names[0]);
     string out_idx_name(opt.file_names[1]);
 
-    // TODO: handle stdin as input
-    if (!substr_equal(in_idx_name, ".ix", -3) && (in_idx_name != "-"))
-        return Usage("Input file should have an .ix extension, or be -");
+    if (!opt.generic) {
+        if (!substr_equal(in_idx_name, ".ix", -3) && (in_idx_name != "-"))
+            return Usage("Input file should have an .ix extension, or be -");
 
-    if (!substr_equal(out_idx_name, ".idx", -4))
-        return Usage("Output file should have an .idx extension");
+        if (!substr_equal(out_idx_name, ".idx", -4))
+            return Usage("Output file should have an .idx extension");
+    }
 
     FILE *in_idx = stdin;
     if (in_idx_name != "-")
@@ -376,11 +392,10 @@ int uncan(const options &opt) {
     // in 16 byte units, convert it to 4 byte units
     uint32_t header_size = 4 * be32toh(header[1]);
 
-    // in bytes
-    uint64_t out_size = 16 * be64toh(*reinterpret_cast<uint64_t *>(&header[2]));
+    uint64_t out_size = be64toh(*reinterpret_cast<uint64_t *>(&header[2]));
 
     // Verify that the sizes make sense
-    if (header_size * 4 != canned_size(out_size))
+    if (header_size * 4 != hsize(out_size))
         return Usage("Input header is corrupt");
 
     if (!opt.quiet)
@@ -403,7 +418,8 @@ int uncan(const options &opt) {
     // Full output blocks, there might be one more, partial
     uint64_t num_blocks = out_size / BSZ;
 
-    uint32_t count = 0; // The running count of output blocks with data
+    // Running count of output blocks with data
+    uint32_t count = 0; 
     uint32_t line = 0; // increments by 4
 
     // How many output blocks are empty
@@ -420,7 +436,6 @@ int uncan(const options &opt) {
             return Usage("Input bitmap is corrupt\n");
 
         for (int bit= 0; bit < bits; bit++, num_blocks--) {
-
             if (!is_on(&bitmap[line], bit)) {
                 empties++;
                 continue;
@@ -435,7 +450,7 @@ int uncan(const options &opt) {
             if (!transfer(in_idx, out_idx))
                 return IO_ERR;
 
-            count++; // Transferred one more block
+            count++; // One more transferred block
         }
 
         line += 4;
@@ -448,9 +463,11 @@ int uncan(const options &opt) {
     // Might have a partial block at the end
     int extra_bytes = out_size % BSZ;
     if (extra_bytes) {
+
         // Which line we're on
         line = static_cast<uint32_t>((out_size / BSZ / 96) * 4);
         int bit = (out_size / BSZ) % 96;
+
         // Check the running count if the partial block is bit 0
         if ((bit == 0) && (count != bitmap[line]))
             return Usage("Input bitmap is corrupt\n");
