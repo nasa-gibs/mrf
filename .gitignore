@@ -10,3 +10,9 @@ update*
 *.obj
 /dist/
 /docker/el7/rpms/
+
+# Visual Studio
+.vs
+Debug
+Release
+*.user
