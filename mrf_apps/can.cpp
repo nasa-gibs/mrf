@@ -388,7 +388,7 @@ int uncan(const options &opt) {
 
     // Verify and unpack the header line
     if (header[0] != *reinterpret_cast<const uint32_t *>(SIG))
-        return Usage("Input is not a canned MRF index, wrong magick");
+        return Usage("Input is not a canned file, wrong magic");
     // in 16 byte units, convert it to 4 byte units
     uint32_t header_size = 4 * be32toh(header[1]);
 
@@ -441,7 +441,6 @@ int uncan(const options &opt) {
                 continue;
             }
 
-            // Flush
             if (empties)
                 FSEEK(out_idx, empties * BSZ, SEEK_CUR);
             empties = 0;
@@ -456,7 +455,6 @@ int uncan(const options &opt) {
         line += 4;
     }
 
-    // Flush
     if (empties)
         FSEEK(out_idx, empties * BSZ, SEEK_CUR);
 
@@ -472,20 +470,16 @@ int uncan(const options &opt) {
         if ((bit == 0) && (count != bitmap[line]))
             return Usage("Input bitmap is corrupt\n");
 
-        if (is_on(&bitmap[line], bit)) {
-            // Transfer the partial block, we're done
-            if (!transfer(in_idx, out_idx, extra_bytes))
+        // Last bytes could be empty
+        if (is_on(&bitmap[line], bit) && !transfer(in_idx, out_idx, extra_bytes))
                 return IO_ERR;
-        }
-        else {
-            FSEEK(out_idx, extra_bytes, SEEK_CUR);
-        }
     }
 
-    fclose(in_idx);
-    // Need to end the file at the current position, to get the right size
+    // Need to end the file at the right size
+    FSEEK(out_idx, out_size, SEEK_SET);
     MARK_END(out_idx);
     fclose(out_idx);
+    fclose(in_idx);
 
     return NO_ERR;
 }
