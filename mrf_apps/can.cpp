@@ -5,12 +5,12 @@
  *
  * canned Format:
  *
- * The MRF packed format consist of a header of size 16 + 16 * ((49151 + isize) / 49152)
+ * The MRF canned format consist of a header of size 16 + 16 * ((49151 + isize) / 49152)
  * followed by the 512 byte blocks of the original MRF index that do hold non-zero values
- * The output index will be 1:3072 (0.03255%) of the original virtual size, rounded up to 16,
- * plus the actual content blocks.
+ * The output file will be 1:3072 (0.03255%) of the original virtual size, rounded up to 16,
+ * plus the blocks with non-zero content
  *
- * This is because the canned file header contains a bitmask that holds presence info for every
+ * This is because the canned file header includes a bitmask that holds presence info for every
  * 512 byte block of the input, stored in 96 block groups, stored as a 96 bit line prefixed 
  * by a 32 bit running count of previously existing blocks. Thus, each line will use 16 bytes.
  * The canned file starts with a 16 byte canned index metadata that describes it's structure
@@ -28,6 +28,13 @@
  * |start_count | bits 0 to 32 | bits 33 to 63 | bits 64 to 95 |
  * Where start_count is the total count of the bits set in the previous lines
  * 
+ * Reading data from any block requires reading the 16 byte line corresponding to the 
+ * initial block count, checking that the bit representing the block is set and then
+ * calculating the block number within the canned file.  This operation can be done fast
+ * and has a constant cost O(1), but this cost is added to the cost of reading the MRF index data.
+ * It is recommended to cache content within the bitmap, to reduce or eliminate the cost associated
+ * with reading from the bitmap
+ *
  */
 
 #if defined(_WIN32)
@@ -45,13 +52,15 @@
 #define be32toh _byteswap_ulong
 #define htobe64 _byteswap_uint64
 #define be64toh _byteswap_uint64
+
 #else
 #include <unistd.h>
 #include <endian.h>
 #define FSEEK fseek
 #define FTELL ftell
 
-#define SETSPARSE(f) true
+#define SETSPARSE(f) {}
+
 #endif
 
 #include <string>
@@ -186,8 +195,9 @@ static inline uint64_t hsize(uint64_t in_size) {
     return 16 + 16 * ((96 * BSZ - 1 + in_size) / (96 * BSZ));
 }
 
-// transfer len bytes from in to out, prints an error and returns false if it erred
-// len has to be under or equal to BSZ
+// transfer len bytes from in to out, at the current positions
+// prints an error and returns false if errors are encountered
+// len has to be under or equal to BSZ, since a static buffer is used
 inline int transfer(FILE *in_file, FILE *out_file, size_t len = BSZ) {
     assert(len <= BSZ);
     static char buffer[BSZ];
@@ -229,7 +239,7 @@ int can(const options &opt) {
     FILE *out_idx = fopen(out_idx_name.c_str(), "wb");
 
     if (!in_idx || !out_idx) {
-        cerr << "Can't open " << (in_idx ? out_idx_name : in_idx_name) << endl;
+        cerr << "Error opening " << (in_idx ? out_idx_name : in_idx_name) << endl;
         return IO_ERR;
     }
 
@@ -315,6 +325,7 @@ int can(const options &opt) {
         }
         line += 4; // Points to the header end
     }
+    fclose(in_idx);
 
 #undef BIT_SET
 
@@ -322,8 +333,7 @@ int can(const options &opt) {
         cout << "Index packed from " << in_size << " to " << FTELL(out_idx) << endl;
 
     // line should point to the last line or the one after the last
-    if (!(header.size() == line))
-        cerr << "Something is wrong, line is " << line << " header is " << header.size() << endl;
+    assert(header.size() == line);
 
     // swap all header values to big endian
     for (auto &v : header)
@@ -341,7 +351,6 @@ int can(const options &opt) {
     *reinterpret_cast<uint64_t *>(&header[2]) = htobe64(in_size);
 
     // Done, write the header at the begining of the file
-    fclose(in_idx);
     FSEEK(out_idx, 0, SEEK_SET);
     if (header.size() != fwrite(header.data(), sizeof(uint32_t), header.size(), out_idx)) {
         cerr << "Error writing output header\n";
