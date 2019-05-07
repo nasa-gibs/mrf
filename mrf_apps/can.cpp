@@ -299,6 +299,11 @@ int can(const options &opt) {
         if (96 == bit_pos) {
             // Start a new line, store the running count
             bit_pos = 0;
+            // If there are no set bits, mark the line
+            // This allows for efficient caching of canned index
+            // since every double block will have some non-zero data
+            if (count == 0)
+                header[line] = *reinterpret_cast<const uint32_t *>(SIG);
             line += 4;
             // If there is another line, initialize running count
             if (line < header.size())
@@ -342,9 +347,9 @@ int can(const options &opt) {
     // Write the header line, the signature is not dependent of endianess
     header[0] = *reinterpret_cast<const uint32_t *>(SIG);
 
-    // Last piece of the header line, the size of the header itself, in 16 byte units
+    // The size of the header itself, in 16 byte units
     // This imposes a size limit of 64GB for the header, which translates into 
-    // 192PB for the source index, unlikely to be ever reached
+    // 192PB for the source index, unlikely ever be reached
     header[1] = htobe32(static_cast<uint32_t>(header.size() / 4));
 
     // The initial file size, big endian, uses header[2] and header[3]
