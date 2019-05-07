@@ -301,7 +301,7 @@ int can(const options &opt) {
             bit_pos = 0;
             // If there are no set bits, mark the line
             // This allows for efficient caching of canned index
-            // since every double block will have some non-zero data
+            // since every double block will contain non-zero bytes
             if (count == 0)
                 header[line] = *reinterpret_cast<const uint32_t *>(SIG);
             line += 4;
