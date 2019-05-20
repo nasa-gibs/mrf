@@ -28,9 +28,9 @@ An MRF dataset has three components, metadata, index and data.  Usually each com
 
 - The metadata file represents the raster itself.  It is an XML formatted file, which improves readability and extensibility.  In GDAL, the XML content can be used directly instead of a file name, so the metadata file does not even need to exist as such.  The metadata file uses the .mrf extension by convention, but any other file extension can also be used.
 - The index file is concerned with the two dimensional organization of the raster tiles on a grid.  It contains a two dimensional array of structures, each structure holding the size and offset of a tile.  The index file size is proportional to the number of tiles that can reside in an MRF.  The organization of the index file depends on which MRF features are being used, but for a single raster they are stored in a top-left aligned, row major array.  The index file name is by default the same as the metadata file name with the .idx extension replacing the original .mrf.
--	The data file contains the raster tiles forming the MRF, which themselves contain the data values for each pixel.  There is no implicit order of the tiles in the data file.  The datafile is modified only by appending at the end of the file, all existing content will continue to take space on disk, even if it is no longer accessible by the MRF driver.
+- The data file contains the raster tiles forming the MRF, which themselves contain the data values for each pixel. There is no guaranteed order of the tiles within the data file.  The datafile is modified only by appending at the end of the file, all existing content will continue to take space on disk, even if it is no longer accessible by the MRF driver.
 
-Note that neither the index, nor the data file contain any information about the MRF size, organization or content.  All three files are required for accessing the MRF content, it is usually not possible to recover the data from one or two of the files.
+Note that neither the index, nor the data file contain any information about the MRF size, organization or content.  All three components are required for accessing the MRF content, it is usually not possible to recover the data from one or two of the files.
 
 # Referring to an MRF
 
@@ -42,31 +42,29 @@ Another way to reference an MRF is to use the XML content of the metadata file a
 
 # MRF Operations
 
-When a MRF is created, all three files are usually created on disk, in the same folder.  One of the MRF format features is that the content can be read as soon as the files are created, even before any data is actually written.  It is also possible to read from an MRF file while it is being written into.  Regions of an MRF that have not been written to automatically return the NoData value if the NoData is defined, or zero otherwise.  This is also true for the overviews, they can be read as soon as the MRF file is flagged as having overviews.
+When a MRF is created, all three files are usually created on disk in the same folder.  One of the MRF format features is that the content can be read as soon as the files are created, even before any data is actually written.  It is also possible to read from an MRF file while it is being written into.  Regions of an MRF that have not been written to automatically return the NoData value if the NoData is defined, or zero otherwise.  This is also true for the overviews, they can be read as soon as the MRF file is flagged as having overviews.
 
 ## Overview Generation
 
-An MRF can have either no overviews or all overviews, until all the raster fits into a single tile.  There is no information in the MRF about individual overviews, so it is not possible to only have a selected few!  If the overviews are not populated, they will return no-data or black.
+An MRF can have either no overviews or all overviews, until all the raster fits into a single tile.  There is no information in the MRF about individual overviews, so it is not possible to only have a selected few!  If the overviews are not populated with data, they will return no-data or black.
 
-The MRF driver contains code to generate internal overviews using bilinear interpolation, for overview scale of powers of 2.  The GDAL overview generation code can also be used, in which case overviews at different scale factor (3, 4 …) can also be generated.  Same rule applies; all levels have to exist until all raster fits in one tile.  If the MRF isn't already marked as having overviews, the scale between overviews is the first value passed to gdaladdo utility.  So the first overview to be generated and populated has to be the largest one.   It is also mandatory to generate all necessary overviews in sequence, since they are generated from the previous one.  Usually the list of levels passed to gdaladdo should be all the needed powers of the scale factor, like this:
+The MRF driver contains code to generate internal overviews using averaging or nearest value interpolation, for overview scale of powers of 2.  The GDAL overview generation code can also be used, in which case overviews with various resampling methods or at different scale factor (3, 4 …) can be generated.  The same rule applies; all levels have to exist until all raster fits in one tile.  If the MRF is not already marked as having overviews, the scale between overviews will be the first value passed to gdaladdo utility.  The first overview to be generated and populated has to be the largest one.   It is also mandatory to generate all necessary overviews in sequence, since they are generated recursively, from the previous one.  Usually the list of levels passed to gdaladdo should be all the needed powers of the scale factor, like this:
 
-`gdaladdo Test.mrf 2 4 8 16 32 64 128`
+`gdaladdo -r avg Test.mrf 2 4 8 16 32 64 128`
 
 Or for powers of 3:
 
 `gdaladdo Test.mrf 3 9 27 81`
 
-For convenience, unnecessary levels (the big values) will generate a warning but not a fault.  It is not possible to change MRF overviews from one scale factor to another.  It is however possible to generate the overviews multiple times.
+For convenience, unnecessary levels (the big values) generate a warning but not an error.  It is not possible to change MRF overviews from one scale factor to another.  It is however possible to generate the overviews multiple times.
 
 ## Overview sampling:
 
-The MRF driver contains its own resampling code, based on averaging.  The internal code has less overhead than the GDAL averaging and is usually faster.  Use `–r avg` as the sampling option to gdaladdo with 2 as a scale factor to select this algorithm.   Only scale 2 works correctly with this option!  The MRF built-in sampler pads to the right and bottom of the image when needed.  The normal GDAL sampler stretches the input as needed by repeating rows and/or columns.  Both samplers do take the NoData into account.  For the internal sampler, each band in averaged independently, band interpretation has no significance.  GDAL resampling does take the band interpretation into account, if an alpha band exists and the opacity is zero for any pixel, GDAL will zero out all the other bands for that pixel.  The internal sampler does not use a progress indicator.
+The MRF driver contains its own resampling code, which can use averaging or nearest neighbor algorithms.  The internal code has less overhead than the GDAL averaging and is usually faster.  It is also optimized for MRFs with large areas of NoData.  Use `–r avg` or `-r nnb` as the sampling option to gdaladdo with 2 as a scale factor to use these.  Only scale 2 works for the internal sampler!   The MRF sampler pads to the right and bottom of the image when needed, keeping the scale factor an exact 2.  Since the scale factor is always 2, the average algorithm can also be considered a bilinear interpolation.  The GDAL sampler stretches the input when needed by repeating rows and/or columns.  Both samplers do take the NoData into account.
 
-Note that GDAL up to version 1.11 uses an incorrect step when generating overviews.  This bug results in inefficient execution, larger than necessary file sizes and sometimes visible artifacts.  This problem has been addressed and should not affect future versions of GDAL.  Also, Use `–r average` to use the GDAL bilinear interpolation.  The results differ slightly from the MRF internal sampler, due to the different padding.  GDAL pads when necessary by duplicating pixel rows, in the middle of the image.  The progress indicator is per generated level.
+Note that GDAL up to version 1.11 used an incorrect step when generating overviews.  This bug results in inefficient execution, larger than necessary file sizes and sometimes visible artifacts.  This problem has been addressed and should not affect future versions of GDAL.  Also, Use `–r average` to use the GDAL average interpolation and `-r near` to select the GDAL nearest neighbor one.  The results differ slightly from the MRF internal sampler, due to the different padding.  The progress indicator is per generated level.
 
-Use `–r nearest` (or no –r option), to use GDAL NearNb sampling.  The progress indicator will be per generated level.
-
-GDAL resampling takes into consideration both the noDataValue and the alpha band, setting to zero pixels where the alpha band is zero.  To force gdal to ignore the alpha, set the create option PHOTOMETRIC=MULTISPECTRAL.   This will set the photometric interpretation of all bands to unknown. The MRF –avg method is not subject to this behavior, it will keep the the data values even if the alpha band is zero.
+GDAL resampling takes into consideration both the noDataValue and the alpha band, setting to zero pixels where the alpha band is zero.  To force gdal to ignore the alpha, set the MRF create option PHOTOMETRIC=MULTISPECTRAL.   This will set the photometric interpretation of all bands to unknown. The MRF avg or nnb method is not subject to this behavior, it will keep the the data values even if the alpha band is zero.
 
 In case of an MRF file with overviews, it is possible to open a single specific overview level.  The overviews are identified by their numeral and not by the relative scale, with 0 being the largest overview.  The syntax used for this is `<filename>:MRF:L<n>`
 
@@ -78,11 +76,11 @@ For example, this command will explicitly open the first overview level:
 
 Using an MRF specific utility, mrf_insert, it is possible to modify a part of an MRF and regenerate only the affected portions of the overviews.  This facility makes it possible to build very large datasets efficiently, operating on small areas at a time.
 
-This functionality relies on the internal MRF resampling (-avg described above), so it will only work for averaging mode and powers of two between levels.
+This functionality relies on the internal MRF resampling, so it will only work with avg or nnb resampling mode and powers of two between levels.
 
 Set create option APPEND_SUBDATASET to true avoid deleting the MRF header file.
 
-Since a Caching or Cloning MRF may be used at the same time by different processes, the MRF driver contains code that allows it to be written by multiple processes safely.  This feature might be useful for other types of MRF, for example when mrf_insert is used to update different areas of the same file, or when multiple third dimension MRF Z-Slices are written to at the same time.  To turn on this feature, manually add a boolean attribute called mp_safe with the value **on** to the Raster node of the MRF metadata.  It is not on by default since it slows down the write operations somewhat.  This feature has only been tested on Windows and Linux, and it depends on the specific operating and file system implementation, there might be configurations in which this operation fails.
+Since a Caching or Cloning MRF may be used at the same time by different processes, the MRF driver contains code that allows it to be written by multiple processes safely.  This feature might be useful for other types of MRF, for example when mrf_insert is used to update different areas of the same file, or when multiple third dimension MRF Z-Slices are written to at the same time.  To turn on this feature, manually add a boolean attribute called mp_safe with the value **on** to the Raster node of the MRF metadata.  It is not on by default since it slows down the write operations somewhat.  This feature has only been tested on Windows and Linux, and it depends on the specific operating and file system implementation, there might be configurations in which this operation fails.  It does not work properly on network file systems like CIFS and NFS, because these file systems do not implement the file append mode fully.
 
 # Types of tile compressions supported by MRF
 
@@ -128,9 +126,9 @@ The compression speed and the size of the output will change significantly if th
 
 ## PNG and PPNG Compression
 
-PNG is a lossless compression image format which uses the DEFLATE algorithm internally.  PNG is the default compression mechanism for MRF.  PNG compression is used for both the PNG and PPNG compression mode.  PPNG stands for Palette PNG.  While both types can have a MRF level palette, PPNG also stores the palette inside each and every PNG tile.  Normally this should only be used if the PNGs are to be served over the web as color PNGs, otherwise the PNG compression results in smaller data files.
+PNG is a lossless compression image format which uses the DEFLATE algorithm internally.  PNG is the default compression mechanism for MRF.  PNG compression is used for both the PNG and PPNG MRF compression mode.  PPNG stands for Palette PNG.  While both types can have an MRF level palette, PPNG also stores the palette inside each and every PNG tile.  This mode should only be used if the individual tiles are to be served over the web as PNGs, otherwise the regular PNG compression results in smaller data files.
 
-The PNG format itself supports up to sixteen bit unsigned integer data types.  In the MRF, only the eight and sixteen bit formats are used.  However, the MRF itself can have a signed sixteen bit data type (Int16), in which case the 16bit unsigned values stored in the PNG are interpreted as signed.
+The PNG format itself supports up to sixteen bit unsigned integer data types.  However, the MRF driver can treat a 16 bit PNG as containing signed data type (Int16), in which case the values stored in the PNG are interpreted as signed.
 
 The QUALITY setting controls the DEFLATE stage of the PNG, with the same meaning as the ones described in the DEFLATE compression.  Similarly, the Z_STRATEGY band option controls the zlib stage of PNG.  Choosing Z_RLE or Z_HUFFMAN_ONLY will result in much faster compression, at the expense of size, Z_HUFFMAN_ONLY being the fastest.  Z_FIXED and Z_FILTERED have much less effect.  The effect of the strategy setting is much stronger than the QUALITY value setting.
 
@@ -140,11 +138,11 @@ Example of gdal_translate options for PNG
 
 ## LERC Compression
 
-Limited Error Raster Compression (LERC) is an Esri compression format.  The main benefit of using LERC is extremely fast compression and decompression when compared with PNG and even JPEG, as well as excellent compression for data types larger than eight bit.  LERC is a single band compression, with an explicit NoData mask.  This means that for MRF with LERC compression only band interleave is supported.  LERC also supports a datamask, which in MRF is enabled when the NoData value is defined.  The LERC built in NoData support makes it a great choice for storing sparse data.
+Limited Error Raster Compression (LERC) is an Esri compression format.  The main benefit of using LERC is extremely fast compression and decompression when compared with PNG and even JPEG, as well as excellent compression for data types larger than eight bit.  LERC is a single band compression, with an explicit data mask.  This means that for MRF with LERC compression only band interleave is supported.  LERC includes a data mask, which in MRF is enabled when the NoData value is defined.  The LERC built in mask support makes it a great choice for storing sparse data.
 
-LERC can be either lossy or lossless.  LERC maximum error value (LERC_PREC) is a floating point number that controls the quantization of the input data, thus the accuracy of the data.  LERC may modify the input values but the change is always less or equal to the LERC maximum error value.  The quanta or precision of the output data values will thus be twice the LERC_PREC value.  If the LERC maximum error is zero or too small for any space savings to be obtained by quantization, the input data values are not modified, and LERC becomes a lossless compression format.  There are two versions of LERC compression supported in MRF, LERC and LERC V2 (default).  LERC supports integer and floating point data types with up to 24 bits of precision.  LERC V2 supports more data types with higher precision and is somewhat faster.  LERC V2 also includes different compression methods that sometimes results in significantly better compression than LERC.  Yet for most cases, the compression achieved will be very similar.
+The LERC algorithm can be either lossy or lossless.  LERC maximum error value (LERC_PREC) is a floating point number that controls the quantization of the input data, thus the accuracy of the data.  LERC alters the values stored, but the change is always less or equal to the LERC maximum error value.  The quanta or precision of the output data values will thus be twice the LERC_PREC value.  If the LERC maximum error is zero or too small for any space savings to be obtained by quantization, the input data values are not modified, and LERC becomes a lossless format.  There are two versions of LERC compression supported in MRF, LERC and LERC V2 (default).  LERC supports integer and floating point data types with up to 24 bits of precision.  LERC V2 supports more data types and is somewhat faster.  While in most cases LERC V2 achieves similar compression to LERC, it also includes different compression methods that may result in significantly better compression. For byte input data, a Huffman algorithm is used instead of the LERC algorithm.
 
-For integer types the default LERC_PREC value is 0.5, corresponding to lossless compression.  For floating point types the LERC_PREC defaults to 0.001 (.002 value resolution).  The compression achieved by LERC heavily depends on the LERC_PREC value, which should be carefully selected for each particular dataset.
+In MRF, for integer types the default LERC_PREC value is 0.5, corresponding to lossless compression.  For floating point types the LERC_PREC defaults to 0.001 (.002 data resolution).  The compression achieved by LERC heavily depends on the LERC_PREC value, which should be carefully selected for each particular dataset.
 
 To set a custom LERC precision value, use the free form MRF OPTIONS mechanism, the option name being "OPTIONS".  To set the LERC precision for a new MRF, use the create option like this:
 
@@ -154,15 +152,15 @@ To use LERC instead of the default LERC2, add V1=ON to the options string, like 
 
 `-co OPTIONS="LERC_PREC=0.01 V1=ON"`
 
-MRF tiles compressed with LERC can be further encoded with zlib (DEFLATE), which sometimes results in better compression at a slight expense of speed.  DEFLATE speed is asymmetric, decompression being faster than compression, so it does not affect read speeds as much as it does writes.  To add DEFLATE to LERC, add "DEFLATE:ON" to the list of options.  This example sets both the LERC precision and the extra DEFLATE option:
+MRF tiles compressed with LERC can be further encoded with zlib (DEFLATE), which can improve the compression at the expense of speed.  DEFLATE speed is asymmetric, decompression being faster than compression, so it does not affect read speeds as much as it does writes.  DEFLATE is significantly slower than LERC, so it should be used only when the size is critical.  To add DEFLATE to LERC, add "DEFLATE:ON" to the list of options.  This example sets both the LERC precision and the extra DEFLATE option:
 
 `-co OPTIONS="LERC_PREC=0.01 DEFLATE=ON"`
 
-Once set, the LERC_PREC value will be used for all subsequent writes into the respective MRF.
+When set, the LERC_PREC value will be used for all subsequent writes into the respective MRF.
 
 ## JPEG Compression
 
-The JPEG compression depends on the internal GDAL libjpeg.  It can handle 8 or 12 bit data.  It can have up to 10 bands in pixel interleave mode.  Note that only 8 bit JPEGs with 1 or 3 bands are suitable for web services in most cases.
+The JPEG compression depends on the internal GDAL libjpeg.  It can handle 8 or 12 bit data.  It can have up to 10 bands in pixel interleave mode.  Note that only 8 bit JPEGs with 1 or 3 bands are suitable for web tile services in most cases.
 
 The QUALITY setting is directly passed to JPEG library as the Q factor, the default value being 85.  Values between 0 and 100 are supported, the common range being between sixty and eighty five, larger values producing visually better results at the cost of increased size.  For the exact interpretation of Q, please consult JPEG documentation.  For three bands interleaved, a couple of encoding options are available, controlled via the PHOTOMETRIC setting.  The default setting should be used most of the time.  Tiles produced this way are read correctly by most applications:
 
@@ -172,19 +170,19 @@ The QUALITY setting is directly passed to JPEG library as the Q factor, the defa
 
 Optimizing the Huffman encoding tables for each tile, as opposed to using the default value can be enabled by having the "OPTIMIZE=ON" in the OPTIONS list.  Choosing this will increase encoding time and reduce the tile size slightly, both are relatively small changes in most cases.
 
-The 12 bit JPEG is used when the input data type is Int16 or UInt16
+The 12 bit JPEG is used when the input data type is Int16 or UInt16.
 
-## JPEG Zero Enhanced (Zen) Extension
+### JPEG Zero Enhanced (Zen) Extension
 
-The JPEG tiles generated by MRF will always contain a JPEG Zen chunk, using APP3 "Zen" tag.  This chunk contains a bitmask of the pixel positions that contain zero. If the size of the bitmask is zero, all pixels within the respective tile are non-zero. When reading a JPEG that contains a Zen chunk, the MRF will ensure that the pixel positions that contain zero matches the Zen mask.  In essence, the pixels that contain zero are stored losslessly.  This eliminates some of the JPEG edge artifacts when the background is black, enabling a Zen JPEG encoded MRF to be used as an overlay on top of other data, as long as black is made transparent.  Since the Zen chunk is inserted in accordance to the JFIF standard, it will be ignored by legacy applications, which will still decode the JPEG image content.
+The JPEG tiles generated by MRF contain a mask of zero value pixels stored in a JPEG Zen chunk, using APP3 "Zen" tag. If the size of the Zen chunk is zero, all pixels within the respective tile are to be non-zero. When reading a JPEG that contains a Zen chunk, the MRF driver will ensure that the pixel positions that contain zero matches the mask.  In essence, the pixels that contain zero are stored in a lossless way.  This eliminates the JPEG edge artifacts when the background is black, enabling a Zen JPEG encoded MRF to be used as an overlay on top of other data, as long as black is made transparent.  Since the Zen chunk is built in accordance to the JFIF standard, it will be ignored by legacy applications, which will only decode the JPEG image content.  Since the mask is generated and consumed at the MRF level, it is not visible to GDAL.  It only enables 0 to be treated as NoData value for JPEG compressed MRFs.
 
-The bitmask is organized in a 8x8 2D bitmask, which is then compressed by run length encoding.  For most tiles, the size of the Zen chunk containing the mask is negligible but it does add at least eigth bytes to a tile, so there is a small size penalty.  However, the potential benefit of being able to treat black as transparent outweigh this size increase.
+The bitmask is organized in a 8x8 2D bitmask, which is then compressed by run length encoding.  For most inputs, the size of the Zen chunk containing the mask is negligible.  The potential benefit of being able to treat black as transparent outweigh this size increase.
 
 ## JPNG Compression
 
-The JPNG compression generates either PNG or JPEG tiles, depending on the presence of non-opaque pixels.  If all the pixels within a tile are opaque, it is stored as JPEG, otherwise it is stored as PNG with an Alpha channel.  It emulates either a Luma-Alpha image or an RGBA one, so it will always have 2 or 4 bands, always PIXEL interleaved.
+The JPNG compression is a combination of PNG or JPEG tiles, depending on the presence of non-opaque pixels.  If all the pixels within a tile are opaque, it is stored as JPEG, otherwise it is stored as PNG with an Alpha channel.  It is presented to GDAL as either a Luma-Alpha image or an RGBA one, so it will always have 2 or 4 bands, always PIXEL interleaved.
 
-Most of the options from PNG and from JPEG compression still apply.  The data file will be smaller than when using PNG, if there are tiles that are fully opaque and can be stored as JPEG.  Note that depending on the options used and the input data, the transition from PNG to JPEG might be visible.
+Most of the options from PNG and from JPEG compression still apply.  The data file will be smaller than when using PNG, if there are tiles that are fully opaque and can be stored as JPEG.  Note that depending on the options used and the input data, the transition from PNG to JPEG might be visible. The normal JPEG with Zen mask should be used in most cases, except if 0 is not to be transparent and when gradual transparency is needed.
 
 ## TIFF Compression
 
@@ -198,43 +196,43 @@ This is the name for the basic storage format MRF, where all the three files are
 
 ## Split MRF
 
-The three files that compose an MRF (metadata, index and data) can be distributed across different storage systems.  This is accomplished by having two extra XML nodes in the MRF metadata file, each containing GDAL accessible file names for the index or respectively for the data file.  These types of files are not created by gdal_translate and need to be created by manually editing the metadata file.  The two nodes to be added are `<IndexFile>` and `<DataFile>`.  They are added as sub-nodes of the `<Raster>` node.  The content is simply a path to where the data or the index file can be found.  The Split MRF can be used for example to accelerate access, by keeping the metadata files and possibly the index file on a faster storage (local SSD) while having the large data files on a HDD or a NAS.  Other than the file location, there is no difference between the Static and the Split MRF.  The IndexFile and DataFile nodes can also contain an optional attribute called **offset** , with a numerical value.  This value will be added to the normal, calculated file offsets for all access to the respective files.  This feature can be exploited to combine the data and index files of an MRF.
+The three files that compose an MRF (metadata, index and data) can be distributed across different storage systems.  This is accomplished by having two extra XML nodes in the MRF metadata file, each containing GDAL accessible file names for the index or respectively for the data file.  These types of files are not created by gdal_translate and need to be created by manually editing the metadata file.  The two nodes to be added are `<IndexFile>` and `<DataFile>`.  They are added as sub-nodes of the `<Raster>` node.  The content is simply a path to where the data or the index file can be found.  The Split MRF can be used for example to accelerate access, by keeping the metadata files and possibly the index file on a faster storage (local SSD) while having the large data files on a HDD or a NAS.  Other than the file location, there is no difference between the Static and the Split MRF.  The IndexFile and DataFile nodes can also contain an optional attribute called **offset** , with a numerical value.  This value will be added to the normal, calculated file offsets for all access to the respective files.
 
 ## Caching MRF
 
-MRF can also be used as an intermediary format, to cache data another raster file.  The original raster is called the **source** raster, while the MRF used to cache becomes the **caching MRF**.  Only reading from a caching MRF is exposed in GDAL, writing to the MRF files occurs automatically.  Opening a caching MRF for update is not supported.  It is also not possible to write to the parent dataset through a caching MRF.  Some of the GDAL functionality of the parent raster might not be available when accessing the data through an MRF.  Only access to the raster data, the geotransform and projection are guaranteed to be available.   Only static rasters, including static/split MRFs should be cached.  Chaining caching MRFs is possible but cache coherency may become an issue.
+MRF can also be used as a cache for another raster file.  The original raster is called the **source** raster, while the MRF used to cache becomes the **caching MRF**.  Only reading from a caching MRF is exposed in GDAL, the update of the MRF cache occurs automatically.  Opening a caching MRF for update is not supported.  It is also not possible to write to the parent dataset through a caching MRF.  Some of the GDAL functionality of the parent raster might not be available when accessing the data through an MRF.  Only access to the raster data, the geotransform and projection are guaranteed to be available.   Only static rasters, including static/split MRFs should be cached.  Chaining caching MRFs is possible but cache coherency may become an issue.
 
 ### Creating a MRF cache
 
 #### CACHEDSOURCE Create Option
 
-The MRF GDAL driver only supports the CreateCopy, so the simplest way to instantiate a caching MRF is using the gdal_translate.  In addition to the normal MRF create options, the creation of a caching MRF dataset requires the presence of the " **CACHEDSOURCE**" option, whose value is the file name of the raster dataset to be cached.  Only local files are supported, in any format readable by GDAL.  The file name should be absolute, except for the case where the parent raster file is located in the same exact folder as the caching MRF metadata file.
+The simplest way to create a caching MRF is using the gdal_translate command.  In addition to the normal MRF create options, the creation of a caching MRF dataset requires the presence of the " **CACHEDSOURCE**" option, whose value is the file name of the raster dataset to be cached.  Only local files are supported, in any format readable by GDAL.  The file name should be absolute, except for the case where the parent raster file is located in the same exact folder as the caching MRF metadata file.
 
 An example of creating a caching MRF:
 
-`gdal_translate –of MRF –co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
+`gdal_translate –of MRF -co NOCPY=True –co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif H12003_MB_1m_MLLW_14of16.tif tst.mrf`
 
-In the command above, the presence of the CACHEDSOURCE option flags the file as a caching MRF and gets stored in the MRF metadata file.  The value is the file name without the absolute path, which means that the caching mrf metadata file will always reside in the same location as the parent dataset file.
+In the command above, the presence of the CACHEDSOURCE option flags the file as a caching MRF and the value of the option gets stored in the MRF metadata file.  Since the values used are the file name without an absolute path, the caching mrf metadata file will always reside in the same location as the parent dataset file.  Absolute source path is also supported, and is the right choice in most cases.
 
-The command above will create the caching MRF metadata, data and index files and proceed to copy the parent dataset into the caching MRF.  The caching MRF has the same structure as a normal, static MRF, except that it is flagged as a caching MRF.  This example is not a true MRF caching application, since all the data is copied into the new created file at creation time.  It is possible to erase the index and data files and then use the MRF for caching, the index and data of a caching MRF file are created when needed.  WARNING:  Always remove the index and data files together, otherwise errors will occur.
+The command above will create the caching MRF metadata, data and index files but will not copy the source data.  The caching MRF has the same structure as a normal, static MRF, except that it is flagged as a caching MRF.  It is possible to erase the index and data files and then use the MRF for caching, the index and data files of a caching MRF file are recreated as needed.  WARNING:  Always remove the index and data files together, otherwise errors will occur.
 
 #### NOCOPY Create Option
 
 To initialize a caching MRF but not store any data in it, use the Boolean create option **NOCOPY** = **True**.  For example:
 
-`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC=0.01" -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC=0.01" -co NOCOPY=True -co CACHEDSOURCE=/data/LERC_test/H12003_MB_1m_MLLW_14of16.tif H12003_MB_1m_MLLW_14of16.tif test.mrf`
 
-The combined use of the CACHEDSOURCE and the NOCOPY options should be the most common use.  Normally, the source raster as used on the gdal_translate command line and the value of the CACHEDSOURCE are identical.  The source raster is used as the source of data and metadata during the gdal_translate execution.   The CACHEDSOURCE raster is used later, when reading from the caching MRF, if the data is not present.  While this syntax seems clumsy, it is required due to the structure of gdal_translate, and it also offers the possibility to initialize a caching MRF using a local file while caching a different, possibly remote raster.
+The combined use of the CACHEDSOURCE and the NOCOPY options should be the most common use.  Normally, the source raster as used on the gdal_translate command line and the value of the CACHEDSOURCE are identical.  The source raster is used as the source of metadata during the gdal_translate execution.   The CACHEDSOURCE raster is used later, when reading from the caching MRF, if the data is not present in the MRF itself.  While this syntax seems clumsy, it is required due to the structure of gdal_translate, and it also offers the possibility to initialize a caching MRF using a local file while caching a different, possibly remote raster.
 
-The example above, in addition to the precedent one, sets the caching MRF compression to LERC, sets the blocksize to be used, sets the LERC max error via the freeform option and sets the NOCOPY to true.  This will leave the caching MRF initialized but empty.  When raster blocks are then read from the MRF, data is read from the CACHEDSOURCE raster and stored in the caching MRF.  On subsequent reads, if the data already exists in the caching MRF it is no longer read from the parent dataset.
+The example above, in addition to the precedent one, sets the caching MRF compression to LERC, sets the blocksize to be used, sets the LERC max error via the freeform option and sets the NOCOPY to true.  This will leave the caching MRF initialized but empty.  When raster blocks are then read from the MRF, data is read from the CACHEDSOURCE raster and stored in the caching MRF.  On subsequent reads, if the data already exists in the caching MRF it is no longer read from the parent dataset.  The caching MRF can be used to transcode data from any raster file format supported by GDAL.
 
 #### UNIFORM_SCALE Create Option
 
-The MRF (caching or normal) can be created with the full set of internal overlays.  This is especially useful when creating a caching MRF.
+The MRF (caching or normal) can be flagged as haing the full set of internal overlays.  This is especially useful when creating a caching MRF, since it will cache and offer access to overviews.  This command creates a caching MRF with the normal, factor 2
 
-`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC:0.01" -co UNIFORM_SCALE=2 -co NOCOPY=True -co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/tst.mrf`
+`gdal_translate -of MRF -co COMPRESS=LERC -co BLOCKSIZE=512 -co OPTIONS="LERC_PREC:0.01" -co UNIFORM_SCALE=2 -co NOCOPY=True -co CACHEDSOURCE=/data/LERC_test/H12003_MB_1m_MLLW_14of16.tif H12003_MB_1m_MLLW_14of16.tif /data/LERC_test/test.mrf`
 
-Note that the overlays will be written with data read at the corresponding scale from the parent dataset, thus they might be different from the ones that could be created via gdaladdo command.  However, gdaladdo will still work on the caching MRF, especially if the base level is fully populated already.  Exercise this option with caution, the current implementation of the overlay building reads the destination tile before writing to it.  In the case of a caching MRF, this will result in fetching the tile from the parent source, storing a copy in the caching MRF, then reading the higher resolution source from the MRF, scaling by 2 and writing the tile again into the caching MRF.
+Note that data for the overlays will be read at the corresponding scale from the parent dataset, thus they might be different from the ones that could be created on a normal MRF. Do not use gdalado on a caching MRF.
 
 #### Using a caching MRF
 
@@ -254,17 +252,15 @@ The performance of the caching MRF depends on a multitude of factors, including 
 
 ## Cloning MRF
 
-As a further optimization, if the source dataset of a caching MRF is itself an MRF, and caching MRF have the identical structure with the source one (image size, projection, page size, compression …), the caching MRF can eliminate the page transcoding, copying the already compressed pages from the source MRF.  This type of MRF is called a Cloning MRF, since it is an almost identical copy of the source MRF.  Creating a clone MRF cannot be done using gdal_translate, since it is not possible to insure that the source has the same properties as the caching MRF.  Instead, a cloning MRF should be created by copying the cloned MRF metadata file to where the cloning MRF should reside and adding the following lines to the top level node:
+As a further optimization, if the source dataset of a caching MRF is itself an MRF, and the caching MRF has the identical structure with the source one (image size, projection, page size, compression …), the caching MRF can eliminate the page transcoding, and just copy the already compressed pages from the source MRF into the cache.  This type of MRF is called a Cloning MRF, since its tiles are an identical copy of the source MRF ones, possibly in a different order.  Creating a clone MRF cannot be done using gdal_translate, since it is not possible to insure that the source has the same properties as the caching MRF.  Instead, a cloning MRF has to be created by copying the cloned MRF metadata file to where the cloning MRF should reside and adding the following lines to the top level node:
 
 ```
 <CachedSource>
-
-<Source clone="true>/path/to/cloned.mrf</Source>
-
+	<Source clone="true>/path/to/cloned.mrf</Source>
 </CachedSource>
 ```
 
-The data and the index files for a cloned MRF will be created on read, as needed.   Only static or split MRFs can be cloned, the cloning MRF does not trigger the full GDAL block reads to the source dataset.  This characteristic has the added benefit of reducing the GDAL block cache use, since the source blocks are not read in the block cache.
+The data and the index files for a cloned MRF will be created on read, as needed.   Only static or split MRFs can be cloned, the cloning MRF read does not trigger the full GDAL block read to the source dataset.  This characteristic has the added benefit of reducing the GDAL block cache use, since the source blocks are not read in the block cache.
 
 ## Versioned MRF
 
@@ -312,8 +308,8 @@ gdal_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
 
 gdaladdo –r avg TenSlice.mrf:MRF:Z3
 ```
-## LERC data MRF
-The MRF driver also recognizes and reads a lerc compressed data-file, if it is one of the supported fromats.  This type of data behaves as a read-only single tile MRF with LERC compression, without geo-reference.  This feature is mostly intended to be used by the GDAL WMS driver.  An open option, DATATYPE, can be used to change the data type when reading from LERC V1 compressed data.  The default data type for LERC V1 is byte.  LERC V2 can only be read as the same data type it was encoded as, the DATATYPE open option is ignored.
+## Single LERC data MRF
+The MRF driver recognizes and reads a LERC compressed file, if LERC support is compiled in the MRF.  This type of file behaves as a read-only single tile MRF with LERC compression, without geo-reference.  This feature is mostly intended to be used by the GDAL WMS driver.  An open option, DATATYPE, can be used to set the data type when reading from LERC V1 compressed data, since that information is not available in the LERC itself.  The default data type for LERC V1 is byte.  LERC V2 can only be read as the same data type it was encoded as, the DATATYPE open option is ignored.
 
 ## Overwriting an MRF
 
