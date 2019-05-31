@@ -1,3 +1,9 @@
+
+# The Makefile.lcl needs to define PREFIX and GDAL_ROOT for this system
+# For example, it should contain these two linel -al
+# PREFIX=/home/ec2-user
+# GDAL_ROOT=$(PREFIX)/src/gdal/gdal
+#
 include Makefile.lcl
 
 TARGETS = can mrf_insert
@@ -21,3 +27,4 @@ install: $(TARGETS)
 
 clean:
 	$(RM) $(TARGETS)
+
