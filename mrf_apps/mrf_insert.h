@@ -40,7 +40,7 @@
 
 // For C++ interface
 #include <gdal_priv.h>
-#include <../frmts/mrf/marfa.h>
+#include <frmts/mrf/marfa.h>
 
 #include <vector>
 #include <string>

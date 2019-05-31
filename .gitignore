@@ -16,3 +16,4 @@ update*
 Debug
 Release
 *.user
+*.lcl
