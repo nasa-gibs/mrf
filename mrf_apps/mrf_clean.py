@@ -48,7 +48,13 @@ def mrf_clean(source, destination, empty_file = None):
                     doffset = dfile.tell()
 
                     while True:
-                        idx = array.array('Q')
+                        try:
+                            idx = array.array('Q')
+                        except ValueError: # likely Python 2.7 
+                            idx = array.array('L')
+                            
+                            if not idx.itemsize == 8:
+                                raise ValueError("Platform does not support unsigned 8 byte long type")
                         try:
                             idx.fromfile(sidx, 512 // idx.itemsize)
                         except: # Could be incomplete last block or EOF
