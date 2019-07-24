@@ -60,13 +60,14 @@ img_info::img_info(GDALDatasetH hDS) {
 }
 
 
-static bool outside_bounds(const Bounds &inside, const Bounds &outside) {
+static bool outside_bounds(const Bounds &inside, const Bounds &outside, XY tolerance)
+{
     return (
-        ((inside.lx + 0.01) < outside.lx && !CPLIsEqual(inside.lx, outside.lx)) ||
-        (inside.ux > outside.ux && !CPLIsEqual(inside.ux, outside.ux)) ||
-        (inside.ly < outside.ly && !CPLIsEqual(inside.ly, outside.ly)) ||
-        ((inside.uy - 0.01) > outside.uy && !CPLIsEqual(inside.uy, outside.uy))
-        );
+        inside.lx + tolerance.x < outside.lx
+     || inside.ux - tolerance.x > outside.ux
+     || inside.ly + tolerance.y < outside.ly
+     || inside.uy - tolerance.y > outside.uy
+    );
 }
 
 //
@@ -174,6 +175,10 @@ bool state::patch() {
 
         img_info in_img(hPatch);
         img_info out_img(hDataset);
+	// Tolerance of 1/100 of an output pixel
+	XY tolerance;
+	tolerance.x = fabs(out_img.res.x) / 100.0;
+	tolerance.y = fabs(out_img.res.y) / 100.0;
         XY factor;
         factor.x = in_img.res.x / out_img.res.x;
         factor.y = in_img.res.x / out_img.res.x;
@@ -181,7 +186,7 @@ bool state::patch() {
         if (verbose > 0)
             cerr << "Out " << out_img.bbox << endl << "In " << in_img.bbox << endl;
 
-        if (outside_bounds(in_img.bbox, out_img.bbox)) {
+        if (outside_bounds(in_img.bbox, out_img.bbox, tolerance)) {
             CPLError(CE_Failure, CPLE_AppDefined, "Input patch outside of target");
             throw 2;
         }
