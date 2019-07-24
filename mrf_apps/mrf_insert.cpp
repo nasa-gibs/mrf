@@ -259,11 +259,12 @@ bool state::patch() {
                         // cerr << " Y block " << y << " X block " << x << endl;
                         // READ
 
+                        CPLErr eErr = CE_None;
                         // If input needs padding, initialize the buffer with destination content
                         if (src_offset_x < 0 || src_offset_x + tsz_x > src_b[band]->GetXSize()
                             && src_offset_y < 0 || src_offset_y + tsz_y > src_b[band]->GetYSize()) {
 
-                            dst_b[band]->RasterIO(GF_Read,
+                            eErr = dst_b[band]->RasterIO(GF_Read,
                                 x * tsz_x, y * tsz_y, // offset in output image
                                 tsz_x, tsz_y, // Size in output image
                                 buffer, tsz_x, tsz_y, // Buffer and size in buffer
@@ -273,6 +274,10 @@ bool state::patch() {
                                 , NULL
 #endif
                             );
+                            if (CE_None != eErr) {
+                                cerr << "Read error" << endl;
+                                throw static_cast<int>(eErr);
+                            }
                         }
 
                         // Works just like RasterIO, except that it only reads the 
@@ -285,7 +290,7 @@ bool state::patch() {
                             pixel_size, line_size); // Pixel and line space
 
                             // WRITE
-                        dst_b[band]->RasterIO(GF_Write,
+                        eErr = dst_b[band]->RasterIO(GF_Write,
                             x * tsz_x, y * tsz_y, // offset in output image
                             tsz_x, tsz_y, // Size in output image
                             buffer, tsz_x, tsz_y, // Buffer and size in buffer
@@ -295,6 +300,10 @@ bool state::patch() {
                             , NULL
 #endif
                         );
+                        if (CE_None != eErr) {
+                            cerr << "Read error" << endl;
+                            throw static_cast<int>(eErr);
+                        }
                     }
                 }
             }
