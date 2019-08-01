@@ -1,4 +1,4 @@
-%global gdal_version 2.4.0
+%global gdal_version 2.4.2
 %global gdal_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -131,6 +131,9 @@ rm -rf %{buildroot}
 %postun -p /sbin/ldconfig
 
 %changelog
+* Thu Aug 1 2019 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.2-1
+- Update to GDAL 2.4.2
+
 * Thu Mar 7 2019 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.0-1
 - Update to GDAL 2.4.0 and added apps
 
