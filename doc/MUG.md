@@ -210,7 +210,7 @@ The simplest way to create a caching MRF is using the gdal_translate command.  I
 
 An example of creating a caching MRF:
 
-`gdal_translate –of MRF -co NOCPY=True –co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif H12003_MB_1m_MLLW_14of16.tif tst.mrf`
+`gdal_translate –of MRF -co NOCOPY=True –co CACHEDSOURCE=H12003_MB_1m_MLLW_14of16.tif H12003_MB_1m_MLLW_14of16.tif tst.mrf`
 
 In the command above, the presence of the CACHEDSOURCE option flags the file as a caching MRF and the value of the option gets stored in the MRF metadata file.  Since the values used are the file name without an absolute path, the caching mrf metadata file will always reside in the same location as the parent dataset file.  Absolute source path is also supported, and is the right choice in most cases.
 
