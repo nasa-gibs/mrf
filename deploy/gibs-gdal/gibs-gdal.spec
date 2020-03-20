@@ -1,4 +1,4 @@
-%global gdal_version 2.4.2
+%global gdal_version 2.4.4
 %global gdal_release 1%{?dist}
 
 Name:		gibs-gdal
@@ -16,7 +16,7 @@ BuildRequires:  make
 BuildRequires:	libtool
 BuildRequires:  pkgconfig
 BuildRequires:	python-devel
-BuildRequires:	libpng12-devel 
+BuildRequires:	libpng-devel 
 BuildRequires:	libungif-devel
 BuildRequires:	libjpeg-devel
 BuildRequires:	libtiff-devel
@@ -131,6 +131,9 @@ rm -rf %{buildroot}
 %postun -p /sbin/ldconfig
 
 %changelog
+* Thu Mar 19 2020 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-1
+- Update to GDAL 2.4.4
+
 * Thu Aug 1 2019 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.2-1
 - Update to GDAL 2.4.2
 
