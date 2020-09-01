@@ -643,5 +643,5 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 
 |Key|Default Value|Description|
 | --- | --- | --- |
-| DATATYPE | Byte | Sets data type for reading raw LERC V1 files|
+| ZSLICE | Integer | Sets the ZSlice to open in a 3rd dimension MRF|
 | NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt areas|
