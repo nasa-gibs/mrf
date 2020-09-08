@@ -103,18 +103,14 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
             nYSize += nYOff; // YOff is negative, so this is a subtraction
             nYOff = 0;
         }
-        if (nYOff + nYSize > band->GetYSize()) {// Clip end of line
+        if (nYOff + nYSize > band->GetYSize()) {// Clip end of linez
             nYSize = band->GetYSize() - nYOff;
         }
     }
 
     // Call the raster band read with the trimmed values
     return band->RasterIO(GF_Read, nXOff, nYOff, nXSize, nYSize,
-        pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace
-#if GDAL_VERSION_MAJOR >= 2
-        , NULL
-#endif
-    );
+        pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace, NULL);
 }
 
 // Insert the target in the base level
@@ -253,13 +249,13 @@ bool state::patch() {
         // ouput block boundaries
         //
         if (start_level == 0) // Skip if start level is not zero
-            for (int y = blocks_bbox.uy; y < blocks_bbox.ly; y++) {
+            for (int y = static_cast<int>(blocks_bbox.uy); y < static_cast<int>(blocks_bbox.ly); y++) {
                 // Source offset relative to this block on y
-                int src_offset_y = tsz_y * y * factor.y - pix_bbox.uy + 0.5;
+                int src_offset_y = static_cast<int>(factor.y * tsz_y * y - pix_bbox.uy + 0.5);
 
-                for (int x = blocks_bbox.lx; x < blocks_bbox.ux; x++) {
+                for (int x = static_cast<int>(blocks_bbox.lx); x < static_cast<int>(blocks_bbox.ux); x++) {
                     // Source offset relative to this block on x
-                    int src_offset_x = tsz_x * x * factor.x - pix_bbox.lx + 0.5;
+                    int src_offset_x = static_cast<int>(factor.x * tsz_x * x - pix_bbox.lx + 0.5);
                     for (int band = 0; band < bands; band++) { // Counting from zero in a vector
                         // cerr << " Y block " << y << " X block " << x << endl;
                         // READ
@@ -275,9 +271,7 @@ bool state::patch() {
                                 buffer, tsz_x, tsz_y, // Buffer and size in buffer
                                 eDataType, // Requested type
                                 pixel_size, line_size // Pixel and line space
-#if GDAL_VERSION_MAJOR >= 2
-                                , NULL
-#endif
+                                , NULL // ExtraIO arguments
                             );
                             if (CE_None != eErr) {
                                 cerr << "Read error" << endl;
@@ -301,9 +295,7 @@ bool state::patch() {
                             buffer, tsz_x, tsz_y, // Buffer and size in buffer
                             eDataType, // Requested type
                             pixel_size, line_size // Pixel and line space
-#if GDAL_VERSION_MAJOR >= 2
-                            , NULL
-#endif
+                            , NULL // ExtraIO arguments
                         );
                         if (CE_None != eErr) {
                             cerr << "Read error" << endl;
@@ -327,12 +319,10 @@ bool state::patch() {
 
     // Call the patchOverview for the MRF
     if (overlays) {
-
-        int BlockXOut, BlockYOut, WidthOut, HeightOut, srcLevel;
-        BlockXOut = blocks_bbox.lx;
-        BlockYOut = blocks_bbox.uy;
-        WidthOut = blocks_bbox.ux - blocks_bbox.lx;
-        HeightOut = blocks_bbox.ly - blocks_bbox.uy;
+        auto BlockXOut = static_cast<int>(blocks_bbox.lx);
+        auto BlockYOut = static_cast<int>(blocks_bbox.uy);
+        auto WidthOut = static_cast<int>(blocks_bbox.ux - blocks_bbox.lx);
+        auto HeightOut = static_cast<int>(blocks_bbox.ly - blocks_bbox.uy);
 
         // If stop level is not set, do all levels
         if (stop_level == -1)
@@ -390,11 +380,11 @@ int main(int nArgc, char **papszArgv) {
 
     std::vector<std::string> fnames;
 
-    /* Check that we are running against at least GDAL 1.9 */
+    /* Check that we are running against at least GDAL 3.x */
     /* Note to developers : if using newer API, please change the requirement */
-    if (atoi(GDALVersionInfo("VERSION_NUM")) < 1900)
+    if (atoi(GDALVersionInfo("VERSION_NUM")) < 3000)
     {
-        fprintf(stderr, "At least, GDAL >= 1.9.0 is required for this version of %s, "
+        fprintf(stderr, "At least, GDAL >= 3.0.0 is required for this version of %s, "
             "which was compiled against GDAL %s\n", papszArgv[0], GDAL_RELEASE_NAME);
         exit(1);
     }
