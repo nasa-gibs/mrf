@@ -40,7 +40,10 @@
 
 // For C++ interface
 #include <gdal_priv.h>
-#include <frmts/mrf/marfa.h>
+
+// This file is not part of the normal gdal runtime, 
+// it resides in <GDAL_ROOT>/frmts/mrf
+#include <marfa.h>
 
 #include <vector>
 #include <string>

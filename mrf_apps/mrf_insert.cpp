@@ -126,7 +126,7 @@ bool state::patch() {
     union {
         GDALDatasetH hDataset;
         GDALDataset *pTDS;
-        GDALMRFDataset *pTarg;
+        MRFDataset *pTarg;
     };
 
     union {

@@ -5,7 +5,7 @@
  *
  * canned Format:
  *
- * The MRF canned format consist of a header of size 16 + 16 * ((49151 + isize) / 49152)
+ * The MRF canned format consists of a header of size 16 + 16 * ((49151 + isize) / 49152)
  * followed by the 512 byte blocks of the original MRF index that do hold non-zero values
  * The output file will be 1:3072 (0.03255%) of the original virtual size, rounded up to 16,
  * plus the blocks with non-zero content
@@ -22,7 +22,7 @@
  * 
  * The canned index file metadata line contains two 32bit integers and one 64bit int
  * all in big endian
- * | "MRF\0" | size of bitmap in 16 byte units | original index size |
+ * | "IDX\0" | size of bitmap in 16 byte units | original index size |
  *
  * The bitmap structure has 4 32bit unsigned integers, in big endian format
  * |start_count | bits 0 to 32 | bits 33 to 63 | bits 64 to 95 |
