@@ -41,8 +41,6 @@ using namespace std;
 USING_NAMESPACE_MRF
 
 // Size and location from handle
-
-//void getinfo(GDALDatasetH hDS, img_info &img) {
 img_info::img_info(GDALDatasetH hDS) {
     double adfGT[6];
     GDALGetGeoTransform(hDS, adfGT);
@@ -83,15 +81,16 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
     int nLineSpace)
 {
     CPLAssert(GF_Read == eRWFlag);
+    auto pcData = reinterpret_cast<char *>(pData);
 
     if (nXOff < 0 || nXOff + nXSize > band->GetXSize()) { // Clip needed on X
         if (nXOff < 0) { // Adjust the start of the line
             // nXoff is negative, so this is addition
-            pData = (void *)((char *)pData - nXOff * nPixelSpace);
+            pcData -= nXOff * nPixelSpace;
             nXSize += nXOff; // XOff is negative, so this is a subtraction
             nXOff = 0;
         }
-        if (nXOff + nXSize > band->GetXSize()) {// Clip end of line
+        if (nXOff + nXSize > band->GetXSize()) {// Clip end of lines
             nXSize = band->GetXSize() - nXOff;
         }
     }
@@ -99,13 +98,12 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
     if (nYOff < 0 || nYOff + nYSize > band->GetYSize()) { // Clip needed on X
         if (nYOff < 0) { // Adjust the start of the column
             // nYoff is negative, so this is addition
-            pData = (void *)((char *)pData - nYOff * nLineSpace);
+            pcData -= nYOff * nLineSpace;
             nYSize += nYOff; // YOff is negative, so this is a subtraction
             nYOff = 0;
         }
-        if (nYOff + nYSize > band->GetYSize()) {// Clip end of linez
+        if (nYOff + nYSize > band->GetYSize()) // Clip end of columns
             nYSize = band->GetYSize() - nYOff;
-        }
     }
 
     // Call the raster band read with the trimmed values
@@ -135,7 +133,7 @@ bool state::patch() {
     CPLPopErrorHandler();
 
     if (hDataset == NULL) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Can't open target file %s for update", TargetName.c_str());
+        CPLError(CE_Failure, CPLE_AppDefined, "Can't open file %s for update", TargetName.c_str());
         return false;
     }
 
@@ -143,7 +141,7 @@ bool state::patch() {
 
         // GetDescription is actually the driver ID, uppercase
         if (!EQUAL(pTDS->GetDriver()->GetDescription(), "MRF")) {
-            CPLError(CE_Failure, CPLE_AppDefined, "Target file is not MRF");
+            CPLError(CE_Failure, CPLE_AppDefined, "Target file is not an MRF");
             throw 1;
         }
 
@@ -152,7 +150,7 @@ bool state::patch() {
         CPLPopErrorHandler();
 
         if (hPatch == NULL) {
-            CPLError(CE_Failure, CPLE_AppDefined, "Can't open source file %s", SourceName.c_str());
+            CPLError(CE_Failure, CPLE_AppDefined, "Can't open file %s", SourceName.c_str());
             throw 1;
         };
 
@@ -171,13 +169,18 @@ bool state::patch() {
 
         img_info in_img(hPatch);
         img_info out_img(hDataset);
-	// Tolerance of 1/100 of an output pixel
-	XY tolerance;
-	tolerance.x = fabs(out_img.res.x) / 100.0;
-	tolerance.y = fabs(out_img.res.y) / 100.0;
+	    // Tolerance of 1/100 of an output pixel
+        XY tolerance;
+        tolerance.x = fabs(out_img.res.x / 100);
+        tolerance.y = fabs(out_img.res.y / 100);
         XY factor;
         factor.x = in_img.res.x / out_img.res.x;
-        factor.y = in_img.res.x / out_img.res.x;
+        factor.y = in_img.res.y / out_img.res.y;
+
+        if (factor.x != factor.y) {
+            CPLError(CE_Failure, CPLE_AppDefined, "Scaling factor for X and Y are not the same");
+            throw 2;
+        }
 
         if (verbose > 0)
             cerr << "Out " << out_img.bbox << endl << "In " << in_img.bbox << endl;
