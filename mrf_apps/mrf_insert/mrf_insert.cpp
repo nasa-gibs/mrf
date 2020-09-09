@@ -138,8 +138,7 @@ bool state::patch() {
     }
 
     try {
-
-        // GetDescription is actually the driver ID, uppercase
+        // GetDescription is the driver name, uppercase
         if (!EQUAL(pTDS->GetDriver()->GetDescription(), "MRF")) {
             CPLError(CE_Failure, CPLE_AppDefined, "Target file is not an MRF");
             throw 1;
@@ -177,7 +176,7 @@ bool state::patch() {
         factor.x = in_img.res.x / out_img.res.x;
         factor.y = in_img.res.y / out_img.res.y;
 
-        if (factor.x != factor.y) {
+        if (!CPLIsEqual(factor.x,factor.y)) {
             CPLError(CE_Failure, CPLE_AppDefined, "Scaling factor for X and Y are not the same");
             throw 2;
         }
@@ -396,7 +395,6 @@ int main(int nArgc, char **papszArgv) {
 
     //
     // Set up a reasonable large cache size, say 256MB
-    // CPLSetConfigOption("GDAL_CACHEMAX","256");
     GDALSetCacheMax(256 * 1024 * 1024);
     //
     // Done before the CmdLineProcessor has looked at options, so it can be overriden by the user 
@@ -414,7 +412,6 @@ int main(int nArgc, char **papszArgv) {
     /* -------------------------------------------------------------------- */
     /*      Parse commandline, set up state                                 */
     /* -------------------------------------------------------------------- */
-
 
     for (int iArg = 1; iArg < nArgc; iArg++)
     {
@@ -447,8 +444,7 @@ int main(int nArgc, char **papszArgv) {
     }
 
     // Need at least a target and a source
-    if (fnames.size() > 0)
-    {
+    if (fnames.size() > 0) {
         State.setTarget(fnames[fnames.size() - 1]);
         fnames.pop_back();
     }
