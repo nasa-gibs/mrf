@@ -187,6 +187,13 @@ static options parse(int argc, char **argv) {
 
 static int Usage(const string &error) {
     cerr << error << endl;
+    cerr << "can [-u] [-g] [-q] [-h] [--] file_name" << endl;
+    cerr << "\t-u : uncan" << endl;
+    cerr << "\t-g : generic input, not necessarily an mrf index file" << endl;
+    cerr << "\t-h : help, print this message" << endl;
+    cerr << "\t-- : end of options, only file names follow" << endl;
+    cerr << "\t   : file name should have .idx extension for canning and .ix for uncanning, except if -g option is used" << endl;
+    cerr << "\t     Use - for stdin or stdout" << endl;
     return USAGE_ERR;
 }
 
