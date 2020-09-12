@@ -142,10 +142,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="mrf_insert.cpp" />
+    <ClInclude Include="..\..\mrf_insert.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="mrf_insert.h" />
+    <ClCompile Include="..\..\mrf_insert.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
