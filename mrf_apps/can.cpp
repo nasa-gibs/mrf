@@ -187,7 +187,7 @@ static options parse(int argc, char **argv) {
 
 static int Usage(const string &error) {
     cerr << error << endl;
-    cerr << "can [-u] [-g] [-q] [-h] [--] file_name" << endl;
+    cerr << "can [-u] [-g] [-q] [-h] [--] input_file output_file" << endl;
     cerr << "\t-u : uncan" << endl;
     cerr << "\t-g : generic input, not necessarily an mrf index file" << endl;
     cerr << "\t-h : help, print this message" << endl;
