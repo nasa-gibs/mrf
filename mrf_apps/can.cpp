@@ -453,7 +453,7 @@ int uncan(const options &opt) {
             bits = static_cast<int>(num_blocks);
 
         // Check that the running count for the line agrees
-        if (count != bitmap[line])
+        if (count && count != bitmap[line])
             return Usage("Input bitmap is corrupt\n");
 
         for (int bit= 0; bit < bits; bit++, num_blocks--) {
