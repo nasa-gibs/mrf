@@ -103,7 +103,7 @@ public:
     void setResampling(const std::string &Resamp) {
 	if (EQUALN(Resamp.c_str(), "Avg", 3))
 	    Resampling = GDAL_MRF::SAMPLING_Avg;
-	else if (EQUALN(Resamp.c_str(), "NearNb", 6))
+	else
 	    Resampling = GDAL_MRF::SAMPLING_Near;
     }
 
