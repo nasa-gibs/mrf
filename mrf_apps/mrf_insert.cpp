@@ -168,7 +168,7 @@ bool state::patch() {
 
         img_info in_img(hPatch);
         img_info out_img(hDataset);
-	    // Tolerance of 1/100 of an output pixel
+        // Tolerance of 1/100 of an output pixel
         XY tolerance;
         tolerance.x = fabs(out_img.res.x / 100);
         tolerance.y = fabs(out_img.res.y / 100);
