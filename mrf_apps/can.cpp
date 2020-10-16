@@ -5,7 +5,7 @@
  *
  * canned Format:
  *
- * The MRF canned format consist of a header of size 16 + 16 * ((49151 + isize) / 49152)
+ * The MRF canned format consists of a header of size 16 + 16 * ((49151 + isize) / 49152)
  * followed by the 512 byte blocks of the original MRF index that do hold non-zero values
  * The output file will be 1:3072 (0.03255%) of the original virtual size, rounded up to 16,
  * plus the blocks with non-zero content
@@ -22,7 +22,7 @@
  * 
  * The canned index file metadata line contains two 32bit integers and one 64bit int
  * all in big endian
- * | "MRF\0" | size of bitmap in 16 byte units | original index size |
+ * | "IDX\0" | size of bitmap in 16 byte units | original index size |
  *
  * The bitmap structure has 4 32bit unsigned integers, in big endian format
  * |start_count | bits 0 to 32 | bits 33 to 63 | bits 64 to 95 |
@@ -187,6 +187,13 @@ static options parse(int argc, char **argv) {
 
 static int Usage(const string &error) {
     cerr << error << endl;
+    cerr << "can [-u] [-g] [-q] [-h] [--] input_file output_file" << endl;
+    cerr << "\t-u : uncan" << endl;
+    cerr << "\t-g : generic input, not necessarily an mrf index file" << endl;
+    cerr << "\t-h : help, print this message" << endl;
+    cerr << "\t-- : end of options, only file names follow" << endl;
+    cerr << "\t   : file name should have .idx extension for canning and .ix for uncanning, except if -g option is used" << endl;
+    cerr << "\t     Use - for stdin or stdout" << endl;
     return USAGE_ERR;
 }
 
@@ -446,7 +453,7 @@ int uncan(const options &opt) {
             bits = static_cast<int>(num_blocks);
 
         // Check that the running count for the line agrees
-        if (count != bitmap[line])
+        if (count && count != bitmap[line])
             return Usage("Input bitmap is corrupt\n");
 
         for (int bit= 0; bit < bits; bit++, num_blocks--) {

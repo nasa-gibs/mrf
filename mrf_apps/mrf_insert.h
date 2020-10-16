@@ -40,7 +40,10 @@
 
 // For C++ interface
 #include <gdal_priv.h>
-#include <frmts/mrf/marfa.h>
+
+// This file is not part of the normal gdal runtime, 
+// it resides in <GDAL_ROOT>/frmts/mrf
+#include <marfa.h>
 
 #include <vector>
 #include <string>
@@ -76,8 +79,8 @@ public:
         Resampling(GDAL_MRF::SAMPLING_Avg),
         verbose(false),
         overlays(false),
-	start_level(0), // From begining
-	stop_level(-1)  // To end
+    start_level(0), // From begining
+    stop_level(-1)  // To end
     {};
 
     // Insert the target in the source, based on internal coordinates
@@ -98,10 +101,10 @@ public:
     void setDebug(int level) { verbose = level; }
 
     void setResampling(const std::string &Resamp) {
-	if (EQUALN(Resamp.c_str(), "Avg", 3))
-	    Resampling = GDAL_MRF::SAMPLING_Avg;
-	else if (EQUALN(Resamp.c_str(), "NearNb", 6))
-	    Resampling = GDAL_MRF::SAMPLING_Near;
+    if (EQUALN(Resamp.c_str(), "Avg", 3))
+        Resampling = GDAL_MRF::SAMPLING_Avg;
+    else
+        Resampling = GDAL_MRF::SAMPLING_Near;
     }
 
 private:

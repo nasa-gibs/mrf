@@ -41,8 +41,6 @@ using namespace std;
 USING_NAMESPACE_MRF
 
 // Size and location from handle
-
-//void getinfo(GDALDatasetH hDS, img_info &img) {
 img_info::img_info(GDALDatasetH hDS) {
     double adfGT[6];
     GDALGetGeoTransform(hDS, adfGT);
@@ -83,15 +81,16 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
     int nLineSpace)
 {
     CPLAssert(GF_Read == eRWFlag);
+    auto pcData = reinterpret_cast<char *>(pData);
 
     if (nXOff < 0 || nXOff + nXSize > band->GetXSize()) { // Clip needed on X
         if (nXOff < 0) { // Adjust the start of the line
             // nXoff is negative, so this is addition
-            pData = (void *)((char *)pData - nXOff * nPixelSpace);
+            pcData -= nXOff * nPixelSpace;
             nXSize += nXOff; // XOff is negative, so this is a subtraction
             nXOff = 0;
         }
-        if (nXOff + nXSize > band->GetXSize()) {// Clip end of line
+        if (nXOff + nXSize > band->GetXSize()) {// Clip end of lines
             nXSize = band->GetXSize() - nXOff;
         }
     }
@@ -99,22 +98,17 @@ CPLErr ClippedRasterIO(GDALRasterBand *band, GDALRWFlag eRWFlag,
     if (nYOff < 0 || nYOff + nYSize > band->GetYSize()) { // Clip needed on X
         if (nYOff < 0) { // Adjust the start of the column
             // nYoff is negative, so this is addition
-            pData = (void *)((char *)pData - nYOff * nLineSpace);
+            pcData -= nYOff * nLineSpace;
             nYSize += nYOff; // YOff is negative, so this is a subtraction
             nYOff = 0;
         }
-        if (nYOff + nYSize > band->GetYSize()) {// Clip end of line
+        if (nYOff + nYSize > band->GetYSize()) // Clip end of columns
             nYSize = band->GetYSize() - nYOff;
-        }
     }
 
     // Call the raster band read with the trimmed values
     return band->RasterIO(GF_Read, nXOff, nYOff, nXSize, nYSize,
-        pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace
-#if GDAL_VERSION_MAJOR >= 2
-        , NULL
-#endif
-    );
+        pData, nXSize, nYSize, eBufType, nPixelSpace, nLineSpace, NULL);
 }
 
 // Insert the target in the base level
@@ -126,7 +120,7 @@ bool state::patch() {
     union {
         GDALDatasetH hDataset;
         GDALDataset *pTDS;
-        GDALMRFDataset *pTarg;
+        MRFDataset *pTarg;
     };
 
     union {
@@ -139,15 +133,14 @@ bool state::patch() {
     CPLPopErrorHandler();
 
     if (hDataset == NULL) {
-        CPLError(CE_Failure, CPLE_AppDefined, "Can't open target file %s for update", TargetName.c_str());
+        CPLError(CE_Failure, CPLE_AppDefined, "Can't open file %s for update", TargetName.c_str());
         return false;
     }
 
     try {
-
-        // GetDescription is actually the driver ID, uppercase
+        // GetDescription is the driver name, uppercase
         if (!EQUAL(pTDS->GetDriver()->GetDescription(), "MRF")) {
-            CPLError(CE_Failure, CPLE_AppDefined, "Target file is not MRF");
+            CPLError(CE_Failure, CPLE_AppDefined, "Target file is not an MRF");
             throw 1;
         }
 
@@ -156,7 +149,7 @@ bool state::patch() {
         CPLPopErrorHandler();
 
         if (hPatch == NULL) {
-            CPLError(CE_Failure, CPLE_AppDefined, "Can't open source file %s", SourceName.c_str());
+            CPLError(CE_Failure, CPLE_AppDefined, "Can't open file %s", SourceName.c_str());
             throw 1;
         };
 
@@ -175,13 +168,18 @@ bool state::patch() {
 
         img_info in_img(hPatch);
         img_info out_img(hDataset);
-	// Tolerance of 1/100 of an output pixel
-	XY tolerance;
-	tolerance.x = fabs(out_img.res.x) / 100.0;
-	tolerance.y = fabs(out_img.res.y) / 100.0;
+        // Tolerance of 1/100 of an output pixel
+        XY tolerance;
+        tolerance.x = fabs(out_img.res.x / 100);
+        tolerance.y = fabs(out_img.res.y / 100);
         XY factor;
         factor.x = in_img.res.x / out_img.res.x;
-        factor.y = in_img.res.x / out_img.res.x;
+        factor.y = in_img.res.y / out_img.res.y;
+
+        if (!CPLIsEqual(factor.x,factor.y)) {
+            CPLError(CE_Failure, CPLE_AppDefined, "Scaling factor for X and Y are not the same");
+            throw 2;
+        }
 
         if (verbose > 0)
             cerr << "Out " << out_img.bbox << endl << "In " << in_img.bbox << endl;
@@ -253,13 +251,13 @@ bool state::patch() {
         // ouput block boundaries
         //
         if (start_level == 0) // Skip if start level is not zero
-            for (int y = blocks_bbox.uy; y < blocks_bbox.ly; y++) {
+            for (int y = static_cast<int>(blocks_bbox.uy); y < static_cast<int>(blocks_bbox.ly); y++) {
                 // Source offset relative to this block on y
-                int src_offset_y = tsz_y * y * factor.y - pix_bbox.uy + 0.5;
+                int src_offset_y = static_cast<int>(factor.y * tsz_y * y - pix_bbox.uy + 0.5);
 
-                for (int x = blocks_bbox.lx; x < blocks_bbox.ux; x++) {
+                for (int x = static_cast<int>(blocks_bbox.lx); x < static_cast<int>(blocks_bbox.ux); x++) {
                     // Source offset relative to this block on x
-                    int src_offset_x = tsz_x * x * factor.x - pix_bbox.lx + 0.5;
+                    int src_offset_x = static_cast<int>(factor.x * tsz_x * x - pix_bbox.lx + 0.5);
                     for (int band = 0; band < bands; band++) { // Counting from zero in a vector
                         // cerr << " Y block " << y << " X block " << x << endl;
                         // READ
@@ -275,9 +273,7 @@ bool state::patch() {
                                 buffer, tsz_x, tsz_y, // Buffer and size in buffer
                                 eDataType, // Requested type
                                 pixel_size, line_size // Pixel and line space
-#if GDAL_VERSION_MAJOR >= 2
-                                , NULL
-#endif
+                                , NULL // ExtraIO arguments
                             );
                             if (CE_None != eErr) {
                                 cerr << "Read error" << endl;
@@ -301,9 +297,7 @@ bool state::patch() {
                             buffer, tsz_x, tsz_y, // Buffer and size in buffer
                             eDataType, // Requested type
                             pixel_size, line_size // Pixel and line space
-#if GDAL_VERSION_MAJOR >= 2
-                            , NULL
-#endif
+                            , NULL // ExtraIO arguments
                         );
                         if (CE_None != eErr) {
                             cerr << "Read error" << endl;
@@ -327,12 +321,10 @@ bool state::patch() {
 
     // Call the patchOverview for the MRF
     if (overlays) {
-
-        int BlockXOut, BlockYOut, WidthOut, HeightOut, srcLevel;
-        BlockXOut = blocks_bbox.lx;
-        BlockYOut = blocks_bbox.uy;
-        WidthOut = blocks_bbox.ux - blocks_bbox.lx;
-        HeightOut = blocks_bbox.ly - blocks_bbox.uy;
+        auto BlockXOut = static_cast<int>(blocks_bbox.lx);
+        auto BlockYOut = static_cast<int>(blocks_bbox.uy);
+        auto WidthOut = static_cast<int>(blocks_bbox.ux - blocks_bbox.lx);
+        auto HeightOut = static_cast<int>(blocks_bbox.ly - blocks_bbox.uy);
 
         // If stop level is not set, do all levels
         if (stop_level == -1)
@@ -390,11 +382,11 @@ int main(int nArgc, char **papszArgv) {
 
     std::vector<std::string> fnames;
 
-    /* Check that we are running against at least GDAL 1.9 */
+    /* Check that we are running against at least GDAL 3.x */
     /* Note to developers : if using newer API, please change the requirement */
-    if (atoi(GDALVersionInfo("VERSION_NUM")) < 1900)
+    if (atoi(GDALVersionInfo("VERSION_NUM")) < 3000)
     {
-        fprintf(stderr, "At least, GDAL >= 1.9.0 is required for this version of %s, "
+        fprintf(stderr, "At least, GDAL >= 3.0.0 is required for this version of %s, "
             "which was compiled against GDAL %s\n", papszArgv[0], GDAL_RELEASE_NAME);
         exit(1);
     }
@@ -403,7 +395,6 @@ int main(int nArgc, char **papszArgv) {
 
     //
     // Set up a reasonable large cache size, say 256MB
-    // CPLSetConfigOption("GDAL_CACHEMAX","256");
     GDALSetCacheMax(256 * 1024 * 1024);
     //
     // Done before the CmdLineProcessor has looked at options, so it can be overriden by the user 
@@ -421,7 +412,6 @@ int main(int nArgc, char **papszArgv) {
     /* -------------------------------------------------------------------- */
     /*      Parse commandline, set up state                                 */
     /* -------------------------------------------------------------------- */
-
 
     for (int iArg = 1; iArg < nArgc; iArg++)
     {
@@ -454,8 +444,7 @@ int main(int nArgc, char **papszArgv) {
     }
 
     // Need at least a target and a source
-    if (fnames.size() > 0)
-    {
+    if (fnames.size() > 0) {
         State.setTarget(fnames[fnames.size() - 1]);
         fnames.pop_back();
     }
