@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ import sys
 import os.path as path
 
 def usage():
-    print ('Takes one argument, an MRF file name, ' +\
+    print('Takes one argument, a MRF file name, ' + \
         'builds a .vrt that contains the tile size info')
 
 def XMLprettify(elem, level=0):

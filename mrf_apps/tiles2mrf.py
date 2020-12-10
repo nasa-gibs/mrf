@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
+
 import errno
 import hashlib
 import struct
 from optparse import OptionParser
 import os
 import sys
+from functools import reduce
 
 prog = os.path.basename(sys.argv[0])
 
@@ -85,10 +86,10 @@ def process_tiles(options, args, fout, fidx):
             blank_tile = fblank.read()
         blank_hash = hash_tile(blank_tile)
 
-    for z in xrange(options.levels -1, -1, -1):
+    for z in range(options.levels -1, -1, -1):
         w,h = sizes[z]
-        for y in xrange(0, h):
-            for x in xrange(0, w):
+        for y in range(0, h):
+            for x in range(0, w):
                 tile_name = template.format(x=x, y=y, z=z)
                 bytes = open(tile_name, "rb").read()
                 to_write = True
