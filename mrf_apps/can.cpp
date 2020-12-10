@@ -38,6 +38,7 @@
  */
 
 #if defined(_WIN32)
+#define _CRT_SECURE_NO_WARNINGS
 #include <Windows.h>
 #include <io.h>
 
@@ -102,7 +103,7 @@ static bool MARK_END(FILE *f) {
 static bool SETSPARSE(FILE *f) {
     DWORD dw;
     HANDLE h = (HANDLE)_get_osfhandle(_fileno(f));
-    if (h = INVALID_HANDLE_VALUE)
+    if (INVALID_HANDLE_VALUE == h)
         return false;
     return 0 != DeviceIoControl(h, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &dw, nullptr);
 }
@@ -416,7 +417,7 @@ int uncan(const options &opt) {
     uint64_t out_size = be64toh(*reinterpret_cast<uint64_t *>(&header[2]));
 
     // Verify that the sizes make sense
-    if (header_size * 4 != hsize(out_size))
+    if (static_cast<uint64_t>(header_size) * 4 != hsize(out_size))
         return Usage("Input header is corrupt");
 
     if (!opt.quiet)
