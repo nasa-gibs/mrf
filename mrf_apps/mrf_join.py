@@ -78,7 +78,7 @@ def mrf_join(argv, forceoffset = None):
 
     # At this point the output exist, loop over the inputs
     for input_file in argv[:-1]:
-        print(("Processing {}".format(input_file)))
+        print("Processing {}".format(input_file))
         fname = os.path.splitext(input_file)[0]
         offset = forceoffset
         if offset is None:
@@ -145,11 +145,11 @@ def getmrfinfo(fname):
     assert root.tag == "MRF_META", "{} is not an MRF".format(fname)
     info = {}
     info['size'] = { key : int(val) for (key, val) in 
-                    list(root.find("./Raster/Size").attrib.items()) }
+                    root.find("./Raster/Size").attrib.items() }
 
     if root.find("./Raster/PageSize"):
         info['pagesize'] = { key : int(val) for (key, val) in 
-                        list(root.find("./Raster/PageSize").attrib.items()) }
+                        root.find("./Raster/PageSize").attrib.items() }
     else:
         info['pagesize'] = {
             'x' : 512,
