@@ -107,7 +107,7 @@ if len(mrfDoc.getElementsByTagName('Raster')) > 0:
 
     if len(rasterElem.getElementsByTagName('Size')):
         sizeElem  = rasterElem.getElementsByTagName('Size')[0]
-        sizeAttrs = dict(list(sizeElem.attributes.items()))
+        sizeAttrs = dict(sizeElem.attributes.items())
 
         mrf_x = int(sizeAttrs['x'])
         mrf_y = int(sizeAttrs['y'])
