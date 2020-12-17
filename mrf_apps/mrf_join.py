@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Name: mrf_join
 # Purpose:
@@ -7,6 +7,7 @@
 
 # Created: 11/08/2018
 # Updated: 12/14/2018 - Added Z dimension append mode
+# Updated: 12/09/2020 - Updated to python3
 #
 # Author: Lucian Plesea
 #

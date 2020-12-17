@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #-------------------------------------------------------------------------------
 # Name:        mrf_clean
@@ -11,8 +11,9 @@
 # Updated:     07/07/2017 Creates index files with holes if possible
 # Updated:     11/09/2018 Use typed arrays instead of struct
 #                         Process index file block at a time
+# Updated:     12/09/2020 Updated to python3
 #
-# Copyright:   (c) lucian 2016 - 2018
+# Copyright:   (c) lucian 2016 - 2020
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
