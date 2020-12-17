@@ -7,9 +7,9 @@
 include Makefile.lcl
 
 TARGETS = can mrf_insert
-GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)
-# LIBDIR = $(PREFIX)/lib64
-BINDIR = $(PREFIX)/bin
+GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT) -I /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-2.el7.x86_64/usr/include/ -I /build/build/rpmbuild/BUILD/gibs-gdal-2.4.4/build/gdal/
+LIBDIR = /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-2.el7.x86_64/usr/lib64
+BINDIR = /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-2.el7.x86_64/usr/bin/
 CP=cp
 
 INCLUDES = $(GDAL_INCLUDE)
@@ -17,10 +17,10 @@ INCLUDES = $(GDAL_INCLUDE)
 all: $(TARGETS)
 
 mrf_insert: mrf_insert.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) -lgdal
+	$(CXX) -std=c++11 $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) -lgdal
 
 can: can.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $<
+	$(CXX) -std=c++11 $(CXXFLAGS) $(INCLUDES) -o $@ $<
 
 install: $(TARGETS)
 	$(CP) $^ $(BINDIR)

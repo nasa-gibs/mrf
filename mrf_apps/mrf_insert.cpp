@@ -395,7 +395,7 @@ int main(int nArgc, char **papszArgv) {
     if (atoi(GDALVersionInfo("VERSION_NUM")) < 1900)
     {
         fprintf(stderr, "At least, GDAL >= 1.9.0 is required for this version of %s, "
-            "which was compiled against GDAL %s\n", papszArgv[0], GDAL_RELEASE_NAME);
+            "which was compiled against GDAL 2.4.4\n", papszArgv[0]);
         exit(1);
     }
 
@@ -427,8 +427,8 @@ int main(int nArgc, char **papszArgv) {
     {
         if (EQUAL(papszArgv[iArg], "--utility_version"))
         {
-            printf("%s was compiled against GDAL %s and is running against GDAL %s\n",
-                papszArgv[0], GDAL_RELEASE_NAME, GDALVersionInfo("RELEASE_NAME"));
+            printf("%s was compiled against GDAL 2.4.4 and is running against GDAL %s\n",
+                papszArgv[0], GDALVersionInfo("RELEASE_NAME"));
             return 0;
         }
 
