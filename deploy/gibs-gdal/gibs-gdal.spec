@@ -1,5 +1,5 @@
 %global gdal_version 2.4.4
-%global gdal_release 1%{?dist}
+%global gdal_release 2%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -30,7 +30,7 @@ BuildRequires:	doxygen
 BuildRequires:	expat-devel
 BuildRequires:  numpy
 BuildRequires:  geos-devel >= 3.3.2
-Requires:	gcc-c++
+BuildRequires:	gcc-c++
 Requires:	geos >= 3.3.2
 	
 %description
@@ -116,6 +116,7 @@ rm -rf %{buildroot}
 
 %files apps
 %defattr(-,root,root,-)
+%{_bindir}/can
 %{_bindir}/mrf_insert
 %{_bindir}/mrf_clean.py
 %{_bindir}/mrf_join.py
@@ -131,6 +132,9 @@ rm -rf %{buildroot}
 %postun -p /sbin/ldconfig
 
 %changelog
+* Wed Dec 16 2020 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-2
+- Use Python3 apps, include can, and moved gcc-c++ to BuildRequires
+
 * Thu Mar 19 2020 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-1
 - Update to GDAL 2.4.4
 
