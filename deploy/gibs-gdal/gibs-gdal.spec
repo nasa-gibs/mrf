@@ -13,25 +13,24 @@ Source0:	gibs-gdal-%{gdal_version}.tar.bz2
 Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar.gz
 
 BuildRequires:  make
-BuildRequires:	libtool
+BuildRequires:  libtool
 BuildRequires:  pkgconfig
-BuildRequires:	python-devel
-BuildRequires:	libpng-devel 
-BuildRequires:	libungif-devel
-BuildRequires:	libjpeg-devel
-BuildRequires:	libtiff-devel
-BuildRequires:	jpackage-utils
+BuildRequires:  python3-devel
+BuildRequires:  libpng-devel
+BuildRequires:  libjpeg-devel
+BuildRequires:  libtiff-devel
+BuildRequires:  jpackage-utils
 BuildRequires:	jasper-devel 
-BuildRequires:	zlib-devel
-BuildRequires:	curl-devel
-BuildRequires:	chrpath
-BuildRequires:	swig 
+BuildRequires:  zlib-devel
+BuildRequires:  curl-devel
+BuildRequires:  chrpath
+BuildRequires:  swig
 BuildRequires:	doxygen
-BuildRequires:	expat-devel
-BuildRequires:  numpy
-BuildRequires:  geos-devel >= 3.3.2
-BuildRequires:	gcc-c++
-Requires:	geos >= 3.3.2
+BuildRequires:  expat-devel
+BuildRequires:  geos-devel
+BuildRequires:  gcc-c++
+BuildRequires: bzip2
+BuildRequires: /usr/bin/pathfix.py
 	
 %description
 The GDAL library provides support to handle multiple GIS file formats.
@@ -86,10 +85,11 @@ rm -rf swig/python/samples
 rm -rf %{buildroot}/usr/etc/bash_completion.d/gdal-bash-completion.sh
 %endif
 
+# Fix python shebangs
+pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{python3_sitearch} %{buildroot}%{_bindir}/*
 
 %clean
 rm -rf %{buildroot}
-
 
 %files
 %defattr(-,root,root,-)
@@ -99,11 +99,12 @@ rm -rf %{buildroot}
 %{_libdir}/*.so.*
 %{_datadir}/gdal
 %{_mandir}/man1/*.1*
-%{python_sitearch}/*.egg-info
-%{python_sitearch}/gdal*
-%{python_sitearch}/ogr*
-%{python_sitearch}/osr*
-%{python_sitearch}/osgeo
+%{python3_sitearch}/*.egg-info
+%{python3_sitearch}/gdal*
+%{python3_sitearch}/ogr*
+%{python3_sitearch}/osr*
+%{python3_sitearch}/osgeo
+%{python3_sitearch}/__pycache__/*
 %{_libdir}/pkgconfig/gdal.pc
 
 %files devel
