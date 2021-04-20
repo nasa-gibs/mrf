@@ -141,6 +141,8 @@ if mrf_type == "JPEG":
     datafile = input.replace(".mrf",".pjg")
 elif mrf_type == "MVT":
     datafile = input.replace(".mrf",".pvt")
+elif mrf_type == "JPNG":
+    datafile = input.replace(".mrf",".pjp")
 else:
     datafile = input.replace(".mrf",".ppg")
 
