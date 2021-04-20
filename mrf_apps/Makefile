@@ -7,9 +7,9 @@
 include Makefile.lcl
 
 TARGETS = can mrf_insert
-GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT) -I /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-2.el8.x86_64/usr/include/ -I /build/build/rpmbuild/BUILD/gibs-gdal-2.4.4/build/gdal/
-LIBDIR = /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-2.el8.x86_64/usr/lib64
-BINDIR = /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-2.el8.x86_64/usr/bin/
+GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT) -I /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-3.el8.x86_64/usr/include/ -I /build/build/rpmbuild/BUILD/gibs-gdal-2.4.4/build/gdal/
+LIBDIR = /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-3.el8.x86_64/usr/lib64
+BINDIR = /build/build/rpmbuild/BUILDROOT/gibs-gdal-2.4.4-3.el8.x86_64/usr/bin/
 CP=cp
 
 INCLUDES = $(GDAL_INCLUDE)

@@ -19,9 +19,9 @@ rm -f docker/el8/rpms/gibs-gdal-*debuginfo-*.rpm
   cd docker/el8
 
   if [ -z "$TAG" ]; then
-    docker build .
+    docker build --no-cache .
   else
-    docker build -t "$TAG" .
+    docker build --no-cache -t "$TAG" .
   fi
 )
 

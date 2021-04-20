@@ -1,5 +1,5 @@
 %global gdal_version 2.4.4
-%global gdal_release 2%{?dist}
+%global gdal_release 3%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -15,7 +15,8 @@ Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar
 BuildRequires:  make
 BuildRequires:  libtool
 BuildRequires:  pkgconfig
-BuildRequires:  python3-devel
+BuildRequires:  python36
+BuildRequires:  python36-devel
 BuildRequires:  libpng-devel
 BuildRequires:  libjpeg-devel
 BuildRequires:  libtiff-devel
@@ -86,7 +87,7 @@ rm -rf %{buildroot}/usr/etc/bash_completion.d/gdal-bash-completion.sh
 %endif
 
 # Fix python shebangs
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{python3_sitearch} %{buildroot}%{_bindir}/*
+pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{python3_sitearch} %{buildroot}%{_bindir}/*.py
 
 %clean
 rm -rf %{buildroot}
@@ -129,10 +130,20 @@ rm -rf %{buildroot}
 
 %post
 /sbin/ldconfig
+# Fix python shebangs post install
+sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin/gdal*.py /usr/bin/gcps2wld.py /usr/bin/mkgraticule.py /usr/bin/pct2rgb.py /usr/bin/epsg_tr.py /usr/bin/gcps2vec.py /usr/bin/rgb2pct.py /usr/bin/esri2wkt.py /usr/bin/ogrmerge.py 
+
+%post apps
+# Fix python shebangs post install apps
+sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin/mrf*.py /usr/bin/tiles2mrf.py
+
 
 %postun -p /sbin/ldconfig
 
 %changelog
+* Mon Apr 19 2021 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-3
+- Support for CentOS 8 builds
+
 * Wed Dec 16 2020 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-2
 - Use Python3 apps, include can, and moved gcc-c++ to BuildRequires
 
