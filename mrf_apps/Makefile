@@ -8,7 +8,7 @@ include Makefile.lcl
 
 TARGETS = can mrf_insert
 GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)
-# LIBDIR = $(PREFIX)/lib64
+LIBDIR = $(PREFIX)/lib
 BINDIR = $(PREFIX)/bin
 CP=cp
 
@@ -22,9 +22,12 @@ mrf_insert: mrf_insert.cpp
 can: can.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $<
 
+jxl: jxl.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) -lbrunslienc-c
+	
 install: $(TARGETS)
 	$(CP) $^ $(BINDIR)
 
 clean:
-	$(RM) $(TARGETS)
+	$(RM) $(TARGETS) jxl
 
