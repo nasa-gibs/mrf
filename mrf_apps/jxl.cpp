@@ -137,9 +137,10 @@ int bundle_to_jxl(const string &inname, const string &outname, bool reverse = fa
 
     // Go back, write the new header and index
     fseek(out, 0, SEEK_SET);
+    
     // TODO: Figure out the header stuff
     // Modify maxtilesize and file size
-    memcpy(header + 8, &maxsz, sizeof(maxsz));
+    memcpy(header + 8, &maxsz, 4); // Assume little endian
     memcpy(header + 24, &ooff, sizeof(ooff));
     fwrite(header, HDRSZ, 1, out);
 
