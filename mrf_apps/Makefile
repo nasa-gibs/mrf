@@ -11,6 +11,7 @@ GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)
 LIBDIR = $(PREFIX)/lib
 BINDIR = $(PREFIX)/bin
 CP=cp
+JXL_LIBS = -lbrunslienc-c -lbrunslidec-c
 
 INCLUDES = $(GDAL_INCLUDE)
 
@@ -23,7 +24,7 @@ can: can.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $<
 
 jxl: jxl.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) -lbrunslienc-c
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) $(JXL_LIBS)
 	
 install: $(TARGETS)
 	$(CP) $^ $(BINDIR)

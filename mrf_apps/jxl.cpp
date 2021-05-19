@@ -51,7 +51,7 @@ static size_t out_fun(vector<uint8_t> *output, const uint8_t *data, size_t size)
     return size;
 }
 
-int bundle_to_jxl(const string &inname, const string &outname) {
+int bundle_to_jxl(const string &inname, const string &outname, bool reverse = false) {
 
     struct stat statb;
     if (stat(inname.c_str(), &statb)) 
@@ -95,16 +95,21 @@ int bundle_to_jxl(const string &inname, const string &outname) {
     // Convert, writing output as we go, reusing the index
     vector<uint8_t> tilebuf; // output holder
     size_t maxsz = 0;
-    double min_rat = 1; // Should be 1, but just in case
-    double max_rat = 0;
+    // Stats, saving ratio
+    double min_rat = 1;
+    double max_rat = -100;
+
     for (auto &v : idx) {
-        if (!v.size)
-            continue;
+        if (!v.size) continue;
         tilebuf.clear();
-        if (!EncodeBrunsli(v.size, &input[v.offset], &tilebuf, (DecodeBrunsliSink)out_fun)) {
+        int result = reverse ?
+            DecodeBrunsli(v.size, &input[v.offset], &tilebuf, (DecodeBrunsliSink)out_fun)
+            : EncodeBrunsli(v.size, &input[v.offset], &tilebuf, (DecodeBrunsliSink)out_fun);
+        if (!result) {
             cerr << "Location " << hex << v.offset << " size " << v.size << endl;
-            return Usage("Error encoding JXL");
+            return Usage(reverse ? "Error decoding JXL" : "Error encoding JXL");
         }
+
         // This has to be 3 bytes or smaller, check anyhow
         uint32_t tilesz = tilebuf.size();
         if (tilesz >= (1 << 24) || static_cast<size_t>(tilesz) != tilebuf.size()) {
@@ -115,23 +120,17 @@ int bundle_to_jxl(const string &inname, const string &outname) {
         // Looks good, write the output tile, prefixed by size
         fwrite(&tilesz, 4, 1, out);
         fwrite(tilebuf.data(), tilesz, 1, out);
-        // Collect some stats
-        double rat = 1 - double(tilesz) / v.size;
 
-        if (rat < min_rat) {
-            cerr << "Min " << rat << endl;
-            min_rat = rat;
-        }
-        if (rat > max_rat) {
-            cerr << "Max " << rat << endl;
-            max_rat = rat;
-        }
+        // Collect stats
+        maxsz = max(maxsz, static_cast<size_t>(tilesz));
+        double rat = 1 - double(tilesz) / v.size;
+        min_rat = min(rat, min_rat);
+        max_rat = max(rat, max_rat);
 
         // Modify the index in place
         v.offset = ooff + 4; // Points to first byte of tile data, not the size prefix
         v.size = tilesz;
         ooff += 4 + tilesz;
-        maxsz = max(maxsz, static_cast<size_t>(tilesz));
     }
     // Done with the input
     munmap((void *)input, insize);
@@ -147,13 +146,25 @@ int bundle_to_jxl(const string &inname, const string &outname) {
     fwrite(idx.data(), IDXSZ, 1, out);
     fclose(out);
     cerr << "Used to be " << insize << " now " << ooff << ", saved " << (1 - double(ooff)/insize) * 100 << "%\n";
-    cerr << "Individual tile saving between " << min_rat * 100 << " and " << max_rat * 100 << endl;
+    cerr << "Individual tile saving between " << min_rat * 100 << "% and " << max_rat * 100 << "%\n";
     return 0;
 }
 
 int main(int argc, char **argv)
 {
-    if (argc < 2)
+    bool reverse = false;
+    string input_name;
+    while(--argc) {
+        string this_arg(argv[argc]);
+        if (this_arg == "-r") {
+            reverse = true;
+        } else {
+            input_name = this_arg;
+        }
+    }
+
+    if (input_name.empty())
         return Usage("Needs input file name");
-    return bundle_to_jxl(argv[1], string(argv[1]) + ".jxl");
+    
+    return bundle_to_jxl(input_name.c_str(), (input_name + ".jxl").c_str(), reverse);
 }
