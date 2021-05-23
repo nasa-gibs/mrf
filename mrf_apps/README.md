@@ -93,3 +93,7 @@ Builds a GDAL VRT that visualizes the size of tiles in an MRF index.
 ## tiles2mrf.py
 
 Generates an MRF from a set of tiles.
+
+## jxl
+
+MRF tie convertor between JPEG and JPEG-XL (brunsli). When used with MRF, it takes a single argument, the data file (default extension .pjg). The output is written to the same location, with .jxl extension added (also .jxl.idx). Add -r to reverse the conversion, ie from JPEG-XL to JPEG. To compile, the brunsli library and public header has to be installed
