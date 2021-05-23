@@ -12,6 +12,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+// For Linux
+#include <endian.h>
+
 using namespace std;
 
 const static int BSZ(128);
@@ -49,6 +52,97 @@ static const int IDXSZ = BSZ2 * sizeof(bundle_index);
 static size_t out_fun(vector<uint8_t> *output, const uint8_t *data, size_t size) {
     copy(data, data+size, back_inserter(*output));
     return size;
+}
+
+// Big Endian native
+struct tinfo {
+    uint64_t offset;
+    uint64_t size;
+    void toh() {
+        offset = be64toh(offset);
+        size = be64toh(size);
+    }
+    void ton() {
+        offset = htobe64(offset);
+        size = htobe64(size);
+    }
+};
+
+// From MRF, separate files, inname is the data file
+int mrf_to_jxl(const string &inname, const string &outname, bool reverse = false) {
+    // Assume three letter data file extension
+    if ('.' != inname[inname.size() - 4])
+        return Usage("Expect mrf data file with three letter file name extension");
+
+    struct stat statb;
+    if (stat(inname.c_str(), &statb)) 
+        return Usage("Can't stat input file");
+    auto insize = statb.st_size;
+
+    // Indes should be same file with extension changed
+    string inidxname(inname);
+    inidxname.resize(inidxname.size() - 3);
+    inidxname += "idx";
+    // cout << "Opening " << inname << " and " << inidxname << endl;
+    auto finidx = fopen(inidxname.c_str(), "rb");
+    auto fin = fopen(inname.c_str(), "rb");
+    if (!finidx || !fin)
+        return Usage("Can't open input data or index file");
+    
+    string outidxname(outname.substr(0, outname.size() - 4) + ".idx");
+    // cout << "Opening " << outname << " and " << outidxname << endl;
+    auto fout = fopen(outname.c_str(), "wb");
+    auto foutidx = fopen(outidxname.c_str(), "wb");
+    tinfo tile;
+    vector<uint8_t> input;
+    vector<uint8_t> tilebuf;
+    uint64_t ooff = 0;
+
+    // Stats, saving ratio
+    double min_rat = 1;
+    double max_rat = -100;
+    while (fread(&tile, sizeof(tile), 1, finidx)) {
+        tile.toh();
+        if (tile.size) {
+            fseek(fin, tile.offset, SEEK_SET);
+            input.resize(tile.size);
+            if (!fread(input.data(), tile.size, 1, fin)) {
+                cerr << "Location " << hex << tile.offset << " size " << tile.size << endl;
+                return Usage("Failed to read input tile");
+            }
+            tilebuf.clear();
+
+            int result = reverse ?
+                DecodeBrunsli(tile.size, input.data(), &tilebuf, (DecodeBrunsliSink)out_fun)
+                : EncodeBrunsli(tile.size, input.data(), &tilebuf, (DecodeBrunsliSink)out_fun);
+            if (!result) {
+                cerr << "Location " << hex << tile.offset << " size " << tile.size << endl;
+                return Usage(reverse ? "Error decoding JXL" : "Error encoding JXL");
+            }
+
+            double rat = 1 - double(tilebuf.size()) / tile.size;
+            min_rat = min(rat, min_rat);
+            max_rat = max(rat, max_rat);
+
+            // Prepare the output tinfo
+            tile.offset = ooff;
+            tile.size = tilebuf.size();
+            ooff += tile.size;
+            if (!fwrite(tilebuf.data(), tilebuf.size(), 1, fout))
+                return Usage("Error writing data");
+        }
+        tile.ton();
+        fwrite(&tile, sizeof(tile), 1, foutidx);
+    }
+    fclose(fin);
+    fclose(finidx);
+    fclose(fout);
+    fclose(foutidx);
+
+    cerr << "Used to be " << insize << " now " << ooff << ", saved " << (1 - double(ooff)/insize) * 100 << "%\n";
+    cerr << "Individual tile saving between " << min_rat * 100 << "% and " << max_rat * 100 << "%\n";
+
+    return 0;
 }
 
 int bundle_to_jxl(const string &inname, const string &outname, bool reverse = false) {
@@ -148,17 +242,21 @@ int bundle_to_jxl(const string &inname, const string &outname, bool reverse = fa
     fclose(out);
     cerr << "Used to be " << insize << " now " << ooff << ", saved " << (1 - double(ooff)/insize) * 100 << "%\n";
     cerr << "Individual tile saving between " << min_rat * 100 << "% and " << max_rat * 100 << "%\n";
+    cerr << "Maxtile " << maxsz << endl;
     return 0;
 }
 
 int main(int argc, char **argv)
 {
-    bool reverse = false;
+    bool reverse = false; // default to JPEG -> JXL
+    bool bundle = false;  // default to MRF
     string input_name;
     while(--argc) {
         string this_arg(argv[argc]);
         if (this_arg == "-r") {
             reverse = true;
+        } else if (this_arg == "-b") {
+            bundle = true;
         } else {
             input_name = this_arg;
         }
@@ -167,5 +265,7 @@ int main(int argc, char **argv)
     if (input_name.empty())
         return Usage("Needs input file name");
     
-    return bundle_to_jxl(input_name.c_str(), (input_name + ".jxl").c_str(), reverse);
+    if (bundle)
+        return bundle_to_jxl(input_name, input_name + ".jxl", reverse);
+    return mrf_to_jxl(input_name, input_name + ".jxl", reverse);
 }
