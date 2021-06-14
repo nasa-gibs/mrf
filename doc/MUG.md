@@ -208,10 +208,10 @@ of the output will change significantly if these options are used. This options 
 tiles can always be decompressed. For exact details on the strategy flags refer to the zlib documentation. The free form option to use 
 is `Z_STRATEGY`, and the valid values are:
 
-- Z_FILTERED: Skips the optional filtering of the input stream
-- Z_HUFFMAN_ONLY:  Only the Huffman encoding part of DEFLATE is performed
-- Z_RLE: Somewhat like an RLE, within the limits of DEFLATE
-- Z_FIXED:  Fixed Huffman tables
+- `Z_FILTERED`: Skips the optional filtering of the input stream
+- `Z_HUFFMAN_ONLY`:  Only the Huffman encoding part of DEFLATE is performed
+- `Z_RLE`: Somewhat like an RLE, within the limits of DEFLATE
+- `Z_FIXED`:  Fixed Huffman tables
 
 Example which will generate an RLE compressed tile with gzip style headers:  
 `gdal_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on Z_STRATEGY:Z_RLE" input.tif gzipped.mrf`
@@ -231,6 +231,90 @@ will result in much faster compression at the expense of size, Z_HUFFMAN_ONLY be
 The effect of the strategy setting is much stronger than the QUALITY value setting.  
 Example of gdal_translate to MRF/PNG:  
 `gdal_translate -of MRF –co COMPRESS=PNG –co OPTIONS="Z_STRATEGY:Z_RLE" –co QUALITY=50 input.tif output.mrf`
+
+
+## JPEG Compression
+
+The JPEG compression is a well know lossless image compression, tuned for good visual quality combined with good compression. Since JPEG is a 
+well known format, the MRF tiles compressed as JPEG are suitable for serving as web tiles. Depending on how the GDAL MRF was built, the MRF/JPEG 
+format can handle 8 and sometimes 12 bit data. The 12 bit option is only available when the GDAL internal libJPEG is used and the GDAL 12bit 
+JPEG is enabled. MRF/JPEG can handle up to 10 bands in pixel interleave mode. Note that only 8 bit JPEGs with 1 or 3 bands are suitable for web 
+tile services in most cases. The MRF `QUALITY` output option value is directly passed to JPEG library as the Q factor, with the default value being 85.
+Note that the JPEG Q value does control the output quality and size, but it is not linear. For the exact interpretation of Q, please consult 
+JPEG documentation. Values between 0 and 100 are supported, the reasonable range being between sixty and eighty five, larger values producing 
+visually better results at the cost of increased size. For three bands interleaved, a couple of encoding options are available, controlled via the 
+`PHOTOMETRIC` setting. The default setting should be used most of the time.
+
+The valid choices for the `PHOTOMETRIC` setting are:
+- DEFAULT: JPEG uses YCbCr, 4:2:0 sampling internally. This provides good compression and visual quality. The color space has significantly lower quality 
+  than the brightness, which roughly matches the human vision charateristics.
+- `YCC`: Compressed as YCbCr with 4:4:4 sampling, ie color space is not spatially resampled. This setting produces tiles about a third larger than
+the default, tiles which have fewer color artifacts. The color conversion itself still results in a loss of information, as well as the quantization.
+- `RGB`: Compressed as RGB, not color converted and not spatially resampled. This setting produces much larger JPEG files, usually twice as large or more. 
+ Files are about three times larger than with the default setting.  MRF with this setting can be decoded and re-encoded multiple times at 
+the same quality without any data quality degradation.
+
+Optimizing the Huffman encoding tables for each tile, as opposed to using the default value can be enabled by having the "OPTIMIZE=ON" in the OPTIONS list. 
+Choosing this will increase encoding time and reduce the tile size slightly, both are relatively small changes in most cases.  
+To use the 12 bit JPEG, when available, set the data type to Int16 or UInt16.
+
+### brunsli (JPEG XL)
+
+While commonly refered to as a JPEG file, the format normally used to stored JPEG compressed images
+is actually [JFIF](https://en.wikipedia.org/wiki/JPEG_File_Interchange_Format). A newer format, which can be 
+losslessly converted back and forth to JFIF exists, named [brunsli](https://github.com/google/brunsli). Brunsli has the 
+advantage that it can store the same information as the JFIF in a smaller package, usually around 22% smaller. 
+Since brunsli is just a better packaging of a JPEG, the result is still JPEG compressed and the raster has exactly the
+same characteristics and limitations. Brunsli supports all the standard JFIF/JPEG features, with the **notable 
+exception** of 12bit per sample JPEGs.
+When GDAL and MRF are compiled with brunsli support and JPEG compression is selected, the extra compression is very 
+beneficial, so MRF will store the data in the brunsli format when possible. In some cases it is useful to
+force the older format, JFIF to be used. For example when the tiles are to be directly 
+served over the web to a browser or when a legacy GDAL application, compiled without 
+brunsli support may be used to to read the data. The OPTIONS flag `JFIF` can be set in those cases, forcing 
+MRF to only generate JFIF compatible tiles:  
+`gdal_translate -of MRF -co COMPRESS=JPEG -co OPTIONS=JFIF:1 input.tif output.mrf`
+
+### JPEG Zero Enhanced (Zen) Extension
+
+The JPEG tiles generated by MRF contain a mask of zero value pixels stored in a JPEG Zen chunk, using APP3 "Zen" tag. If the size of the Zen 
+chunk is zero, all pixels within the respective tile are known to be non-zero. When reading a JPEG that contains a Zen chunk, the MRF driver will 
+ensure that the pixel positions that contain zero matches the mask. In essence, the pixels that contain zero are stored in a lossless way and can be
+used as a data mask, when read with the MRF driver. This eliminates the JPEG edge artifacts when the background is black, enabling a Zen JPEG 
+encoded MRF to be used as an overlay on top of other data, as long as black is made transparent. 
+Using MRF/JPEG for storing visua data can produce significant space savings over the next 
+best option, which would generally be lossless PNG or LERC. Since the Zen chunk is built 
+in accordance to the JFIF standard, the mask will be ignored by legacy applications, which 
+will only decode the JPEG image content. Since the mask is generated and consumed at 
+the MRF level, it is not visible to GDAL. 
+This feature works with either 8 or 12 bit JPEG tiles, and works even when the brunsli tile 
+format is used.
+
+The Zen bitmask is organized in a 8x8 2D bitmask, which is then compressed by run length encoding (RLE). For most inputs, the size of the Zen chunk 
+containing the mask is negligible. The potential benefit of being able to treat black as transparent outweigh this size increase thus this feature 
+cannot be turned off.
+
+## JPNG Compression
+
+The JPNG compression is a combination of PNG or JPEG tiles, depending on the presence of 
+non-opaque pixels. If all the pixels within a tile are opaque the tile is stored as JPEG, 
+otherwise it is stored as PNG with an Alpha channel. It is presented to GDAL as either a 
+Luma-Alpha or RGBA image, it will always have 2 or 4 bands, and always PIXEL interleaved.
+Most of the MRF options from PNG and from JPEG compression still apply, including the 
+JFIF flag.
+The data file will be smaller than when using only PNG, if there are tiles that are fully 
+opaque and can be stored as JPEG. Note that depending on the options used and the input 
+data, the transition from PNG to JPEG might be visible. The normal JPEG with Zen mask 
+should be used in most cases, except if 0 is not to be transparent and when gradual 
+transparency is needed. Another advantage over MRF/JPEG/Zen is that legacy clients 
+such as web browser applications do not usually need modification to be able to 
+display the tiles as intended.
+
+## TIFF Compression
+
+In the MRF with TIFF compression, every tile is a TIFF raster which uses the lossless LZW internal compression. Most data types are supported.
+Note that the tiles are not GeoTiffs, they do not contain geotags. This compression is mostly useful for web services for certain clients which support 
+decoding TIFF.
 
 ## LERC Compression
 
@@ -269,62 +353,6 @@ DEFLATE speed is asymmetric, with decompression being faster than compression, s
 However, DEFLATE decompression is still significantly slower than LERC so it should be used only when the size is critical or when the decompression 
 speed is not the main source of delays, for example when reading tiles from cloud storage. To add DEFLATE to LERC, add "DEFLATE:ON" to the list of 
 free form options. This example sets both the LERC precision and the extra DEFLATE option: `-co OPTIONS="LERC_PREC=0.01 DEFLATE=ON"`
-
-## JPEG Compression
-
-The JPEG compression is a well know lossless image compression, tuned for good visual quality combined with good compression. Since JPEG is a 
-well known format, the MRF tiles compressed as JPEG are suitable for serving as web tiles. Depending on how the GDAL MRF was built, the MRF/JPEG 
-format can handle 8 and sometimes 12 bit data. The 12 bit option is only available when the GDAL internal libJPEG is used and the GDAL 12bit 
-JPEG is enabled. MRF/JPEG can handle up to 10 bands in pixel interleave mode. Note that only 8 bit JPEGs with 1 or 3 bands are suitable for web 
-tile services in most cases. The MRF `QUALITY` output option value is directly passed to JPEG library as the Q factor, with the default value being 85.
-Note that the JPEG Q value does control the output quality and size, but it is not linear. For the exact interpretation of Q, please consult 
-JPEG documentation. Values between 0 and 100 are supported, the reasonable range being between sixty and eighty five, larger values producing 
-visually better results at the cost of increased size. For three bands interleaved, a couple of encoding options are available, controlled via the 
-`PHOTOMETRIC` setting. The default setting should be used most of the time.
-
-The valid choices for the `PHOTOMETRIC` setting are:
-- DEFAULT: JPEG using YCbCr, 4:2:0 sampling. This provides good compression and visual quality. The color space has significantly lower quality 
-  than the brightness, which roughly matches the human vision charateristics.
-- YCC: Compressed as YCbCr, 4:4:4 sampling, ie color space is not spatially resampled. This setting produces tiles about a third larger than
-the default, tiles which have fewer color artifacts. The color conversion itself still results in a loss of information, as well as the quantization.
-- RGB: Compressed as RGB, not color converted and not spatially resampled. This setting produces much larger JPEG files, usually twice as large or more. 
-- Files are about three times larger than with the default setting.  MRF with this setting can be decoded and re-encoded multiple times at 
-the same quality without any data quality degradation.
-
-Optimizing the Huffman encoding tables for each tile, as opposed to using the default value can be enabled by having the "OPTIMIZE=ON" in the OPTIONS list. 
-Choosing this will increase encoding time and reduce the tile size slightly, both are relatively small changes in most cases.  
-To use the 12 bit JPEG, when available, set the data type to Int16 or UInt16.
-
-### JPEG Zero Enhanced (Zen) Extension
-
-The JPEG tiles generated by MRF contain a mask of zero value pixels stored in a JPEG Zen chunk, using APP3 "Zen" tag. If the size of the Zen 
-chunk is zero, all pixels within the respective tile are known to be non-zero. When reading a JPEG that contains a Zen chunk, the MRF driver will 
-ensure that the pixel positions that contain zero matches the mask. In essence, the pixels that contain zero are stored in a lossless way and can be
-used as a data mask, when read with the MRF driver. This eliminates the JPEG edge artifacts when the background is black, enabling a Zen JPEG 
-encoded MRF to be used as an overlay on top of other data, as long as black is made transparent. Using MRF/JPEG for storing visua data can produce 
-significant space savings over the next best option, which would generally be lossless PNG or LERC. Since the Zen chunk is built in accordance to the 
-JFIF standard, it will be ignored by legacy applications, which will only decode the JPEG image content. Since the mask is generated and consumed at 
-the MRF level, it is not visible to GDAL. This feature works with either 8 or 12 bit JPEG tiles.
-
-The Zen bitmask is organized in a 8x8 2D bitmask, which is then compressed by run length encoding (RLE). For most inputs, the size of the Zen chunk 
-containing the mask is negligible. The potential benefit of being able to treat black as transparent outweigh this size increase thus this feature 
-cannot be turned off.
-
-## JPNG Compression
-
-The JPNG compression is a combination of PNG or JPEG tiles, depending on the presence of non-opaque pixels. If all the pixels within a tile are 
-opaque the tile is stored as JPEG, otherwise it is stored as PNG with an Alpha channel. It is presented to GDAL as either a Luma-Alpha image or 
-an RGBA one, so it will always have 2 or 4 bands, and always PIXEL interleaved.  Most of the options from PNG and from JPEG compression still apply. 
-The data file will be smaller than when using PNG, if there are tiles that are fully opaque and can be stored as JPEG. Note that depending on the 
-options used and the input data, the transition from PNG to JPEG might be visible. The normal JPEG with Zen mask should be used in most cases, 
-except if 0 is not to be transparent and when gradual transparency is needed. Another advantage over MRF/JPEG/Zen is that legacy clients such as
-web browser applications do not usually need modification to be able to display the tiles as intended.
-
-## TIFF Compression
-
-In the MRF with TIFF compression, every tile is a TIFF raster which uses the lossless LZW internal compression. Most data types are supported.
-Note that the tiles are not GeoTiffs, they do not contain geotags. This compression is mostly useful for web services for certain clients which support 
-decoding TIFF.
 
 # Types of functional MRF
 
@@ -609,11 +637,13 @@ chosen to match the ones used by TIFF. The create options supported by MRF are:
 | CACHEDSOURCE |   | GDAL raster reference to be cached in the caching MRF being created |
 
 
-# APPENDIX D, Free-Form Create Options
+# APPENDIX D, Free-form Create Options
 
-In addition to the normal create options, MRF also supports a set of options that control features of only certain packing formats, 
-or can be used to modify default behaviors. The main difference between the create options and free-form options is that the latter 
-are saved in the MRF metadata file and may apply when a file is read, not only when it is written. The free form options are not 
+In addition to the normal create options which are applicable to all supported tile packings, 
+MRF compressions also accept a set of options that control features of only specific packing 
+formats, or can be used to modify default behaviors. The main difference between the 
+create options and free-form options is that the latter are saved in the MRF metadata file 
+and may apply when a file is read, not only when it is written. The free form options are not 
 part of the GDAL interface, and as such they are not checked for correctness when passed to the driver. If a free form option doesn't
 seem to have the expected effect, the exact spelling should be checked, they are case sensitive.
 
@@ -626,15 +656,16 @@ When using gdal_translate utility, the free form option syntax will be:
 
 `-co OPTIONS="Key1:Value1 Key2:Value2 …"`
 
-|Key|Default Value|Format|Description|
+|Key|Default|Packing|Description|
 | --- | --- | --- | --- |
 | DEFLATE | False | Most | Apply zlib DEFLATE as a final packing stage |
-| GZ | False | DEFLATE | GZIP headers |
-| RAWZ | False | DEFLATE | No headers |
-| Z_STRATEGY |   | PNG, DEFLATE | DEFLATE algorithmic choice: Z_HUFFMAN_ONLY, Z_FILTERED, Z_RLE, Z_FIXED |
+| GZ | False | DEFLATE | Generate gzip header style |
+| RAWZ | False | DEFLATE | No zlib or gzip headers |
+| Z_STRATEGY |  | PNG, DEFLATE | DEFLATE algorithmic choice: Z_HUFFMAN_ONLY, Z_FILTERED, Z_RLE, Z_FIXED |
 | V1 | False | LERC | Uses LERC1 compression instead of LERC (V2) |
 | LERC_PREC | 0.5 for integer types; 0.001  for floating point | LERC | Maximum value change allowed |
-| OPTIMIZE | False | JPEG | Optimize the Huffman tables for each tile. Always true for JPEG12 |
+| OPTIMIZE | False | JPEG, JPNG | Optimize the Huffman tables for each tile. Always true for JPEG12 |
+| JFIF | False | JPEG, JPNG | When set, write JPEG tiles in JFIF format. By default, brunsli format is preferred |
 
 # APPENDIX E, Open Options
 
