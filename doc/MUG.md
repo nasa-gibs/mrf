@@ -266,7 +266,10 @@ losslessly converted back and forth to JFIF exists, named [brunsli](https://gith
 advantage that it can store the same information as the JFIF in a smaller package, usually around 22% smaller. 
 Since brunsli is just a better packaging of a JPEG, the result is still JPEG compressed and the raster has exactly the
 same characteristics and limitations. Brunsli supports all the standard JFIF/JPEG features, with the **notable 
-exception** of 12bit per sample JPEGs.
+exception** of 12bit per sample JPEGs.  
+Using the brunsli format does have a small negative effect on the speed of reading and writing the 
+data when compared with the JFIF format, because the brunsli adds a codec stage. Both the read and write 
+are still fast compared with algorithms like DEFLATE or PNG.
 When GDAL and MRF are compiled with brunsli support and JPEG compression is selected, the extra compression is very 
 beneficial, so MRF will store the data in the brunsli format when possible. In some cases it is useful to
 force the older format, JFIF to be used. For example when the tiles are to be directly 
