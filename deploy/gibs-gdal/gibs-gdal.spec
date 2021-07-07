@@ -1,5 +1,5 @@
 %global gdal_version 2.4.4
-%global gdal_release 3%{?dist}
+%global gdal_release 4%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -32,7 +32,10 @@ BuildRequires:  geos-devel
 BuildRequires:  gcc-c++
 BuildRequires: bzip2
 BuildRequires: /usr/bin/pathfix.py
-	
+
+Requires:  proj
+
+
 %description
 The GDAL library provides support to handle multiple GIS file formats.
 
@@ -133,6 +136,9 @@ rm -rf %{buildroot}
 # Fix python shebangs post install
 sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin/gdal*.py /usr/bin/gcps2wld.py /usr/bin/mkgraticule.py /usr/bin/pct2rgb.py /usr/bin/epsg_tr.py /usr/bin/gcps2vec.py /usr/bin/rgb2pct.py /usr/bin/esri2wkt.py /usr/bin/ogrmerge.py 
 
+# Link /usr/lib64/libproj.so to /usr/lib64/libproj.so.##
+ln -s $(ls /usr/lib64/libproj.so.[0-9]?) /usr/lib64/libproj.so
+
 %post apps
 # Fix python shebangs post install apps
 sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin/mrf*.py /usr/bin/tiles2mrf.py
@@ -141,6 +147,10 @@ sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin
 %postun -p /sbin/ldconfig
 
 %changelog
+* Wed Jul 7 2021 Matthew Cechini <matthew.f.cechini@.nasa.gov> - 2.4.4-4
+- Adding install requirement for proj.4
+- Updating linking of /usr/lib64/libproj.so
+
 * Mon Apr 19 2021 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-3
 - Support for CentOS 8 builds
 
