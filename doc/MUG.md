@@ -176,18 +176,65 @@ As the name suggest, the NONE format directly stores the tile array, in a row ma
 as well as all the GDAL supported data types. The NONE format has no other options or features, all the common MRF functionality applies. 
 If a NoData value is defined per band, tiles consisting only in NoData values are not stored on disk. If the NoData value is not defined, 
 tiles which only contain zeros are not stored. As with any other tile format, the MRF does not guarantee any specific order of the tiles in 
-the data file.
+the data file. For multiple byte data types, the order of the bytes is machine dependent, except if the NETBYTEORDER option is set, in which
+case the bytes are written in big endian. This rule applies to most of the other formats that do not explicitly control the data values (JPEG, PNG, TIF).
 
-## DEFLATE Compression
+## ZSTD Compression
+
+[ZSTD](https://github.com/facebook/zstd) is a generic lossless compression algorithm, similar to DEFLATE, also open source. By itself, it is 
+considerably faster than DEFLATE for the same compression ratio. MRF ZSTD can handle all the data types, and supports both band 
+and pixel interleave. The ZSTD compression level can be controled somehwat by providing a quality figure, an integer between 1 and 22. 
+The default level in MRF is 9, where it is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
+However, the MRF ZSTD uses a raster specific data filter (see below), which improves the compression ratio considerably while having 
+almost no computational cost. In general the default ZSTD level should not be modified, it provides great compression and is fast. When needed,
+the `QUALITY` option can be used to choose a different level, when the value provided is between 1 and 22 inclusive. Note tha large values
+can take a massive amount of time and do not necessarily improve the compression. Lower figures will be faster but achieve less compression 
+while higher ones will take considerably more CPU time while compressing better. Values outside of the valid range will not have any effect, 
+the ZSTD comression level will be 9.
+
+ZSTD can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
+The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format
+is equivalent to `NONE` compression with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the
+tile order may differ.
+```
+gdal_translate –of MRF –co COMPRESS=ZSTD input.tif zstd.mrf
+gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw_zstd.mrf
+```
+
+### MRF ZSTD Optimization
+MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final compression. This filter 
+improves the raster compression considerably in most cases, especially when multi byte data types or pixel interleave tiles are written. 
+The filter has a negligible computation cost, especially when compared with the ZSTD compression itself. This filter does not apply when ZSTD 
+is applied as a second stage compression, except when the first stage is `NONE`.
+
+
+## PNG and PPNG Compression
+
+PNG is a well known lossless compression image format. It uses a raster filter plus the DEFLATE algorithm internally. PNG is currently the 
+default compression mechanism for MRF. PNG compression is slower than DEFLATE, but results in smaller data files which are also suitable as 
+tiled web services. PPNG is an MRF specific compression name, it stands for Palette PNG. While both types can have an MRF level palette, 
+PPNG also stores the palette inside each and every PNG tile. This mode should only be used if the individual tiles are to be served over the web as colorized images, 
+otherwise the regular PNG compression results in smaller data files. The PNG format itself supports up to sixteen bit unsigned integer data types.
+However, the MRF driver can treat a 16 bit PNG as containing either unsigned or signed data type (Int16), in which case the values stored in 
+the PNG are interpreted as signed. The QUALITY setting controls the DEFLATE stage of the PNG, with the same behavior as the ones described in 
+the DEFLATE compression. Similarly, the Z_STRATEGY band option controls the DEFLATE stage of PNG. Choosing Z_RLE or Z_HUFFMAN_ONLY as strategies 
+will result in much faster compression at the expense of size, Z_HUFFMAN_ONLY being the fastest. Z_FIXED and Z_FILTERED have much less effect.
+The effect of the strategy setting is much stronger than the QUALITY value setting.  
+Example of gdal_translate to MRF/PNG:  
+`gdal_translate -of MRF –co COMPRESS=PNG –co OPTIONS="Z_STRATEGY:Z_RLE" –co QUALITY=50 input.tif output.mrf`
+
+## DEPRECATED: DEFLATE Compression
+
+**The ZSTD tile compression is recommended instead**
 
 DEFLATE is a well known generic compression algorithm, implemented in the open source zlib library. In MRF it can be used in two ways, as a 
 stand-alone tile packing mechanism and also as a second compression step to other compression formats. The second meaning is activated by 
-adding `DEFLATE:on` to the free form list `OPTIONS`.  None compression with the `DEFLATE:on` option is equivalent to the DEFLATE as 
+adding `DEFLATE:on` to the free form list `OPTIONS`. `NONE` compression with the `DEFLATE:on` option is equivalent to the DEFLATE as 
 compression format, even though the content of the metadata file is different. The following two commands should generate MRFs with identical 
 size data files, although the tile order may differ.
 ```
-gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 gdal_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
+gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 ```
 The zlib compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which is very good 
 compression albeit slow. A quality setting of 60 is recommended as a tradeoff between compression speed and size. Quality of zero, 
@@ -216,43 +263,31 @@ is `Z_STRATEGY`, and the valid values are:
 Example which will generate an RLE compressed tile with gzip style headers:  
 `gdal_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on Z_STRATEGY:Z_RLE" input.tif gzipped.mrf`
 
-
-## PNG and PPNG Compression
-
-PNG is a lossless compression image format which uses a filter plus the DEFLATE algorithm internally. PNG is currently the default compression 
-mechanism for MRF. PNG generation is slower than DEFLATE, but results in smaller data files which are also suitable as tiled web services. 
-PPNG is an MRF specific compression name, it stands for Palette PNG. While both types can have an MRF level palette, PPNG also stores the 
-palette inside each and every PNG tile. This mode should only be used if the individual tiles are to be served over the web as colorized images, 
-otherwise the regular PNG compression results in smaller data files. The PNG format itself supports up to sixteen bit unsigned integer data types.
-However, the MRF driver can treat a 16 bit PNG as containing either unsigned or signed data type (Int16), in which case the values stored in 
-the PNG are interpreted as signed. The QUALITY setting controls the DEFLATE stage of the PNG, with the same behavior as the ones described in 
-the DEFLATE compression. Similarly, the Z_STRATEGY band option controls the DEFLATE stage of PNG. Choosing Z_RLE or Z_HUFFMAN_ONLY as strategies 
-will result in much faster compression at the expense of size, Z_HUFFMAN_ONLY being the fastest. Z_FIXED and Z_FILTERED have much less effect.
-The effect of the strategy setting is much stronger than the QUALITY value setting.  
-Example of gdal_translate to MRF/PNG:  
-`gdal_translate -of MRF –co COMPRESS=PNG –co OPTIONS="Z_STRATEGY:Z_RLE" –co QUALITY=50 input.tif output.mrf`
-
-
 ## JPEG Compression
 
-The JPEG compression is a well know lossless image compression, tuned for good visual quality combined with good compression. Since JPEG is a 
-well known format, the MRF tiles compressed as JPEG are suitable for serving as web tiles. Depending on how the GDAL MRF was built, the MRF/JPEG 
-format can handle 8 and sometimes 12 bit data. The 12 bit option is only available when the GDAL internal libJPEG is used and the GDAL 12bit 
-JPEG is enabled. MRF/JPEG can handle up to 10 bands in pixel interleave mode. Note that only 8 bit JPEGs with 1 or 3 bands are suitable for web 
-tile services in most cases. The MRF `QUALITY` output option value is directly passed to JPEG library as the Q factor, with the default value being 85.
-Note that the JPEG Q value does control the output quality and size, but it is not linear. For the exact interpretation of Q, please consult 
-JPEG documentation. Values between 0 and 100 are supported, the reasonable range being between sixty and eighty five, larger values producing 
-visually better results at the cost of increased size. For three bands interleaved, a couple of encoding options are available, controlled via the 
-`PHOTOMETRIC` setting. The default setting should be used most of the time.
+The JPEG compression is a well know lossless image compression, tuned for good visual quality combined with good 
+compression. Since JPEG is a well known format, the MRF tiles compressed as JPEG are suitable for serving as web 
+tiles. Depending on how the GDAL MRF was built, the MRF/JPEG format can handle 8 and sometimes 12 bit data. The 
+12 bit option is only available when the GDAL internal libJPEG is used and the GDAL 12bit JPEG is enabled. 
+MRF/JPEG can handle up to 10 bands in pixel interleave mode. Note that only 8 bit JPEGs with 1 or 3 bands are 
+suitable for web tile services in most cases. The MRF `QUALITY` output option value is directly passed to JPEG 
+library as the Q (quantization) factor, with the default value being 85.
+Note that the JPEG Q value does control the output quality and size, but it is not linear. For the exact interpretation 
+of Q, please consult JPEG documentation. Values between 0 and 100 are supported, the reasonable range being between 
+sixty and eighty five, larger values producing visually better results at the cost of increased size. For three 
+bands interleaved, a couple of encoding options are available, controlled via the `PHOTOMETRIC` setting. 
+The default setting should be used most of the time.
 
 The valid choices for the `PHOTOMETRIC` setting are:
-- DEFAULT: JPEG uses YCbCr, 4:2:0 sampling internally. This provides good compression and visual quality. The color space has significantly lower quality 
-  than the brightness, which roughly matches the human vision charateristics.
-- `YCC`: Compressed as YCbCr with 4:4:4 sampling, ie color space is not spatially resampled. This setting produces tiles about a third larger than
-the default, tiles which have fewer color artifacts. The color conversion itself still results in a loss of information, as well as the quantization.
-- `RGB`: Compressed as RGB, not color converted and not spatially resampled. This setting produces much larger JPEG files, usually twice as large or more. 
- Files are about three times larger than with the default setting.  MRF with this setting can be decoded and re-encoded multiple times at 
-the same quality without any data quality degradation.
+- (DEFAULT): This is the most common JPEG style, it uses the YCbCr color space, and 4:2:0 sampling. This mode provides 
+good compression and visual quality. The color space has significantly lower quality than the brightness, which
+ matches the human vision charateristics.
+- `YCC`: Uses the YCbCr colorspace with 4:4:4 sampling, i.e. it is not spatially resampled. This setting produces 
+tiles with fewer color artifacts which are about a third larger than the default. The color conversion itself results 
+in a slight loss of information, as well as the quantization.
+- `RGB`: Compressed as RGB, not color converted and not spatially resampled. For the same Q setting, this mode produces 
+ JPEG files much larger than the default, commonly two or three time larger. MRF with this setting can be decoded 
+and re-encoded multiple times at the same Q without any data quality degradation.
 
 Optimizing the Huffman encoding tables for each tile, as opposed to using the default value can be enabled by having the "OPTIMIZE=ON" in the OPTIONS list. 
 Choosing this will increase encoding time and reduce the tile size slightly, both are relatively small changes in most cases.  
@@ -262,15 +297,15 @@ To use the 12 bit JPEG, when available, set the data type to Int16 or UInt16.
 
 While commonly refered to as a JPEG file, the format normally used to stored JPEG compressed images
 is actually [JFIF](https://en.wikipedia.org/wiki/JPEG_File_Interchange_Format). A newer format, which can be 
-losslessly converted back and forth to JFIF exists, named [brunsli](https://github.com/google/brunsli). Brunsli has the 
-advantage that it can store the same information as the JFIF in a smaller package, usually around 22% smaller. 
-Since brunsli is just a better packaging of a JPEG, the result is still JPEG compressed and the raster has exactly the
+losslessly converted back and forth to JFIF exists, named [brunsli](https://github.com/google/brunsli). Brunsli 
+format has the advantage that it can store the same information as the JFIF in a package around 22% smaller on average. 
+Since brunsli is only a better packaging of a JPEG, the result is still JPEG compressed and the it has exactly the
 same characteristics and limitations. Brunsli supports all the standard JFIF/JPEG features, with the **notable 
 exception** of 12bit per sample JPEGs.  
-Using the brunsli format does have a small negative effect on the speed of reading and writing the 
-data when compared with the JFIF format, because the brunsli adds a codec stage. Both the read and write 
-are still fast compared with algorithms like DEFLATE or PNG.
-When GDAL and MRF are compiled with brunsli support and JPEG compression is selected, the extra compression is very 
+Using the brunsli format does have a small negative effect on the speed of reading and writing the tiles when compared 
+with the JFIF format, because the brunsli adds a codec stage. Yet both reading and writing are still fast compared with 
+DEFLATE or PNG.
+When GDAL and MRF are compiled with brunsli support and JPEG compression is selected, the extra compression is 
 beneficial, so MRF will store the data in the brunsli format when possible. In some cases it is useful to
 force the older format, JFIF to be used. For example when the tiles are to be directly 
 served over the web to a browser or when a legacy GDAL application, compiled without 
@@ -620,46 +655,49 @@ od -t u8 --endian big <input_file>
 # APPENDIX C, Create Options
 
 In GDAL, a list of key-value string pairs can be used to pass various options to the target driver. Using the gdal_translate 
-utility, these options are passed using the –co Key=Value syntax. Most of the names of the options supported by MRF have been 
+utility, these options are passed using the –co Key=Value syntax. Some of the names of the options supported by MRF have been 
 chosen to match the ones used by TIFF. The create options supported by MRF are:
 
 | Key | Default Value | Description |
 | --- | --- | --- |
-| BLOCKSIZE | 512 | The tile size, in both X and Y |
+| BLOCKSIZE | 512 | The tile size in pixels for both X and Y axis |
 | BLOCKXSIZE | 512 | Horizontal tile size |
 | BLOCKYSIZE | 512 | Vertical tile size |
-| COMPRESS | PNG | Choses the tile packing algorithm |
-| ZSIZE | 1 | Specifies the third dimension size |
 | INTERLEAVE | PIXEL or BAND, format dependent | PIXEL or BAND interleave |
-| NETBYTEORDER | FALSE | If true, for some packings, forces endianness dependent input data to big endian when writing, and back to native when reading |
-| QUALITY | 85 | An integer, 0 to 100, used to control the compression |
+| COMPRESS | PNG | Choses the tile packing algorithm |
+| QUALITY | 85 | An integer value used to control the compression |
+| INDEXNAME | | Filename to be used for the index |
+| DATANAME | | Filename to be used for the data |
+| ZSIZE | 1 | Specifies the third dimension size |
+| NETBYTEORDER | FALSE | If true, for some packings, forces endianness dependent data to big endian when stored |
 | PHOTOMETRIC |   | Sets the interpretation of the bands and controls some of the compression algorithms |
 | SPACING | 0 | Reserve this many bytes before each tile data |
 | NOCOPY | False | Create an empty MRF, do not copy input |
-| UNIFORM_SCALE |   | Flags the MRF as containing overviews, with a given numerical scale factor between successive overviews |
-| CACHEDSOURCE |   | GDAL raster reference to be cached in the caching MRF being created |
-
+| UNIFORM_SCALE | | Flags the MRF as containing overviews, with a given numerical scale factor between successive overviews |
+| CACHEDSOURCE | | GDAL raster reference to be cached in the caching MRF being created |
+| OPTIONS | | A string that contains auxiliary create options, see appendix D |
 
 # APPENDIX D, Free-form Create Options
 
-In addition to the normal create options which are applicable to all supported tile packings, 
-MRF compressions also accept a set of options that control features of only specific packing 
-formats, or can be used to modify default behaviors. The main difference between the 
-create options and free-form options is that the latter are saved in the MRF metadata file 
+In addition to the normal create options which are usually applicable to all supported tile packings 
+and verified by the GDAL core, some MRF compressions accept a set of options that control features of 
+only specific packing formats, or can be used to modify default behaviors. The main difference between 
+the create options and free-form options is that the latter are saved in the MRF metadata file 
 and may apply when a file is read, not only when it is written. The free form options are not 
-part of the GDAL interface, and as such they are not checked for correctness when passed to the driver. If a free form option doesn't
-seem to have the expected effect, the exact spelling should be checked, they are case sensitive.
+part of the GDAL interface, and as such they are not checked for correctness when passed to the driver. 
+If a free form option doesn't seem to have the expected effect, the exact spelling should be checked, 
+they are case sensitive.
 
-The free-form option list is passed as a single string value for the create option called OPTIONS. The value is a free form string 
-containing white space separated key value pairs. GDAL list parsing is being used when reading, either the equal sign `=` or the colon `:` 
-can be used as the separator between key and value.  Boolean flags are false by default, they are treated as true only if the value 
-is one of the `Yes`, `True` or `1`.
+The free-form `OPTONS` parameter takes a single string value. The value is a string containing white space separated 
+key value pairs. GDAL list parsing is being used when reading, either the equal sign `=` or the colon `:` 
+can be used as the separator between key and value. Boolean flags default to `false`, they are treated as 
+true only if the value is `Yes`, `True` or `1`.
 
-When using gdal_translate utility, the free form option syntax will be:
+For the gdal_translate utility, the free form option syntax is:
 
 `-co OPTIONS="Key1:Value1 Key2:Value2 …"`
 
-|Key|Default|Packing|Description|
+|Key|Default|Affected Format|Description|
 | --- | --- | --- | --- |
 | DEFLATE | False | Most | Apply zlib DEFLATE as a final packing stage |
 | GZ | False | DEFLATE | Generate gzip header style |
