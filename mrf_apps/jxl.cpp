@@ -22,7 +22,11 @@ const static int BSZ2(BSZ*BSZ);
 const static int BUFSZ(1024*1024); // 1MB, kinda small
 
 int Usage(const string &s) {
-    cerr << s << endl;
+    cerr << s << endl << endl
+    << "Synopsis: jxl [OPTIONS] <source-file>\n"
+    << "\t-r\tReverse, convert JXL input to JFIF\n"
+    << "\t-b\tBundle (esri v2) input, default is MRF\n"
+    << "\t-s\tSingle image, input is a JFIF or JXL (with -r)\n";
     return 1;
 }
 
@@ -67,6 +71,32 @@ struct tinfo {
         size = htobe64(size);
     }
 };
+
+// Single file, either JXL or JFIF
+int single_to_jxl(const string &inname, bool reverse = false) {
+    auto outname = inname + (reverse ? ".jfif" : ".jxl");
+    auto fin = fopen(inname.c_str(), "rb");
+    if (!fin) return Usage("Can't open input file");
+    fseek(fin, 0, SEEK_END);
+    auto insize = ftell(fin);
+    rewind(fin);
+    // Check a max size of 128MB
+    if (insize > (1ull << 27)) return Usage("Input file too large, limit is 128MB");
+    auto input = vector<uint8_t>(insize);
+    fread(input.data(), insize, 1, fin);
+    fclose(fin);
+    auto fout = fopen(outname.c_str(), "wb");
+    if (!fout) return Usage("Can't open output file");
+    // Convert
+    vector<uint8_t> tilebuf;
+    int result = reverse ?
+        DecodeBrunsli(insize, input.data(), &tilebuf, (DecodeBrunsliSink)out_fun)
+        : EncodeBrunsli(insize, input.data(), &tilebuf, (DecodeBrunsliSink)out_fun);
+    if (!result) return Usage(reverse ? "Error decoding JXL" : "Error encoding JXL");
+    fwrite(tilebuf.data(), tilebuf.size(), 1, fout);
+    fclose(fout);
+    return 0;
+}
 
 // From MRF, separate files, inname is the data file
 int mrf_to_jxl(const string &inname, const string &outname, bool reverse = false) {
@@ -250,6 +280,7 @@ int main(int argc, char **argv)
 {
     bool reverse = false; // default to JPEG -> JXL
     bool bundle = false;  // default to MRF
+    bool single = false;  // single jpeg
     string input_name;
     while(--argc) {
         string this_arg(argv[argc]);
@@ -257,6 +288,8 @@ int main(int argc, char **argv)
             reverse = true;
         } else if (this_arg == "-b") {
             bundle = true;
+        } else if (this_arg == "-s") {
+            single = true;
         } else {
             input_name = this_arg;
         }
@@ -265,6 +298,8 @@ int main(int argc, char **argv)
     if (input_name.empty())
         return Usage("Needs input file name");
     
+    if (single)
+        return single_to_jxl(input_name, reverse);
     if (bundle)
         return bundle_to_jxl(input_name, input_name + ".jxl", reverse);
     return mrf_to_jxl(input_name, input_name + ".jxl", reverse);
