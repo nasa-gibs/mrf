@@ -637,12 +637,12 @@ be erased by hand, outside of the GDAL infrastructure.
 # APPENDIX B, Index file format
 
 The MRF index is a vector of tile records. A tile index record is sixteen bytes long and contains the tile offset and size, each 
-stored as an eight byte unsigned integer. In C, a tile index record is defined as
+stored as an eight byte unsigned integer in big endian order. In C, a tile index record is defined as
 
 ```
 typedef struct {
- uint16_t offset;
- uint16_t size;
+ uint64_t offset;
+ uint64_t size;
 } tidx;
 ```
 

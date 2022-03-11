@@ -6,7 +6,7 @@
 #
 include Makefile.lcl
 
-TARGETS = can mrf_insert
+TARGETS = can mrf_insert jxl
 GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)
 LIBDIR = $(PREFIX)/lib
 BINDIR = $(PREFIX)/bin
@@ -30,5 +30,5 @@ install: $(TARGETS)
 	$(CP) $^ $(BINDIR)
 
 clean:
-	$(RM) $(TARGETS) jxl
+	$(RM) $(TARGETS)
 

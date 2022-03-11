@@ -1,18 +1,25 @@
 ## MRF Apps
 
-A set of tools for working with MRF.
-
-## mrf_clean.py
-
-Copies the tile data and index files of an MRF, ignoring the unused parts.
+MRF Tools for working with MRF files.
 
 ## mrf_insert
 
-Tool for inserting tiles into an existing MRF.
+Tool for inserting data into an existing MRF. Partial overviews can be  generated, for the regions affected by the new data. Location of the inserted data is controlled by the georegistration.
+
+## can
+Transforms an MRF index file between the normal format and a compact, **canned** format, which does not store the sparse regions. This allows for efficient storage of very large MRFs on storage media that doesn't support sparse files, such as object stores. This is the recommended way to transfer MRF files with large, sparse index files between systems. The canned format has to be un-canned on a file system with sparse file support before use by GDAL. The MRF tile server **mod_mrf** is able to use the canned index as is, for reading the tiles.
+
+## jxl
+
+MRF tile convertor between JFIF-JPEG and JPEG-XL (brunsli), works for MRF and for esri bundles. When used with MRF, it takes a single argument, the data file (default extension .pjg). The output is written to the same location, with .jxl extension added (also .jxl.idx). Add -r to reverse the conversion, ie from JPEG-XL to JFIF-JPEG. To compile, the brunsli library and public header has to be installed
+
+## mrf_clean.py
+
+Copies the active tile data and index files of an MRF, ignoring the potential unused parts. It preserves the sparseness of the index file, it is the recommended way to transfer an MRF from one file system to another.
 
 ## mrf_join.py
 
-Joins multiple MRF files with the same structure into a single one.
+Joins two or more MRF files with similar structure into a single one. It can be used to combine MRF content in 2D, or to stack 2D MRFs in a 3-rd dimension MRF.
 
 ## mrf\_read_data.py
 
@@ -92,8 +99,5 @@ Builds a GDAL VRT that visualizes the size of tiles in an MRF index.
 
 ## tiles2mrf.py
 
-Generates an MRF from a set of tiles.
+Assembles an MRF from a set of tiles on disk.
 
-## jxl
-
-MRF tie convertor between JPEG and JPEG-XL (brunsli). When used with MRF, it takes a single argument, the data file (default extension .pjg). The output is written to the same location, with .jxl extension added (also .jxl.idx). Add -r to reverse the conversion, ie from JPEG-XL to JPEG. To compile, the brunsli library and public header has to be installed
