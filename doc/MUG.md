@@ -356,43 +356,63 @@ decoding TIFF.
 
 ## LERC Compression
 
-Limited Error Raster Compression (LERC) is an original Esri raster compression format. The main benefit of using LERC is extremely fast operation 
-when compared with PNG, DEFLATE and even with JPEG, as well as excellent compression for data types larger than eight bit.
-The LERC compression can be either lossy or lossless. The lossy part is due to an initial quantization stage, which is controled by the LERC 
-maximum error value (LERC_PREC), which is a floating point number. LERC may alter the values stored, but the change is always less or equal 
-to this LERC maximum error value. The quanta or precision of the output data values will thus be twice the LERC_PREC value. If the LERC maximum 
-error is zero or too small for any space savings to be obtained by quantization, the input data values are not modified, and LERC becomes a 
-lossless format. LERC supports an explicit data mask, which in MRF is enabled when the NoData value is defined. The NoData values are not stored 
-in the compressed tile, which makes LERC a good choice for storing sparse data.
-In MRF, for integer types the default LERC_PREC value is 0.5, corresponding to lossless compression.  For floating point types the LERC_PREC 
-defaults to 0.001 (.002 data resolution). The compression achieved by LERC heavily depends on the LERC_PREC value, which should be carefully 
-selected for each particular dataset.
+Limited Error Raster Compression [LERC](https://github.com/Esri/lerc) is an original Esri raster 
+compression format. The benefit of using LERC is extremely fast compression when compared with PNG, 
+DEFLATE and even with JPEG, as well as excellent compression for data types larger than eight bit.
+LERC compression can be lossy or lossless. The lossy part is due to an initial quantization stage, 
+which is controled by the LERC maximum error value (LERC_PREC), which is a floating point number. 
+LERC may alter the values stored, but the change is always less or equal to this LERC maximum error 
+value. The quanta or precision of the output data values will thus be twice the LERC_PREC value. If 
+the LERC maximum error is zero or too small for any space savings to be obtained by quantization, 
+the input data values are not modified, and LERC becomes a lossless format. Output compression may 
+still occur, as long as it is lossless. LERC contains an explicit data mask, which in MRF is always 
+enabled. This mask is obtained from the NoData value if defined, otherwise it uses the value zero. 
+The NoData values are not stored in the compressed tile, which makes LERC a good choice 
+for storing sparse data.  
+In MRF, for integer types the default LERC_PREC value is 0.5, corresponding to lossless compression. 
+In MRF, floating point types LERC precision defaults to 0.001 (.002 data resolution). The compression 
+achieved by LERC heavily depends on the LERC_PREC value, which should be carefully selected for each 
+particular dataset.  
+To set a custom LERC precision value for a new MRF file, use the free form MRF OPTIONS mechanism: 
+`-co OPTIONS="LERC_PREC:0.005"`  
 
-To set a custom LERC precision value, use the free form MRF OPTIONS mechanism, the option name being "OPTIONS".  To set the LERC precision for
- a new MRF, use the create option like this: `-co OPTIONS="LERC_PREC:0.005"`  
-When set, the LERC_PREC value will be used for all subsequent writes into the respective MRF.
+There are two different styles of LERC compression supported in MRF, LERC (default, Lerc2) and LERC1.
 
-There are two different versions of LERC compression supported in MRF, LERC (default, V2) and LERC1.
-- LERC supports more data types and higher precision than LERC1. While in most cases LERC achieves very similar compression to LERC1, it also 
-includes different compression methods that may result in significantly better compression. For byte input data for example, a Huffman compression algorithm 
-is used instead of the LERC algorithm. LERC also supports pixel interleaved data, which usually results in better compression.  Note that pixel 
-interleaved LERC compression was introduced later, MRF files using this feature will be unreadable by older versions of the MRF driver.
+- LERC1 is the original LERC code, which implemented a single band compression for floating point. 
+MRF can make use of it for integer type data by conversion to floating point before invoking LERC1. 
+This means that LERC1 integer precision is limited to 24 bits. MRF also simulates pixel interleaved 
+with LERC1 compression by concatenating the results for each individual band. While there is no size 
+advantage to using LERC1 pixel interleaved in MRF, there might still be a performance advantage in 
+a cloud environment since data for all bands is read in a single operation.  
+To choose LERC1 instead of the default LERC, add V1=ON to the options string, like this: 
+`-co OPTIONS="LERC_PREC=0.01 V1=ON"`
 
-- LERC1 is the original LERC algorithm, implemented as a single band compression from floating point. MRF can make use of it for integer type data
-by conversion to floating point before invoking the LERC1 algorithm. This means that LERC1 integer precision is limited to 24 bits. MRF also
-simulated pixel interleaved LERC1 compression by concatenating the results for each individual band. While there is no size advantage to using
-LERC1 pixel interleaved in MRF, there might still be a performance advantage in a cloud environment since data for all bands is read in a single operation.
+- LERC (Lerc2) supports more data types and higher precision than LERC1 and it is usually faster than LERC1. 
+LERC development continues independent of MRF, new features may be added, and the LERC version may increase.
+The LERC library also includes different compression methods in addition to the LERC algorithm, methods 
+that may result in better compression. For byte input data specifically, Huffman compression is used 
+since Lerc version 2, which usually results in better compression. LERC also handles pixel interleaved data, 
+introduced at LERC version 4.
+By default, MRF writes LERC tiles using LERC version 2 for single band per tile, or the latest version
+supported by the LERC library being used otherwise. MRF files created using a more recent LERC library 
+may be unreadable by MRF using an older LERC version, which will generate LERC decoding errors. 
+When writing to a MRF - LERC, it is possible to choose a specific LERC version using the free OPTION L2_VER. 
+This option is used by the MRF driver to request that LERC encoding does not use any features not available 
+in the selected version.
+For example, to choose LERC version 3 as the maximum, while specifying a value precision of 0.2, use 
+`-co OPTIONS="L2_VER=3 LERC_PREC=0.2"`
 
 
-To choose LERC1 instead of the default LERC, add V1=ON to the options string, like this: `-co OPTIONS="LERC_PREC=0.01 V1=ON"`
+MRF tiles compressed by LERC can be further compressed with zlib (DEFLATE) which in some cases can 
+improve the compression, at the expense of speed. DEFLATE speed is asymmetric, with decompression being 
+faster than compression, so it does not affect read speeds as much as it does writes. DEFLATE 
+decompression is still significantly slower than LERC so it should be used only when the size is critical
+or when the decompression speed is not a bottleneck, for example when reading tiles from cloud storage. 
+To add DEFLATE to LERC, add "DEFLATE:ON" to the list of free form options. This example sets both the 
+LERC precision and the extra DEFLATE option: `-co OPTIONS="LERC_PREC=0.01 DEFLATE:ON L2_VER:2"`
 
-MRF tiles compressed by LERC can be further compressed with zlib (DEFLATE) which in some cases can improve the compression at the expense of speed.
-DEFLATE speed is asymmetric, with decompression being faster than compression, so it does not affect read speeds as much as it does writes. 
-However, DEFLATE decompression is still significantly slower than LERC so it should be used only when the size is critical or when the decompression 
-speed is not the main source of delays, for example when reading tiles from cloud storage. To add DEFLATE to LERC, add "DEFLATE:ON" to the list of 
-free form options. This example sets both the LERC precision and the extra DEFLATE option: `-co OPTIONS="LERC_PREC=0.01 DEFLATE=ON"`
 
-# Types of functional MRF
+# Functional Types of MRF
 
 ## Static MRF
 
@@ -689,13 +709,12 @@ If a free form option doesn't seem to have the expected effect, the exact spelli
 they are case sensitive.
 
 The free-form `OPTONS` parameter takes a single string value. The value is a string containing white space separated 
-key value pairs. GDAL list parsing is being used when reading, either the equal sign `=` or the colon `:` 
-can be used as the separator between key and value. Boolean flags default to `false`, they are treated as 
+key value pairs. GDAL list parsing is used when reading, either the equal sign `=` or the colon `:` 
+may be used as the separator between key and value. Boolean flags default to `false`, they are treated as 
 true only if the value is `Yes`, `True` or `1`.
 
-For the gdal_translate utility, the free form option syntax is:
-
-`-co OPTIONS="Key1:Value1 Key2:Value2 …"`
+For the gdal_translate utility, the free form option syntax is:  
+ `-co OPTIONS="Key1:Value1 Key2:Value2 …"`
 
 |Key|Default|Affected Format|Description|
 | --- | --- | --- | --- |
@@ -705,6 +724,7 @@ For the gdal_translate utility, the free form option syntax is:
 | Z_STRATEGY |  | PNG, DEFLATE | DEFLATE algorithmic choice: Z_HUFFMAN_ONLY, Z_FILTERED, Z_RLE, Z_FIXED |
 | V1 | False | LERC | Uses LERC1 compression instead of LERC (V2) |
 | LERC_PREC | 0.5 for integer types; 0.001  for floating point | LERC | Maximum value change allowed |
+| L2_VER | 2 for single band, library default otherwise | LERC | Use features present in a specific Lerc library version |
 | OPTIMIZE | False | JPEG, JPNG | Optimize the Huffman tables for each tile. Always true for JPEG12 |
 | JFIF | False | JPEG, JPNG | When set, write JPEG tiles in JFIF format. By default, brunsli format is preferred |
 
@@ -716,4 +736,4 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 |Key|Default Value|Description|
 | --- | --- | --- |
 | ZSLICE | Integer | Sets the ZSlice to open in a 3rd dimension MRF|
-| NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt areas|
+| NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt data|
