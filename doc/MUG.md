@@ -179,35 +179,6 @@ tiles which only contain zeros are not stored. As with any other tile format, th
 the data file. For multiple byte data types, the order of the bytes is machine dependent, except if the NETBYTEORDER option is set, in which
 case the bytes are written in big endian. This rule applies to most of the other formats that do not explicitly control the data values (JPEG, PNG, TIF).
 
-## ZSTD Compression
-
-[ZSTD](https://github.com/facebook/zstd) is a generic lossless compression algorithm, similar to DEFLATE, also open source. By itself, it is 
-considerably faster than DEFLATE for the same compression ratio. MRF ZSTD can handle all the data types, and supports both band 
-and pixel interleave. The ZSTD compression level can be controled somehwat by providing a quality figure, an integer between 1 and 22. 
-The default level in MRF is 9, where it is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
-However, the MRF ZSTD uses a raster specific data filter (see below), which improves the compression ratio considerably while having 
-almost no computational cost. In general the default ZSTD level should not be modified, it provides great compression and is fast. When needed,
-the `QUALITY` option can be used to choose a different level, when the value provided is between 1 and 22 inclusive. Note tha large values
-can take a massive amount of time and do not necessarily improve the compression. Lower figures will be faster but achieve less compression 
-while higher ones will take considerably more CPU time while compressing better. Values outside of the valid range will not have any effect, 
-the ZSTD comression level will be 9.
-
-ZSTD can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
-The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format
-is equivalent to `NONE` compression with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the
-tile order may differ.
-```
-gdal_translate –of MRF –co COMPRESS=ZSTD input.tif zstd.mrf
-gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw_zstd.mrf
-```
-
-### MRF ZSTD Optimization
-MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final compression. This filter 
-improves the raster compression considerably in most cases, especially when multi byte data types or pixel interleave tiles are written. 
-The filter has a negligible computation cost, especially when compared with the ZSTD compression itself. This filter does not apply when ZSTD 
-is applied as a second stage compression, except when the first stage is `NONE`.
-
-
 ## PNG and PPNG Compression
 
 PNG is a well known lossless compression image format. It uses a raster filter plus the DEFLATE algorithm internally. PNG is currently the 
@@ -222,6 +193,35 @@ will result in much faster compression at the expense of size, Z_HUFFMAN_ONLY be
 The effect of the strategy setting is much stronger than the QUALITY value setting.  
 Example of gdal_translate to MRF/PNG:  
 `gdal_translate -of MRF –co COMPRESS=PNG –co OPTIONS="Z_STRATEGY:Z_RLE" –co QUALITY=50 input.tif output.mrf`
+
+## ZSTD Compression
+
+[ZSTD](https://github.com/facebook/zstd) is a generic lossless compression algorithm, similar to DEFLATE, also open source. By itself, it is 
+considerably faster than DEFLATE for the same compression ratio. MRF ZSTD can handle all the data types, and supports both band 
+and pixel interleave. The ZSTD compression level can be controled somehwat by providing a quality figure, an integer between 1 and 22. 
+The default level in MRF is 9, where it is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
+However, the MRF ZSTD uses a raster specific data filter (see below), which improves the compression ratio considerably while having 
+almost no computational cost. In general the default ZSTD level should not be modified, it provides great compression and is fast. When needed,
+the `QUALITY` option can be used to choose a different level, when the value provided is between 1 and 22 inclusive. Note tha large values
+can take a massive amount of time and do not necessarily improve the compression. Lower figures will be faster but achieve less compression 
+while higher ones will take considerably more CPU time while compressing better. Values outside of the valid range will not have any effect, 
+the ZSTD comression level will be 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing reasonable compression. It should be used
+in most cases where the write speed is more important than the absolute storage size, for example in caching MRFs. The fact that ZSTD compression
+is lossless and that it works with all supported data types makes this choice even better.
+
+ZSTD can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
+The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format
+is equivalent to `NONE` compression with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the
+tile order may differ.
+```
+gdal_translate –of MRF –co COMPRESS=ZSTD input.tif zstd.mrf
+gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw_zstd.mrf
+```
+### MRF ZSTD Optimization
+MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final compression. This filter 
+improves the raster compression considerably in most cases, especially when multi byte data types or pixel interleave tiles are written. 
+The filter has a negligible computation cost, especially when compared with the ZSTD compression itself. This filter does not apply when ZSTD 
+is applied as a second stage compression, except when the first stage is `NONE`.
 
 ## DEPRECATED: DEFLATE Compression
 
@@ -406,13 +406,14 @@ For example, to choose LERC version 3 as the maximum, while specifying a value p
 `-co OPTIONS="L2_VER=3 LERC_PREC=0.2"`
 
 
-MRF tiles compressed by LERC can be further compressed with zlib (DEFLATE) which in some cases can 
-improve the compression, at the expense of speed. DEFLATE speed is asymmetric, with decompression being 
-faster than compression, so it does not affect read speeds as much as it does writes. DEFLATE 
-decompression is still significantly slower than LERC so it should be used only when the size is critical
-or when the decompression speed is not a bottleneck, for example when reading tiles from cloud storage. 
-To add DEFLATE to LERC, add "DEFLATE:ON" to the list of free form options. This example sets both the 
-LERC precision and the extra DEFLATE option: `-co OPTIONS="LERC_PREC=0.01 DEFLATE:ON L2_VER:2"`
+MRF tiles compressed by LERC can be further compressed with ZSTD or DEFLATE, which in some cases can 
+improve the overall compression, at the expense of speed. ZSTD and DEFLATE speed is asymmetric, with 
+decompression being faster than compression, so it does not affect read speeds as much as it does writes. 
+DEFLATE decompression is still significantly slower than LERC so it should be used only when the size 
+is critical or when the decompression speed is not a bottleneck, for example when reading tiles from 
+cloud storage.
+To add ZSTD or DEFLATE to LERC, add "ZSTD:ON" or "DEFLATE:ON" to the list of free form options. This 
+example sets both the LERC precision, the LERC version and the extra ZSTD stage: `-co OPTIONS="LERC_PREC=0.01 ZSTD:ON L2_VER:2"`
 
 
 # Functional Types of MRF
@@ -478,7 +479,7 @@ MRF the parent dataset is not longer accessed.  The caching MRF can be used to t
 
 The combined use of the `CACHEDSOURCE` and `NOCOPY` options should be the most common use pattern. Normally, the source raster as used on the 
 gdal_translate command line and the value of the `CACHEDSOURCE` are the same. The difference is that the source raster is used as the source of 
-metadata during the gdal_translate execution, while the `CACHEDSOURCE` raster is used for reasing, when attempting to read from the caching MRF, 
+metadata during the gdal_translate execution, while the `CACHEDSOURCE` raster is used while reading, when attempting to read from the caching MRF, 
 if the data is not present in the MRF itself.  This syntax is required due to the structure of gdal_translate, and it also offers the possibility 
 to initialize a caching MRF using a local file while caching a different, possibly remote raster. Since opening and reading the metadata from a remote
 raster can take a while, this option can greatly speed up setting multiple caching MRFs without having to open each and every remote raster.
