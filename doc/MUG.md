@@ -289,8 +289,11 @@ in a slight loss of information, as well as the quantization.
  JPEG files much larger than the default, commonly two or three time larger. MRF with this setting can be decoded 
 and re-encoded multiple times at the same Q without any data quality degradation.
 
-Optimizing the Huffman encoding tables for each tile, as opposed to using the default value can be enabled by having the "OPTIMIZE=ON" in the OPTIONS list. 
-Choosing this will increase encoding time and reduce the tile size slightly, both are relatively small changes in most cases.  
+Optimizing the Huffman encoding tables for each tile, as opposed to using the default table will improve the compression 
+by a few percent in most cases. By default, MRF uses the default tables for 8 bit data. For 12 bit JPEG optimize is always 
+on since there are no predefined Huffman tables.
+In MRF, optimized Huffman tables in JPEG can be enabled by adding the "OPTIMIZE:ON" to the OPTIONS list. Choosing this will increase 
+encoding time and reduce the tile size, both changes are relatively small in most cases.  
 To use the 12 bit JPEG, when available, set the data type to Int16 or UInt16.
 
 ### brunsli (JPEG XL)
@@ -718,7 +721,8 @@ For the gdal_translate utility, the free form option syntax is:
 
 |Key|Default|Affected Format|Description|
 | --- | --- | --- | --- |
-| DEFLATE | False | Most | Apply zlib DEFLATE as a final packing stage |
+| DEFLATE | False | Most | Apply zlib DEFLATE as a final compression stage |
+| ZSTD | False | Most | Apply ZSTD as a final compression stage |
 | GZ | False | DEFLATE | Generate gzip header style |
 | RAWZ | False | DEFLATE | No zlib or gzip headers |
 | Z_STRATEGY |  | PNG, DEFLATE | DEFLATE algorithmic choice: Z_HUFFMAN_ONLY, Z_FILTERED, Z_RLE, Z_FIXED |
