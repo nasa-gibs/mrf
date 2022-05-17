@@ -745,5 +745,5 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 | --- | --- | --- |
 | ZSLICE | Integer | Sets the ZSlice to open in a 3rd dimension MRF|
 | NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt data|
-| DATATYPE | Byte | Set the desired output datatype for single LERC chunk|
+| DATATYPE | Byte | Set the desired output datatype for single LERC1 chunk|
 
