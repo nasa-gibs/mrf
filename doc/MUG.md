@@ -314,7 +314,10 @@ force the older format, JFIF to be used. For example when the tiles are to be di
 served over the web to a browser or when a legacy GDAL application, compiled without 
 brunsli support may be used to to read the data. The OPTIONS flag `JFIF` can be set in those cases, forcing 
 MRF to only generate JFIF compatible tiles:  
-`gdal_translate -of MRF -co COMPRESS=JPEG -co OPTIONS=JFIF:1 input.tif output.mrf`
+`gdal_translate -of MRF -co COMPRESS=JPEG -co OPTIONS=JFIF:1 input.tif output.mrf`  
+The command above can also be used to convert a brunsli input MRF to a JFIF output MRF.  
+Serving JPEG (JFIF) tiles from an MRF which uses brunsli as the storage format is possible, using an Apache httpd filter 
+module which converts the tiles on the fly to JFIF, see [mod_brunsli](https://github.com/lucianpls/mod_brunsli).
 
 ### JPEG Zero Enhanced (Zen) Extension
 
