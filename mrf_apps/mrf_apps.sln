@@ -1,11 +1,16 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30413.136
+# Visual Studio Version 17
+VisualStudioVersion = 17.1.32414.318
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "packindex", "vc\can\can.vcxproj", "{E392B36A-171A-4CCF-A974-29B20AD6D302}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mrf_insert", "vc\mrf_insert\mrf_insert.vcxproj", "{2A11EB20-EC76-4318-BF9D-BC4F7A75C38A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6DB99A32-70A3-422A-ACF6-3A16EFA43068}"
+	ProjectSection(SolutionItems) = preProject
+		..\doc\MUG.md = ..\doc\MUG.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -170,6 +170,20 @@ Tiles in an MRF are stored using one of the multiple supported packing or compre
 raster formats like JPEG, TIFF or PNG, while others are only compression formats. The choice of the tile format is passed to the MRF driver 
 using the GDAL create option `COMPRESS`.
 
+|Format|Data Type|Description|Usage|Lossy|Comments|
+| --- | --- | --- | --- | --- |
+|[NONE](#none-compression)|All|As is, no compression|Rarely|No|Very large and very fast|
+|[QB3](#qb3-compression)|All Integer|Data compressed with [QB3](https://github.com/lucianpls/QB3)|Recommended|No|Small and very fast|
+|[PNG](#png-and-ppng-compression)|Byte, UInt16, Int16|Well known PNG format|Web Tiles|No|Small but very slow to create|
+|[PPNG](#png-and-ppng-compression)|Byte|PNG with per tile palette|Web Tiles|No|Small but very slow to create|
+|[ZSTD](#zstd-compression)|All|Data compressed with [ZSTD](https://github.com/facebook/zstd)|Recommended|No|Good compression, speed depends on QUALITY=[1-22]|
+|[DEFLATE](#deflate-compression)|All|Data compressed with [zlib](https://www.zlib.net/)|DEPRECATED|No|Use ZSTD instead, it is faster and better|
+|[JPEG](#jpeg-compression)|Byte, UInt16|Well known JPEG format|Images, Web Tiles|Yes|Very small and fast. Up to 12bit per channel data. Includes zero mask (Zen)|
+|[-BRUNSLI](#jpeg-compression)|Byte|JPEG repacked by Brunsli(https://github.com/google/brunsli)|Smaller than JPEG| Yes|Uses COMPRESSION=JPEG|
+|[JPNG](#jpng-compression)|Byte|Mix of JPEG and PNG|Web Tiles with transparency|Yes|Uses JPEG for tiles with no transparency, PNG otherwise. Use only when JPEG-Zen is not suitable|
+|[TIFF](#tiff-compression)|All|Well known TIFF with LZW compression|Web Tiles|No|Mostly for web clients with TIFF support|
+|[LERC](#lerc-compression)|All|Data compressed with [LERC](https://github.com/Esri/lerc)||Choice|Fast compression with fixed quantization step|
+
 ## NONE Compression
 
 As the name suggest, the NONE format directly stores the tile array, in a row major pixel order. PIXEL and BAND interleave modes are supported, 
@@ -179,13 +193,26 @@ tiles which only contain zeros are not stored. As with any other tile format, th
 the data file. For multiple byte data types, the order of the bytes is machine dependent, except if the NETBYTEORDER option is set, in which
 case the bytes are written in big endian. This rule applies to most of the other formats that do not explicitly control the data values (JPEG, PNG, TIF).
 
+## QB3 Compression
+
+### PRELIMINARY
+
+The [QB3](https://github.com/lucianpls/QB3) compression is a raster specific lossless integer compression algorithm. It is very fast for both 
+compression and decompression yet it produces very good compression results for natural images. In MRF it supports all integer types, signed 
+and unsigned. Multiple bands per tile are supported (INTERLEAVE=PIXEL), with a default inter-band decorrelation for RGB(A) data, 
+decorrelation which can improve the compression ratio. If the input data has 3 or 4 bands but it is not RGB(A), the decorrelation can be disabled
+by using PHOTOMETRIC=MULTI create option.  
+QB3 has an optional extra compression step which in some cases can result in additional compression while still being lossless. Since this step
+slows down the compression and is usually ineffective for Byte data, it is not enabled by default. To enable it, use QUALITY settings above 95.
+
 ## PNG and PPNG Compression
 
 PNG is a well known lossless compression image format. It uses a raster filter plus the DEFLATE algorithm internally. PNG is currently the 
 default compression mechanism for MRF. PNG compression is slower than DEFLATE, but results in smaller data files which are also suitable as 
 tiled web services. PPNG is an MRF specific compression name, it stands for Palette PNG. While both types can have an MRF level palette, 
-PPNG also stores the palette inside each and every PNG tile. This mode should only be used if the individual tiles are to be served over the web as colorized images, 
-otherwise the regular PNG compression results in smaller data files. The PNG format itself supports up to sixteen bit unsigned integer data types.
+PPNG also stores the palette inside each and every PNG tile. This mode should only be used if the individual tiles are to be served 
+over the web as colorized images, otherwise the regular PNG compression results in smaller data files. The PNG format itself supports up 
+to sixteen bit unsigned integer data types.
 However, the MRF driver can treat a 16 bit PNG as containing either unsigned or signed data type (Int16), in which case the values stored in 
 the PNG are interpreted as signed. The QUALITY setting controls the DEFLATE stage of the PNG, with the same behavior as the ones described in 
 the DEFLATE compression. Similarly, the Z_STRATEGY band option controls the DEFLATE stage of PNG. Choosing Z_RLE or Z_HUFFMAN_ONLY as strategies 
@@ -223,7 +250,8 @@ improves the raster compression considerably in most cases, especially when mult
 The filter has a negligible computation cost, especially when compared with the ZSTD compression itself. This filter does not apply when ZSTD 
 is applied as a second stage compression, except when the first stage is `NONE`.
 
-## DEPRECATED: DEFLATE Compression
+## DEFLATE Compression
+### DEPRECATED
 
 **The ZSTD tile compression is recommended instead**
 
