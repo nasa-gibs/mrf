@@ -173,7 +173,7 @@ using the GDAL create option `COMPRESS`.
 |Format|Data Type|Description|Usage|Lossy|Comments|
 | --- | --- | --- | --- | --- | --- |
 |[NONE](#none-compression)|All|As is, no compression|Rarely|No|Very large and very fast|
-|[QB3](#qb3-compression)|All Integer|Data compressed with [QB3](https://github.com/lucianpls/QB3)|Recommended|No|Small and very fast|
+|[QB3](#qb3-compression)|Integer|Data compressed with [QB3](https://github.com/lucianpls/QB3)|Recommended|No|Small and very fast|
 |[PNG](#png-and-ppng-compression)|Byte, UInt16, Int16|Well known PNG format|Web Tiles|No|Small but very slow to create|
 |[PPNG](#png-and-ppng-compression)|Byte|PNG with per tile palette|Web Tiles|No|Small but very slow to create|
 |[ZSTD](#zstd-compression)|All|Data compressed with [ZSTD](https://github.com/facebook/zstd)|Recommended|No|Good compression, speed depends on QUALITY=[1-22]|
