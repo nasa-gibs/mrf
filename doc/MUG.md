@@ -171,7 +171,7 @@ raster formats like JPEG, TIFF or PNG, while others are only compression formats
 using the GDAL create option `COMPRESS`.
 
 |Format|Data Type|Description|Usage|Lossy|Comments|
-| --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- |
 |[NONE](#none-compression)|All|As is, no compression|Rarely|No|Very large and very fast|
 |[QB3](#qb3-compression)|All Integer|Data compressed with [QB3](https://github.com/lucianpls/QB3)|Recommended|No|Small and very fast|
 |[PNG](#png-and-ppng-compression)|Byte, UInt16, Int16|Well known PNG format|Web Tiles|No|Small but very slow to create|
