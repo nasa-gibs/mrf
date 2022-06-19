@@ -195,15 +195,15 @@ case the bytes are written in big endian. This rule applies to most of the other
 
 ## QB3 Compression
 
-### PRELIMINARY
-
 The [QB3](https://github.com/lucianpls/QB3) compression is a raster specific lossless integer compression algorithm. It is very fast for both 
 compression and decompression yet it produces very good compression results for natural images. In MRF it supports all integer types, signed 
 and unsigned. Multiple bands per tile are supported (INTERLEAVE=PIXEL), with a default inter-band decorrelation for RGB(A) data, 
 decorrelation which can improve the compression ratio. If the input data has 3 or 4 bands but it is not RGB(A), the decorrelation can be disabled
 by using PHOTOMETRIC=MULTI create option.  
 QB3 has an optional extra compression step which in some cases can result in additional compression while still being lossless. Since this step
-slows down the compression and is usually ineffective for Byte data, it is not enabled by default. To enable it, use QUALITY settings above 95.
+slows down the compression and is usually ineffective for Byte data, it is not enabled by default. To enable it, use QUALITY settings above 95.  
+The QB3 is highly recommended as a format for lossless data. It achieves better compression that PNG, DEFLATE, ZSTD and LERC while being significantly
+faster. The fast compression makes it especially valuable for use in a caching MRF or when MRF is a transient (work) format.  
 
 ## PNG and PPNG Compression
 
