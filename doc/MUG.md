@@ -223,37 +223,31 @@ Example of gdal_translate to MRF/PNG:
 
 ## ZSTD Compression
 
-[ZSTD](https://github.com/facebook/zstd) is a generic lossless compression algorithm, similar to DEFLATE, also open source. By itself, it is 
-considerably faster than DEFLATE for the same compression ratio. MRF ZSTD can handle all the data types, and supports both band 
-and pixel interleave. The ZSTD compression level can be controled somehwat by providing a quality figure, an integer between 1 and 22. 
-The default level in MRF is 9, where it is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
-However, the MRF ZSTD uses a raster specific data filter (see below), which improves the compression ratio considerably while having 
-almost no computational cost. In general the default ZSTD level should not be modified, it provides great compression and is fast. When needed,
-the `QUALITY` option can be used to choose a different level, when the value provided is between 1 and 22 inclusive. Note tha large values
-can take a massive amount of time and do not necessarily improve the compression. Lower figures will be faster but achieve less compression 
-while higher ones will take considerably more CPU time while compressing better. Values outside of the valid range will not have any effect, 
-the ZSTD comression level will be 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing reasonable compression. It should be used
-in most cases where the write speed is more important than the absolute storage size, for example in caching MRFs. The fact that ZSTD compression
-is lossless and that it works with all supported data types makes this choice even better.
+[ZSTD](https://github.com/facebook/zstd) is an open source generic lossless compression algorithm, similar to DEFLATE. It is considerably faster 
+than DEFLATE for the same compression ratio and can achieve better compression. ZSTD in MRF can handle all the data types, both band 
+and pixel interleave. The ZSTD compression level can be controled by providing a quality figure, an integer between 1 and 22. 
+The default level in MRF is 9, where ZSTD is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
+However, the MRF with ZSTD uses a raster specific data filter (see below), which improves the compression ratio considerably while having 
+almost no computational cost. In general the default ZSTD level should not be modified, it provides good compression and is fast. Lower figures 
+will be faster but achieve less compression while higher ones will take more CPU time while compressing better. Note that large values
+can take a massive amount of time and do not necessarily improve the compression over slighly lower levels. QUALITY values outside of the valid 
+range will be ignored, the ZSTD comression level will stay the default 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing reasonable compression. It should be used in most cases where the write speed is more important than the absolute storage size, for example in caching MRFs. 
+The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
 
-ZSTD can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
-The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format
-is equivalent to `NONE` compression with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the
-tile order may differ.
+ZSTD in MRF can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
+The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format is equivalent to `NONE` compression 
+with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the tile order may differ.
 ```
 gdal_translate –of MRF –co COMPRESS=ZSTD input.tif zstd.mrf
 gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw_zstd.mrf
 ```
 ### MRF ZSTD Optimization
-MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final compression. This filter 
-improves the raster compression considerably in most cases, especially when multi byte data types or pixel interleave tiles are written. 
-The filter has a negligible computation cost, especially when compared with the ZSTD compression itself. This filter does not apply when ZSTD 
-is applied as a second stage compression, except when the first stage is `NONE`.
+ZSTD is a generic byte stream compression. The compression achieved can be improved if the input data type is taken into consideration by filtering
+the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final compression. This filter improves the raster compression considerably in most cases, especially when multi byte data types or pixel interleave tiles are written. The filter has a negligible computation cost, especially when compared with the ZSTD compression itself, so it is always applied. 
+This filter is not used when ZSTD is applied as a second stage compression, except when the first compression stage is `NONE`.
 
 ## DEFLATE Compression
-### DEPRECATED
-
-**The ZSTD tile compression is recommended instead**
+### DEPRECATED, **ZSTD is recommended instead**
 
 DEFLATE is a well known generic compression algorithm, implemented in the open source zlib library. In MRF it can be used in two ways, as a 
 stand-alone tile packing mechanism and also as a second compression step to other compression formats. The second meaning is activated by 
@@ -264,7 +258,7 @@ size data files, although the tile order may differ.
 gdal_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
 gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 ```
-The zlib compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which is very good 
+The zlib compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which produces very good 
 compression albeit slow. A quality setting of 60 is recommended as a tradeoff between compression speed and size. Quality of zero, 
 corresponding to quality values under 10, means no compression.  
 The DEFLATE compression can use different tile headers. The default should be used in general, since the speed and size difference 
@@ -278,15 +272,16 @@ The following command will generate an MRF in which every tile is a gzip stream:
 
 `gdal_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on" input.tif gzipped.mrf`
 
-Zlib also supports slightly different compression strategies, and MRF can control these strategies. The compression speed and the size 
+This feature can be useful when tiles are served via http, which mandates support for GZIP decoding.  
+Zlib supports slightly different compression strategies, and MRF allows control of these strategies. The compression speed and the size 
 of the output will change significantly if these options are used. This options only affect the compression algorithm, so the generated 
 tiles can always be decompressed. For exact details on the strategy flags refer to the zlib documentation. The free form option to use 
 is `Z_STRATEGY`, and the valid values are:
 
 - `Z_FILTERED`: Skips the optional filtering of the input stream
-- `Z_HUFFMAN_ONLY`:  Only the Huffman encoding part of DEFLATE is performed
+- `Z_HUFFMAN_ONLY`: Only the Huffman encoding part of DEFLATE is performed
 - `Z_RLE`: Somewhat like an RLE, within the limits of DEFLATE
-- `Z_FIXED`:  Fixed Huffman tables
+- `Z_FIXED`: Fixed Huffman tables as opposed to addaptive ones
 
 Example which will generate an RLE compressed tile with gzip style headers:  
 `gdal_translate –of MRF –co COMPRESS=DEFLATE -co OPTIONS="GZ:on Z_STRATEGY:Z_RLE" input.tif gzipped.mrf`
@@ -295,15 +290,14 @@ Example which will generate an RLE compressed tile with gzip style headers:
 
 The JPEG compression is a well know lossless image compression, tuned for good visual quality combined with good 
 compression. Since JPEG is a well known format, the MRF tiles compressed as JPEG are suitable for serving as web 
-tiles. Depending on how the GDAL MRF was built, the MRF/JPEG format can handle 8 and sometimes 12 bit data. The 
-12 bit option is only available when the GDAL internal libJPEG is used and the GDAL 12bit JPEG is enabled. 
-MRF/JPEG can handle up to 10 bands in pixel interleave mode. Note that only 8 bit JPEGs with 1 or 3 bands are 
-suitable for web tile services in most cases. The MRF `QUALITY` output option value is directly passed to JPEG 
+tiles. Depending on how the GDAL MRF was built, the MRF/JPEG format can handle 8 and sometimes 12 bit data.
+MRF with JPEG can handle up to 10 bands in pixel interleave mode. Note that only 8 bit JPEGs with 1 or 3 bands are 
+suitable as web tile services in most cases. The MRF `QUALITY` output option value is directly passed to JPEG 
 library as the Q (quantization) factor, with the default value being 85.
 Note that the JPEG Q value does control the output quality and size, but it is not linear. For the exact interpretation 
 of Q, please consult JPEG documentation. Values between 0 and 100 are supported, the reasonable range being between 
-sixty and eighty five, larger values producing visually better results at the cost of increased size. For three 
-bands interleaved, a couple of encoding options are available, controlled via the `PHOTOMETRIC` setting. 
+60 and 85, larger values producing visually better results at the cost of increased size.  
+For three bands interleaved, a couple of encoding options are available, controlled via the `PHOTOMETRIC` setting. 
 The default setting should be used most of the time.
 
 The valid choices for the `PHOTOMETRIC` setting are:
@@ -311,96 +305,100 @@ The valid choices for the `PHOTOMETRIC` setting are:
 good compression and visual quality. The color space has significantly lower quality than the brightness, which
  matches the human vision charateristics.
 - `YCC`: Uses the YCbCr colorspace with 4:4:4 sampling, i.e. it is not spatially resampled. This setting produces 
-tiles with fewer color artifacts which are about a third larger than the default. The color conversion itself results 
+tiles with fewer color artifacts while being about a third larger than the default. The color conversion itself results 
 in a slight loss of information, as well as the quantization.
 - `RGB`: Compressed as RGB, not color converted and not spatially resampled. For the same Q setting, this mode produces 
  JPEG files much larger than the default, commonly two or three time larger. MRF with this setting can be decoded 
 and re-encoded multiple times at the same Q without any data quality degradation.
 
-Optimizing the Huffman encoding tables for each tile, as opposed to using the default table will improve the compression 
-by a few percent in most cases. By default, MRF uses the default tables for 8 bit data. For 12 bit JPEG optimize is always 
-on since there are no predefined Huffman tables.
-In MRF, optimized Huffman tables in JPEG can be enabled by adding the "OPTIMIZE:ON" to the OPTIONS list. Choosing this will increase 
-encoding time and reduce the tile size, both changes are relatively small in most cases.  
+Optimizing the Huffman encoding tables for each tile, as opposed to using a default table will improve the compression 
+by a few percent in most cases, while taking slighly longer to compress. By default, MRF uses the default tables for 8 
+bit data. For 12 bit JPEG optimize is always on since there are no predefined Huffman tables for that mode.
+In MRF, optimized Huffman tables in JPEG can be enabled by adding the "OPTIMIZE:ON" to the OPTIONS list. Choosing this 
+will increase encoding time somewhat and reduce the tile size, both changes are relatively small in most cases. It is
+recommended to use custom tables when tiles will be stored for a while or when web tile services will operate from the MRF.  
 To use the 12 bit JPEG, when available, set the data type to Int16 or UInt16.
 
 ### brunsli (JPEG XL)
 
-While commonly refered to as a JPEG file, the format normally used to stored JPEG compressed images
+While commonly refered to as a JPEG file, the normal file format used to stored JPEG compressed images
 is actually [JFIF](https://en.wikipedia.org/wiki/JPEG_File_Interchange_Format). A newer format, which can be 
 losslessly converted back and forth to JFIF exists, named [brunsli](https://github.com/google/brunsli). Brunsli 
-format has the advantage that it can store the same information as the JFIF in a package around 22% smaller on average. 
-Since brunsli is only a better packaging of a JPEG, the result is still JPEG compressed and the it has exactly the
-same characteristics and limitations. Brunsli supports all the standard JFIF/JPEG features, with the **notable 
+format has the advantage that it can store the same exact information as the JFIF in a package 22% smaller on average. 
+Since brunsli is only a better packing of a JPEG, the result is still JPEG compressed and the it has exactly the
+same features and limitations. Brunsli supports all the standard JFIF/JPEG features, with the **notable 
 exception** of 12bit per sample JPEGs.  
 Using the brunsli format does have a small negative effect on the speed of reading and writing the tiles when compared 
 with the JFIF format, because the brunsli adds a codec stage. Yet both reading and writing are still fast compared with 
 DEFLATE or PNG.
-When GDAL and MRF are compiled with brunsli support and JPEG compression is selected, the extra compression is 
-beneficial, so MRF will store the data in the brunsli format when possible. In some cases it is useful to
+When GDAL and MRF are compiled with brunsli support and JPEG compression is selected, the extra compression is very
+beneficial, so MRF will store the data in the brunsli format bye default. In some cases it is useful to
 force the older format, JFIF to be used. For example when the tiles are to be directly 
 served over the web to a browser or when a legacy GDAL application, compiled without 
 brunsli support may be used to to read the data. The OPTIONS flag `JFIF` can be set in those cases, forcing 
 MRF to only generate JFIF compatible tiles:  
-`gdal_translate -of MRF -co COMPRESS=JPEG -co OPTIONS=JFIF:1 input.tif output.mrf`  
+`gdal_translate -of MRF -co COMPRESS=JPEG -co OPTIONS=JFIF:on input.tif output.mrf`  
 The command above can also be used to convert a brunsli input MRF to a JFIF output MRF.  
 Serving JPEG (JFIF) tiles from an MRF which uses brunsli as the storage format is possible, using an Apache httpd filter 
 module which converts the tiles on the fly to JFIF, see [mod_brunsli](https://github.com/lucianpls/mod_brunsli).
 
 ### JPEG Zero Enhanced (Zen) Extension
 
-The JPEG tiles generated by MRF contain a mask of zero value pixels stored in a JPEG Zen chunk, using APP3 "Zen" tag. If the size of the Zen 
-chunk is zero, all pixels within the respective tile are known to be non-zero. When reading a JPEG that contains a Zen chunk, the MRF driver will 
-ensure that the pixel positions that contain zero matches the mask. In essence, the pixels that contain zero are stored in a lossless way and can be
-used as a data mask, when read with the MRF driver. This eliminates the JPEG edge artifacts when the background is black, enabling a Zen JPEG 
-encoded MRF to be used as an overlay on top of other data, as long as black is made transparent. 
-Using MRF/JPEG for storing visua data can produce significant space savings over the next 
-best option, which would generally be lossless PNG or LERC. Since the Zen chunk is built 
+The JPEG tiles generated by MRF contain a mask of zero value pixels, which is stored in a JPEG Zen chunk, using APP3 "Zen" tag. 
+If the size of the Zen chunk is zero, all pixels within the respective tile are known to be non-zero. When reading a JPEG that 
+contains a Zen chunk, the MRF driver will ensure that the pixel positions that contain zero matches the mask. In essence, the 
+pixels that contain zero are stored in a lossless way and can be used as a data mask, when read with the MRF driver. This 
+eliminates the JPEG edge artifacts when the background is black, enabling a Zen JPEG encoded MRF to be used as an overlay on
+top of other data, as long as black is made transparent.
+Using MRF/JPEG-Zen for storing visual data can produce significant space savings over the next 
+best option, which would generally be lossless JPNG, PNG or LERC. Since the Zen chunk is built 
 in accordance to the JFIF standard, the mask will be ignored by legacy applications, which 
-will only decode the JPEG image content. Since the mask is generated and consumed at 
-the MRF level, it is not visible to GDAL. 
-This feature works with either 8 or 12 bit JPEG tiles, and works even when the brunsli tile 
-format is used.
-
-The Zen bitmask is organized in a 8x8 2D bitmask, which is then compressed by run length encoding (RLE). For most inputs, the size of the Zen chunk 
-containing the mask is negligible. The potential benefit of being able to treat black as transparent outweigh this size increase thus this feature 
-cannot be turned off.
+will still decode the JPEG image content. Since the mask is generated and applied at the MRF codec level, it is not 
+accessible to GDAL. 
+This Zen feature works with either 8 or 12 bit JPEG tiles, and works even when the brunsli tile 
+format is used.  
+The Zen bitmask is organized in a 8x8 2D bitmask, which is then compressed by run length encoding (RLE). For most inputs, 
+the size of the Zen chunk containing the mask is negligible. The potential benefit of being able to treat black as transparent 
+outweigh this size increase thus this feature cannot be turned off.
 
 ## JPNG Compression
 
-The JPNG compression is a combination of PNG or JPEG tiles, depending on the presence of 
-non-opaque pixels. If all the pixels within a tile are opaque the tile is stored as JPEG, 
-otherwise it is stored as PNG with an Alpha channel. It is presented to GDAL as either a 
-Luma-Alpha or RGBA image, it will always have 2 or 4 bands, and always PIXEL interleaved.
+The JPNG compression uses a combination of PNG or JPEG tiles, depending on the presence of 
+non-opaque pixels. It is intended to be used for generating web tiles which include a transparency channel
+while minimizing the size of the tiles. If all the pixels within a tile are opaque the tile will be stored 
+as JPEG, otherwise it is stored as PNG with an Alpha channel. It is presented to GDAL as a RGBA or 
+Luma-Alpha image, it will always have 2 or 4 bands, and always PIXEL interleaved.
 Most of the MRF options from PNG and from JPEG compression still apply, including the 
 JFIF flag.
 The data file will be smaller than when using only PNG, if there are tiles that are fully 
 opaque and can be stored as JPEG. Note that depending on the options used and the input 
 data, the transition from PNG to JPEG might be visible. The normal JPEG with Zen mask 
-should be used in most cases, except if 0 is not to be transparent and when gradual 
-transparency is needed. Another advantage over MRF/JPEG/Zen is that legacy clients 
+should be used in most cases, except if 0 is not to be transparent or when gradual 
+transparency is needed. Another advantage over MRF/JPEG-Zen is that legacy clients 
 such as web browser applications do not usually need modification to be able to 
 display the tiles as intended.
 
 ## TIFF Compression
 
-In the MRF with TIFF compression, every tile is a TIFF raster which uses the lossless LZW internal compression. Most data types are supported.
-Note that the tiles are not GeoTiffs, they do not contain geotags. This compression is mostly useful for web services for certain clients which support 
+In the MRF with TIFF compression, every tile is a TIFF raster which uses the lossless LZW compression. 
+Most data types are supported. Note that the tiles are not GeoTiffs, they do not contain geotags. 
+This compression is mostly useful for web services for certain clients which support 
 decoding TIFF.
 
 ## LERC Compression
 
 Limited Error Raster Compression [LERC](https://github.com/Esri/lerc) is an original Esri raster 
-compression format. The benefit of using LERC is extremely fast compression when compared with PNG, 
-DEFLATE and even with JPEG, as well as excellent compression for data types larger than eight bit.
+compression format. The benefit of using LERC is fast compression when compared with PNG, 
+DEFLATE and even with JPEG, as well as great compression for data types larger than eight bit.
 LERC compression can be lossy or lossless. The lossy part is due to an initial quantization stage, 
 which is controled by the LERC maximum error value (LERC_PREC), which is a floating point number. 
-LERC may alter the values stored, but the change is always less or equal to this LERC maximum error 
-value. The quanta or precision of the output data values will thus be twice the LERC_PREC value. If 
-the LERC maximum error is zero or too small for any space savings to be obtained by quantization, 
-the input data values are not modified, and LERC becomes a lossless format. Output compression may 
-still occur, as long as it is lossless. LERC contains an explicit data mask, which in MRF is always 
-enabled. This mask is obtained from the NoData value if defined, otherwise it uses the value zero. 
+LERC may alter the values during compression, but the change will always be less or equal to this 
+LERC maximum error value. The quanta or precision of the output data values will thus be twice the 
+LERC_PREC value. If the LERC maximum error is zero or too small for any space savings to be obtained 
+by quantization, the input data values are not modified, and LERC becomes a lossless format.
+Output compression may still occur in this case, as long as it can be lossless.  
+LERC contains an explicit data mask, which in MRF is always enabled. This mask is obtained from the 
+NoData value if defined, otherwise the value zero is used.
 The NoData values are not stored in the compressed tile, which makes LERC a good choice 
 for storing sparse data.  
 In MRF, for integer types the default LERC_PREC value is 0.5, corresponding to lossless compression. 
@@ -410,41 +408,38 @@ particular dataset.
 To set a custom LERC precision value for a new MRF file, use the free form MRF OPTIONS mechanism: 
 `-co OPTIONS="LERC_PREC:0.005"`  
 
-There are two different styles of LERC compression supported in MRF, LERC (default, Lerc2) and LERC1.
+There are two different styles of LERC compression supported in MRF, LERC (default) and LERC1.
 
-- LERC1 is the original LERC code, which implemented a single band compression for floating point. 
-MRF can make use of it for integer type data by conversion to floating point before invoking LERC1. 
+- LERC1 is the original LERC algorithm, which implements a single band compression for floating point. 
+MRF can make use of it for integer data by conversion to floating point before invoking LERC1. 
 This means that LERC1 integer precision is limited to 24 bits. MRF also simulates pixel interleaved 
 with LERC1 compression by concatenating the results for each individual band. While there is no size 
-advantage to using LERC1 pixel interleaved in MRF, there might still be a performance advantage in 
-a cloud environment since data for all bands is read in a single operation.  
-To choose LERC1 instead of the default LERC, add V1=ON to the options string, like this: 
+advantage to using LERC1 pixel interleaved in MRF, there might be a performance advantage in some environments
+since data for all bands is read in a single operation. LERC1 is the format used by Esri terrain tiles.  
+To choose LERC1 instead of the default LERC, add V1=ON to the options string:  
 `-co OPTIONS="LERC_PREC=0.01 V1=ON"`
 
-- LERC (Lerc2) supports more data types and higher precision than LERC1 and it is usually faster than LERC1. 
-LERC development continues independent of MRF, new features may be added, and the LERC version may increase.
-The LERC library also includes different compression methods in addition to the LERC algorithm, methods 
+- LERC (Lerc2, not to be confused with Lerc version 2) supports different data types explicitly and is usually faster than LERC1. 
+LERC development continues independent of MRF, new features may be added.
+The LERC format includes different compression algorithms in addition to the original LERC1 one, methods 
 that may result in better compression. For byte input data specifically, Huffman compression is used 
 since Lerc version 2, which usually results in better compression. LERC also handles pixel interleaved data, 
 introduced at LERC version 4.
 By default, MRF writes LERC tiles using LERC version 2 for single band per tile, or the latest version
-supported by the LERC library being used otherwise. MRF files created using a more recent LERC library 
-may be unreadable by MRF using an older LERC version, which will generate LERC decoding errors. 
-When writing to a MRF - LERC, it is possible to choose a specific LERC version using the free OPTION L2_VER. 
+supported by the LERC library otherwise. MRF files created using a more recent LERC library 
+may be unreadable by MRF using an older LERC version, it will generate LERC decoding errors. 
+When writing to a MRF/LERC, it is possible to choose a specific LERC version using the free OPTION L2_VER. 
 This option is used by the MRF driver to request that LERC encoding does not use any features not available 
 in the selected version.
 For example, to choose LERC version 3 as the maximum, while specifying a value precision of 0.2, use 
 `-co OPTIONS="L2_VER=3 LERC_PREC=0.2"`
 
 
-MRF tiles compressed by LERC can be further compressed with ZSTD or DEFLATE, which in some cases can 
+MRF tiles compressed by LERC can be further compressed with ZSTD or DEFLATE which in some cases can 
 improve the overall compression, at the expense of speed. ZSTD and DEFLATE speed is asymmetric, with 
-decompression being faster than compression, so it does not affect read speeds as much as it does writes. 
-DEFLATE decompression is still significantly slower than LERC so it should be used only when the size 
-is critical or when the decompression speed is not a bottleneck, for example when reading tiles from 
-cloud storage.
+decompression being faster than compression, so it does not affect read speeds as much as it does writes.
 To add ZSTD or DEFLATE to LERC, add "ZSTD:ON" or "DEFLATE:ON" to the list of free form options. This 
-example sets both the LERC precision, the LERC version and the extra ZSTD stage: `-co OPTIONS="LERC_PREC=0.01 ZSTD:ON L2_VER:2"`
+example sets the LERC precision, the LERC version and the extra ZSTD stage: `-co OPTIONS="LERC_PREC=0.01 ZSTD:ON L2_VER:2"`
 
 
 # Functional Types of MRF
