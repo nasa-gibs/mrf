@@ -568,7 +568,7 @@ reside and adding the following lines to the top level node:
 
 ```
 <CachedSource>
-	<Source clone="true>/path/to/cloned.mrf</Source>
+	<Source clone="true">/path/to/cloned.mrf</Source>
 </CachedSource>
 ```
 
@@ -738,7 +738,7 @@ part of the GDAL interface, and as such they are not checked for correctness whe
 If a free form option doesn't seem to have the expected effect, the exact spelling should be checked, 
 they are case sensitive.
 
-The free-form `OPTONS` parameter takes a single string value. The value is a string containing white space separated 
+The free-form `OPTIONS` parameter takes a single string value. The value is a string containing white space separated 
 key value pairs. GDAL list parsing is used when reading, either the equal sign `=` or the colon `:` 
 may be used as the separator between key and value. Boolean flags default to `false`, they are treated as 
 true only if the value is `Yes`, `True` or `1`.
