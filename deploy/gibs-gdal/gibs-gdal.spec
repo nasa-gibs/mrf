@@ -1,5 +1,5 @@
 %global gdal_version 2.4.4
-%global gdal_release 4%{?dist}
+%global gdal_release 5%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -15,8 +15,8 @@ Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar
 BuildRequires:  make
 BuildRequires:  libtool
 BuildRequires:  pkgconfig
-BuildRequires:  python36
-BuildRequires:  python36-devel
+BuildRequires:  python3
+BuildRequires:  python3-devel
 BuildRequires:  libpng-devel
 BuildRequires:  libjpeg-devel
 BuildRequires:  libtiff-devel
@@ -30,8 +30,11 @@ BuildRequires:	doxygen
 BuildRequires:  expat-devel
 BuildRequires:  geos-devel
 BuildRequires:  gcc-c++
-BuildRequires: bzip2
-BuildRequires: /usr/bin/pathfix.py
+BuildRequires:  libstdc++-devel
+BuildRequires:  bzip2
+BuildRequires:  python3-numpy
+BuildRequires:  /usr/bin/pathfix.py
+BuildRequires:  openjpeg2
 
 Requires:  proj
 
@@ -147,6 +150,9 @@ sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin
 %postun -p /sbin/ldconfig
 
 %changelog
+* Wed Jan 18 2023 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-5
+- Support for el9 builds
+
 * Wed Jul 7 2021 Matthew Cechini <matthew.f.cechini@.nasa.gov> - 2.4.4-4
 - Adding install requirement for proj.4
 - Updating linking of /usr/lib64/libproj.so
