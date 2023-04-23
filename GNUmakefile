@@ -56,7 +56,7 @@ build/gdal/VERSION:
 	cp mrf_apps/* build/gdal/mrf_apps/
 
 gdal-compile:
-	( cd build/gdal ; ./configure \
+	( cd build/gdal ; sed -i 's/HAVE_CAD	=	yes/HAVE_CAD	=	no/g' GDALmake.opt.in ; ./configure \
 		--prefix=$(PREFIX) \
 		--libdir=$(PREFIX)/$(LIB_DIR) \
 		--mandir=$(PREFIX)/share/man \
@@ -67,7 +67,7 @@ gdal-compile:
 		--without-ogdi \
 		--with-libz \
 		--with-geos \
-		--with-jasper \
+		--with-jasper=no \
 		--with-png \
 		--with-gif \
 		--with-jpeg \
@@ -79,8 +79,12 @@ gdal-compile:
 		--with-gdal-ver=$(GDAL_VERSION) \
 		--disable-rpath \
 		--with-expat \
+		--without-teigha \
+		--without-cad \
+		--without-pg \
+		--with-openjpeg \
 	)
-	$(MAKE) -C build/gdal $(SMP_FLAGS) all man
+	$(MAKE) -C build/gdal $(SMP_FLAGS) man
 
 #-----------------------------------------------------------------------------
 # Install
@@ -146,7 +150,7 @@ mock: gdal-mock
 
 gdal-mock:
 	mock --clean
-	mock --root=gibs-epel-7-$(shell arch) \
+	mock --root=gibs-epel-9-$(shell arch) \
 		dist/gibs-gdal-$(GDAL_VERSION)-*.src.rpm
 
 #-----------------------------------------------------------------------------

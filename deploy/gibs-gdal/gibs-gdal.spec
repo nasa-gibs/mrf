@@ -1,5 +1,5 @@
 %global gdal_version 2.4.4
-%global gdal_release 1%{?dist}
+%global gdal_release 5%{?dist}
 
 Name:		gibs-gdal
 Version:	%{gdal_version}
@@ -13,26 +13,32 @@ Source0:	gibs-gdal-%{gdal_version}.tar.bz2
 Source1:	http://download.osgeo.org/gdal/%{gdal_version}/gdal-%{gdal_version}.tar.gz
 
 BuildRequires:  make
-BuildRequires:	libtool
+BuildRequires:  libtool
 BuildRequires:  pkgconfig
-BuildRequires:	python-devel
-BuildRequires:	libpng-devel 
-BuildRequires:	libungif-devel
-BuildRequires:	libjpeg-devel
-BuildRequires:	libtiff-devel
-BuildRequires:	jpackage-utils
+BuildRequires:  python3
+BuildRequires:  python3-devel
+BuildRequires:  libpng-devel
+BuildRequires:  libjpeg-devel
+BuildRequires:  libtiff-devel
+BuildRequires:  jpackage-utils
 BuildRequires:	jasper-devel 
-BuildRequires:	zlib-devel
-BuildRequires:	curl-devel
-BuildRequires:	chrpath
-BuildRequires:	swig 
+BuildRequires:  zlib-devel
+BuildRequires:  curl-devel
+BuildRequires:  chrpath
+BuildRequires:  swig
 BuildRequires:	doxygen
-BuildRequires:	expat-devel
-BuildRequires:  numpy
-BuildRequires:  geos-devel >= 3.3.2
-Requires:	gcc-c++
-Requires:	geos >= 3.3.2
-	
+BuildRequires:  expat-devel
+BuildRequires:  geos-devel
+BuildRequires:  gcc-c++
+BuildRequires:  libstdc++-devel
+BuildRequires:  bzip2
+BuildRequires:  python3-numpy
+BuildRequires:  /usr/bin/pathfix.py
+BuildRequires:  openjpeg2
+
+Requires:  proj
+
+
 %description
 The GDAL library provides support to handle multiple GIS file formats.
 
@@ -86,10 +92,11 @@ rm -rf swig/python/samples
 rm -rf %{buildroot}/usr/etc/bash_completion.d/gdal-bash-completion.sh
 %endif
 
+# Fix python shebangs
+pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{python3_sitearch} %{buildroot}%{_bindir}/*.py
 
 %clean
 rm -rf %{buildroot}
-
 
 %files
 %defattr(-,root,root,-)
@@ -99,11 +106,12 @@ rm -rf %{buildroot}
 %{_libdir}/*.so.*
 %{_datadir}/gdal
 %{_mandir}/man1/*.1*
-%{python_sitearch}/*.egg-info
-%{python_sitearch}/gdal*
-%{python_sitearch}/ogr*
-%{python_sitearch}/osr*
-%{python_sitearch}/osgeo
+%{python3_sitearch}/*.egg-info
+%{python3_sitearch}/gdal*
+%{python3_sitearch}/ogr*
+%{python3_sitearch}/osr*
+%{python3_sitearch}/osgeo
+%{python3_sitearch}/__pycache__/*
 %{_libdir}/pkgconfig/gdal.pc
 
 %files devel
@@ -116,6 +124,7 @@ rm -rf %{buildroot}
 
 %files apps
 %defattr(-,root,root,-)
+%{_bindir}/can
 %{_bindir}/mrf_insert
 %{_bindir}/mrf_clean.py
 %{_bindir}/mrf_join.py
@@ -127,10 +136,33 @@ rm -rf %{buildroot}
 
 %post
 /sbin/ldconfig
+# Fix python shebangs post install
+sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin/gdal*.py /usr/bin/gcps2wld.py /usr/bin/mkgraticule.py /usr/bin/pct2rgb.py /usr/bin/epsg_tr.py /usr/bin/gcps2vec.py /usr/bin/rgb2pct.py /usr/bin/esri2wkt.py /usr/bin/ogrmerge.py 
+
+# Link /usr/lib64/libproj.so to /usr/lib64/libproj.so.##
+ln -s $(ls /usr/lib64/libproj.so.[0-9]?) /usr/lib64/libproj.so
+
+%post apps
+# Fix python shebangs post install apps
+sed -i 's@\/usr\/libexec\/platform-python -s@\/usr\/bin\/env python3@g' /usr/bin/mrf*.py /usr/bin/tiles2mrf.py
+
 
 %postun -p /sbin/ldconfig
 
 %changelog
+* Wed Jan 18 2023 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-5
+- Support for el9 builds
+
+* Wed Jul 7 2021 Matthew Cechini <matthew.f.cechini@.nasa.gov> - 2.4.4-4
+- Adding install requirement for proj.4
+- Updating linking of /usr/lib64/libproj.so
+
+* Mon Apr 19 2021 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-3
+- Support for CentOS 8 builds
+
+* Wed Dec 16 2020 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-2
+- Use Python3 apps, include can, and moved gcc-c++ to BuildRequires
+
 * Thu Mar 19 2020 Joe T. Roberts <joe.t.roberts@jpl.nasa.gov> - 2.4.4-1
 - Update to GDAL 2.4.4
 
