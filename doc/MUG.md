@@ -68,6 +68,7 @@ configurations exist.
 - The data component contains the raster tiles forming the MRF, which themselves contain data values for each pixel. As opposed to the index,
   there is no guaranteed order of the data tiles within the data file. The data file is modified only by appending at the end of the file, 
   all existing content will continue to take space on disk, even if it was replaced and is no longer accessible via the MRF driver.
+  The data file name may have a variety of extensions (e.g. ".ppg" for PNG tiles or ".pjg" for JPEG tiles).
 
 Note that there is no redundancy of information, neither of the components contain any information which exist in a different component 
 of the same MRF. All three components are required for accessing the MRF content. It is not usually possible to fully recover the dataset from 
