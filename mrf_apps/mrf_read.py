@@ -109,11 +109,11 @@ if len(mrfDoc.getElementsByTagName('Raster')) > 0:
         sizeElem  = rasterElem.getElementsByTagName('Size')[0]
         sizeAttrs = dict(sizeElem.attributes.items())
 
-        mrf_x = int(sizeAttrs['x'])
-        mrf_y = int(sizeAttrs['y'])
+        mrf_x = float(sizeAttrs['x'])
+        mrf_y = float(sizeAttrs['y'])
 
         if 'z' in sizeAttrs:
-            mrf_z = int(sizeAttrs['z'])
+            mrf_z = float(sizeAttrs['z'])
 
     if len(rasterElem.getElementsByTagName('Compression')):
         compressionElem = rasterElem.getElementsByTagName('Compression')[0]
