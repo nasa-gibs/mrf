@@ -336,8 +336,8 @@ int can(const options &opt) {
             }
             BIT_SET(line, bit_pos);
         }
-        line += 4; // Points to the header end
     }
+    line += 4; // Points to the header end
     fclose(in_idx);
 
 #undef BIT_SET
@@ -345,7 +345,7 @@ int can(const options &opt) {
     if (!opt.quiet)
         cout << "Index packed from " << in_size << " to " << FTELL(out_idx) << endl;
 
-    // line should point to the last line or the one after the last
+    // line should point to the end of header
     assert(header.size() == line);
 
     // swap all header values to big endian
