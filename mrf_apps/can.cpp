@@ -270,7 +270,7 @@ int can(const options &opt) {
     vector<uint32_t> header(header_size / sizeof(uint32_t));
 
     // Reserve space for the header
-    FSEEK(out_idx, header_size, SEEK_SET);
+    fwrite(header.data(), sizeof(uint32_t), header.size(), out_idx);
 
     // Running count of output blocks
     size_t count = 0;
@@ -319,23 +319,21 @@ int can(const options &opt) {
         }
     }
 
-    auto extra_bytes = in_size % BSZ;
+    auto extra_bytes = (in_size % BSZ) ? (in_size % BSZ) : BSZ;
 
-    // The very last block may be partial
-    if (extra_bytes) {
-        memset(buffer, 0, BSZ);
-        if (extra_bytes != fread(buffer, 1, extra_bytes, in_idx)) {
-            cerr << "Error reading block from input file\n";
+    // The very last block may be partial, but it always exists
+    memset(buffer, 0, BSZ);
+    if (extra_bytes != fread(buffer, 1, extra_bytes, in_idx)) {
+        cerr << "Error reading block from input file\n";
+        return IO_ERR;
+    }
+
+    if (!check(buffer)) {
+        if (extra_bytes != fwrite(buffer, 1, extra_bytes, out_idx)) {
+            cerr << "Error writing to output file\n";
             return IO_ERR;
         }
-
-        if (!check(buffer)) {
-            if (extra_bytes != fwrite(buffer, 1, extra_bytes, out_idx)) {
-                cerr << "Error writing to output file\n";
-                return IO_ERR;
-            }
-            BIT_SET(line, bit_pos);
-        }
+        BIT_SET(line, bit_pos);
     }
     line += 4; // Points to the header end
     fclose(in_idx);
