@@ -651,9 +651,34 @@ gdal_translate –of MRF –co ZSIZE=10 source3.tif TenSlice.mrf:MRF:Z3
 
 gdaladdo –r avg TenSlice.mrf:MRF:Z3
 ```
+
+# Notes on using MRF
+
+## MRF as a Web Tile Cache
+One of the most common uses of MRF is to serve as a fast and easy to use tile cache for a web map tile server. 
+Since far fewer files are used, adn MRF tile cache is much more efficient at using the disk than individual tiles would be,
+while also offering better performance.
+For example, the [NASA WorldView](https://worldview.earthdata.nasa.gov/) and [NASA-GIBS/OnEarth server](https://github.com/nasa-gibs/onearth) 
+are using MRF as a web tile cache. An MRF can be updated at the same time as tiles are accessed by a tile server. 
+The [mrf_insert](https://github.com/nasa-gibs/mrf/blob/master/mrf_apps/mrf_insert.cpp) utility allows a small region 
+of an MRF to be updated efficiently, including the overview tiles affected, without distrubing the web server access 
+to tiles in the same MRF.
+For a simple web server solution using MRF and based on the Apache HTTPD server, use [mod_mrf](https://github.com/lucianpls/mod_mrf).
+
+## Dealing with large MRF index files
+MRF efficiently scales to very large areas. For example it is common to have MRFs that cover a whole planet at very high resolution, 
+such as the [5m Mars CTX mosaic](http://astro.arcgis.com/CTX/index.html) or even larger.
+MRF is also great for storing sparse datasets, where very few ares have actual data. The size of the index file component of an
+MRF does not depend on the amount on data stored but instead is proportional to the number of possible tiles. This is usually not a 
+problem when the MRF is stored on a file system, since the MRF makes good use of file system holes, which are areas of a file 
+that contain no data. It can become a problem when copying data to a different location, or on storage systems that do not support 
+sparse files, AWS S3 for example. The recommended way to handle such sparse MRF index files is to use the [MRF can](https://github.com/nasa-gibs/mrf/blob/master/mrf_apps/can.cpp) utility. It can convert the sparse index into a compact form and then extract it back to a sparse file when needed.
+While the MRF GDAL driver cannot access an MRF with a canned (compact) index, the [mod_mrf](https://github.com/lucianpls/mod_mrf) 
+tile handler can serve tiles from an MRF with a canned index.
+
 ## Single LERC data MRF
-The MRF driver recognizes and reads a LERC/LERC1 compressed file. This type of file behaves as a read-only single tile MRF with LERC 
-compression, without geo-reference. This feature is mostly intended to be used by the GDAL WMS driver. An open option, `DATATYPE`, 
+The MRF driver recognizes and reads a LERC and LERC1 compressed file. This type of file behaves as a read-only single tile MRF 
+with LERC compression, without geo-reference. This feature is mostly intended to be used by the GDAL WMS driver. An open option, `DATATYPE`, 
 can be used to set the data type when reading from LERC1 compressed data, since that information is not available in the LERC itself. 
 The default data type for LERC1 is byte. LERC (V2) can only be read as the same data type it was encoded, the DATATYPE open option 
 is ignored.
