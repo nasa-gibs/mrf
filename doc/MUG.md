@@ -775,7 +775,7 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 | NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt data|
 | DATATYPE | Byte | Set the desired output datatype for single LERC1 chunk|
 
-# APPENDIX E, Change Log
+# APPENDIX F, Change Log
 
 2024-06-21  Lucian Plesea
 * Add support for 64 bit integer data type, signed and unsigned, for NONE, DEFLATE, ZSTD, QB3 and TIF tile format
