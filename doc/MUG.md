@@ -197,10 +197,10 @@ case the bytes are written in big endian. This rule applies to most of the other
 ## QB3 Compression
 
 The [QB3](https://github.com/lucianpls/QB3) compression is a raster specific lossless integer compression algorithm. It is very fast for both 
-compression and decompression yet it produces very good compression results for natural images. In MRF it supports all integer types, signed 
+compression and decompression and it produces great compression for natural images. In MRF it supports all integer types, signed 
 and unsigned. Multiple bands per tile are supported (INTERLEAVE=PIXEL), with a default inter-band decorrelation for RGB(A) data, 
-decorrelation which can improve the compression ratio. If the input data has 3 or 4 bands but it is not RGB(A), the decorrelation can be disabled
-by using PHOTOMETRIC=MULTI create option.  
+decorrelation which can improve the compression ratio. If the input data has 3 or 4 bands but it is not RGB(A), the decorrelation 
+can be disabled by using PHOTOMETRIC=MULTI create option.  
 QB3 has an optional extra compression step which in some cases can result in additional compression while still being lossless. Since this step
 slows down the compression and is usually ineffective for Byte data, it is not enabled by default. To enable it, use QUALITY settings above 95.  
 The QB3 is highly recommended as a format for lossless data. It achieves better compression that PNG, DEFLATE, ZSTD and LERC while being significantly
@@ -225,15 +225,17 @@ Example of gdal_translate to MRF/PNG:
 ## ZSTD Compression
 
 [ZSTD](https://github.com/facebook/zstd) is an open source generic lossless compression algorithm, similar to DEFLATE. It is considerably faster 
-than DEFLATE for the same compression ratio and can achieve better compression. ZSTD in MRF can handle all the data types, both band 
+than DEFLATE at the same compression ratio and can achieve better compression. ZSTD in MRF can handle all the data types, both band 
 and pixel interleave. The ZSTD compression level can be controled by providing a quality figure, an integer between 1 and 22. 
 The default level in MRF is 9, where ZSTD is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
-However, the MRF with ZSTD uses a raster specific data filter (see below), which improves the compression ratio considerably while having 
-almost no computational cost. In general the default ZSTD level should not be modified, it provides good compression and is fast. Lower figures 
+In general the default ZSTD level should not be modified, it provides good compression and is fast. Lower figures 
 will be faster but achieve less compression while higher ones will take more CPU time while compressing better. Note that large values
 can take a massive amount of time and do not necessarily improve the compression over slighly lower levels. QUALITY values outside of the valid 
-range will be ignored, the ZSTD comression level will stay the default 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing reasonable compression. It should be used in most cases where the write speed is more important than the absolute storage size, for example in caching MRFs. 
-The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
+range will be ignored, the ZSTD comression level will stay the default 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing 
+reasonable compression. It should be used in most cases where the write speed is more important than the absolute storage size, for example 
+in caching MRFs. The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
+MRF with ZSTD uses a data filter (see below), which improves the compression ratio considerably while having almost no computational cost. 
+
 
 ZSTD in MRF can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
 The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format is equivalent to `NONE` compression 
@@ -244,7 +246,9 @@ gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw
 ```
 ### MRF ZSTD Optimization
 ZSTD is a generic byte stream compression. The compression achieved can be improved if the input data type is taken into consideration by filtering
-the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final compression. This filter improves the raster compression considerably in most cases, especially when multi byte data types or pixel interleave tiles are written. The filter has a negligible computation cost, especially when compared with the ZSTD compression itself, so it is always applied. 
+the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final 
+compression. This filter improves the raster compression considerably in most cases, especially for multi byte data types and for pixel interleaved 
+data. The filter has a negligible computation cost, especially when compared with the ZSTD compression itself, so it is always applied. 
 This filter is not used when ZSTD is applied as a second stage compression, except when the first compression stage is `NONE`.
 
 ## DEFLATE Compression
@@ -770,4 +774,10 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 | ZSLICE | Integer | Sets the ZSlice to open in a 3rd dimension MRF|
 | NOERRORS | False | If true, read errors will become warnings, allowing the read to continue past corrupt data|
 | DATATYPE | Byte | Set the desired output datatype for single LERC1 chunk|
+
+# APPENDIX E, Change Log
+
+2024-06-21  Lucian Plesea
+* Add support for 64 bit integer data type, signed and unsigned, for NONE, DEFLATE, ZSTD, QB3 and TIF tile format
+* Add support for signed 8 bit integer
 
