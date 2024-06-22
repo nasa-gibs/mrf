@@ -668,13 +668,15 @@ For a simple web server solution using MRF and based on the Apache HTTPD server,
 ## Dealing with large MRF index files
 MRF efficiently scales to very large areas. For example it is common to have MRFs that cover a whole planet at very high resolution, 
 such as the [5m Mars CTX mosaic](http://astro.arcgis.com/CTX/index.html) or even larger.
-MRF is also great for storing sparse datasets, where very few ares have actual data. The size of the index file component of an
+MRF is also great for storing sparse datasets, where very few ares have actual data. The virtual size of the index file component of an
 MRF does not depend on the amount on data stored but instead is proportional to the number of possible tiles. This is usually not a 
-problem when the MRF is stored on a file system, since the MRF makes good use of file system holes, which are areas of a file 
-that contain no data. It can become a problem when copying data to a different location, or on storage systems that do not support 
-sparse files, AWS S3 for example. The recommended way to handle such sparse MRF index files is to use the [MRF can](https://github.com/nasa-gibs/mrf/blob/master/mrf_apps/can.cpp) utility. It can convert the sparse index into a compact form and then extract it back to a sparse file when needed.
-While the MRF GDAL driver cannot access an MRF with a canned (compact) index, the [mod_mrf](https://github.com/lucianpls/mod_mrf) 
-tile handler can serve tiles from an MRF with a canned index.
+problem when the MRF is stored on a file system, since the MRF makes good use of file system holes, which are areas of a sparse file 
+that contain no data. This means that the actual storage used may be much smaller than the virtual file size.
+This feature can become a problem when transferring data to a different location, or on storage systems that do not support 
+sparse files, AWS S3 for example. The recommended way to handle such sparse MRF index files is to use the [MRF can](https://github.com/nasa-gibs/mrf/blob/master/mrf_apps/can.cpp) utility. It can convert the sparse index into a dense form (canned) and then extract it back to a sparse file when needed.
+The canned form of an index can be compressed further with any generic utility such as zip or gzip.
+While the MRF GDAL driver itself cannot access an MRF with a canned index, the [mod_mrf](https://github.com/lucianpls/mod_mrf) 
+tile handler does serve tiles from an MRF with a canned index.
 
 ## Single LERC data MRF
 The MRF driver recognizes and reads a LERC and LERC1 compressed file. This type of file behaves as a read-only single tile MRF 
