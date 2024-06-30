@@ -654,6 +654,20 @@ gdaladdo –r avg TenSlice.mrf:MRF:Z3
 
 # Notes on using MRF
 
+## MRF in TAR
+
+Many of the unique MRF applications rely on the separation of the MRF components in individual files. At times this can become 
+a nuisance. As a convenience, it is possible to pack all the MRF component files in a single tar file and use the resulting 
+tar as an MRF using GDAL. This feature is subject to the following requirements:
+
+	- The MRF file names inside the tar do not include a path (basename only)  
+	- The tar file includes all the MRF component files, with the metadata file (.mrf) being the first
+	- The tar uses a UStar (Unix Standard TAR) header format, not pax
+	- The file extension ends with .tar, with .mrf.tar being recommended
+
+As long as the conditions above are met, the GDAL MRF driver will recognise the file as an MRF file and will be able to read from it. 
+External overviews or external metadata (.mrf.aux.xml) will be used if included in the tar.
+
 ## MRF as a Web Tile Cache
 One of the most common uses of MRF is to serve as a fast and easy to use tile cache for a web map tile server. 
 Since far fewer files are used, adn MRF tile cache is much more efficient at using the disk than individual tiles would be,
@@ -804,7 +818,8 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 
 # APPENDIX F, Change Log
 
-2024-06-21  Lucian Plesea
+2024-06-21
 * Add support for 64 bit integer data type, signed and unsigned, for NONE, DEFLATE, ZSTD, QB3 and TIF tile format
 * Add support for signed 8 bit integer
-
+2024-06-30
+* Add mrf-in-tar, acting as a single file MRF
