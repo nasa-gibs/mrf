@@ -707,7 +707,19 @@ This can create problems in certain cases, for example when the same file name i
 or when the MRF itself is corrupt. Crashes may occur in some of these situations. In these cases, the index and data file should 
 be erased by hand, outside of the GDAL infrastructure.
 
-# APPENDIX A, MRF Metadata Schema
+# APPENDIX A, MRF specific environment variables
+
+## MRF_BYPASSCACHING=FALSE|TRUE
+Boolean, defaults to false. When set to TRUE and caching MRFs are in use, writes to the local MRF cache will not occur.
+## CPL_DEBUG
+This variable controls the [GDAL Logging](https://gdal.org/en/latest/user/configoptions.html#logging). In can hold
+multiple concatenated control token strings, case insensitive. The presence of each recognized control token will turn
+on logging of specific messages during gdal processing. MRF defines the following logging tokens:
+* MRF : Top level MRF related operations
+* MRF_TIMING : Accurate tile compression and decompression time is accumulated for each MRF dataset and are logged out when the
+respective dataset is closed.
+* MRF_IO : Details of MRF tile IO operations
+* MRF_OVERLAY: Details of MRF overview building
 
 # APPENDIX B, Index file format
 
@@ -822,7 +834,7 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 * Add support for signed 8 bit integer
 
 2024-06-30
-* Add mrf-in-tar, acting as a single file MRF
+* Add [mrf-in-tar](https://github.com/nasa-gibs/mrf/edit/master/doc/MUG.md#mrf-in-tar), acting as a single file MRF
 
 2024-09-10
-* QB3 encoding using faster mode when libQB3 supports it and QUALITY setting is under 5
+* QB3 encoding using the faster FTL mode when libQB3 has support for it and QUALITY setting is under 5
