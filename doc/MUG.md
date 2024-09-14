@@ -820,7 +820,9 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 2024-06-21
 * Add support for 64 bit integer data type, signed and unsigned, for NONE, DEFLATE, ZSTD, QB3 and TIF tile format
 * Add support for signed 8 bit integer
+
 2024-06-30
 * Add mrf-in-tar, acting as a single file MRF
+
 2024-09-10
 * QB3 encoding using faster mode when libQB3 supports it and QUALITY setting is under 5
