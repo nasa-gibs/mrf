@@ -834,7 +834,7 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 * Add support for signed 8 bit integer
 
 2024-06-30
-* Add [mrf-in-tar](https://github.com/nasa-gibs/mrf/edit/master/doc/MUG.md#mrf-in-tar), acting as a single file MRF
+* Add [mrf-in-tar](https://github.com/nasa-gibs/mrf/blob/master/doc/MUG.md#mrf-in-tar), a single file MRF format
 
 2024-09-10
 * QB3 encoding using the faster FTL mode when libQB3 has support for it and QUALITY setting is under 5
