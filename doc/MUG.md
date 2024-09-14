@@ -27,7 +27,7 @@ compression algorithms for reducing the amount of storage needed. Most of these 
 and have continued to be used since they serve their purpose very well. Yet these formats have significant limitations, for example when used 
 to store extremely large images, or non-image data.
 
-MRF was designed to leverage existing image formats while addressing some of their shortcomings, without adding unnecessary complexities. In the 
+MRF was designed to leverage existing image formats while addressing some of their shortcomings, without adding unnecessary complexity. In the 
 simplest form, MRF explicitly provides tiling, spatial indexing and multiple resolutions (aka overviews, pyramid, or resolution-sets) support.
 This is an extremely common approach in GIS, allowing data for a specific area to be read without having to read the complete raster. It also 
 allows for raster sizes well beyond what is feasible with traditional image formats. Since the tiles in an MRF file may themselves be stored in a 
