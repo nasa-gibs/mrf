@@ -710,7 +710,7 @@ be erased by hand, outside of the GDAL infrastructure.
 # APPENDIX A, MRF specific environment variables
 
 ## MRF_BYPASSCACHING=FALSE|TRUE
-Boolean, defaults to false. When set to TRUE and caching MRFs are in use, writes to the local MRF cache will not occur.
+Boolean, defaults to false. When set to TRUE and caching or cloning MRFs are in use, writes to the local MRF cache will not occur.
 ## CPL_DEBUG
 This variable controls the [GDAL Logging](https://gdal.org/en/latest/user/configoptions.html#logging). In can hold
 multiple concatenated control token strings, case insensitive. The presence of each recognized control token will turn
