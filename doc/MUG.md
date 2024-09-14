@@ -177,13 +177,13 @@ using the GDAL create option `COMPRESS`.
 |[QB3](#qb3-compression)|Integer|[QB3](https://github.com/lucianpls/QB3) compression|Recommended|No|Small and very fast|
 |[PNG](#png-and-ppng-compression)|Byte, UInt16, Int16|Well known PNG format|Web Tiles|No|Small but very slow to create|
 |[PPNG](#png-and-ppng-compression)|Byte|PNG with per tile palette|Web Tiles|No|Small but very slow to create|
-|[ZSTD](#zstd-compression)|All|Data compressed with [ZSTD](https://github.com/facebook/zstd)|Recommended|No|Good compression, speed depends on QUALITY=[1-22]|
-|[DEFLATE](#deflate-compression)|All|Data compressed with [zlib](https://www.zlib.net/)|DEPRECATED|No|Use ZSTD instead, it is faster and better|
-|[JPEG](#jpeg-compression)|Byte, UInt16|Well known JPEG (JFIF) format|Images, Web Tiles|Yes|Very small and fast. Up to 12bit per channel data. Includes zero mask (Zen)|
-|[JPEG](#jpeg-compression) brunsli|Byte|JPEG repacked by [Brunsli](https://github.com/google/brunsli)|Smaller than JPEG| Yes|Replaces COMPRESSION=JPEG when brunsli is available|
+|[ZSTD](#zstd-compression)|All|[ZSTD](https://github.com/facebook/zstd) compression|Recommended|No|Good compression, speed depends on QUALITY=[1-22]|
+|[DEFLATE](#deflate-compression)|All|[zlib](https://www.zlib.net/) compression|DEPRECATED|No|Use ZSTD instead, it is faster and better|
+|[JPEG](#jpeg-compression)|Byte, UInt16|JPEG (JFIF) format|Images, Web Tiles|Yes|Very small and fast. Up to 12bit per channel data. Includes zero mask (Zen)|
+|[JPEG](#jpeg-compression) brunsli|Byte|[Brunsli](https://github.com/google/brunsli) packed JPEG|Smaller than JPEG| Yes|Replaces COMPRESSION=JPEG when brunsli is available|
 |[JPNG](#jpng-compression)|Byte|Mix of JPEG and PNG|Web Tiles with transparency|Yes|Uses JPEG for tiles with no transparency, PNG otherwise. Use only when JPEG-Zen is not suitable|
-|[TIFF](#tiff-compression)|All|Well known TIFF with LZW compression|Web Tiles|No|Mostly for web clients with TIFF support|
-|[LERC](#lerc-compression)|All|Data compressed with [LERC](https://github.com/Esri/lerc)||Choice|Fast compression with fixed quantization step|
+|[TIFF](#tiff-compression)|All|TIFF with LZW compression|Web Tiles|No|Mostly for web clients with TIFF support|
+|[LERC](#lerc-compression)|All|[LERC](https://github.com/Esri/lerc) compression||Choice|Fast compression with fixed quantization step|
 
 ## NONE
 
