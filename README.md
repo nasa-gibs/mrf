@@ -1,6 +1,6 @@
 ## Meta Raster Format
 
-MRF is a raster format implemented as a [GDAL](http://github.com/OSGeo/GDAL) driver.  The MRF driver itself is maintained [within GDAL](https://github.com/OSGeo/gdal/tree/master/gdal/frmts/mrf) since GDAL version 2.1.  This repository only contains MRF documentation and MRF related utilities.
+MRF is a raster format implemented as a [GDAL](http://github.com/OSGeo/GDAL) driver.  The MRF driver itself is maintained [within GDAL](https://github.com/OSGeo/gdal/tree/master/frmts/mrf) since GDAL version 2.1.  This repository only contains MRF documentation and MRF related utilities.
 
 For the full documentation of the MRF format and the MRF GDAL driver see
 [Meta Raster Format User Guide](doc/MUG.md)
