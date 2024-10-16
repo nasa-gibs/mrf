@@ -72,6 +72,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 
  // For memset only
 #include <cstring>
