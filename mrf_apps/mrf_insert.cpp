@@ -369,28 +369,50 @@ bool state::patch()
     GDALClose(hPatch);
     GDALFlushCache(hDataset);
 
-    // Call the patchOverview for the MRF
+    // Call the PatchOverview for the MRF
     if (overlays)
     {
-        auto BlockXOut = static_cast<int>(blocks_bbox.lx);
-        auto BlockYOut = static_cast<int>(blocks_bbox.uy);
-        // correct off-by-one error when generating overlays
-        auto WidthOut = static_cast<int>(blocks_bbox.ux - blocks_bbox.lx + 1);
-        auto HeightOut = static_cast<int>(blocks_bbox.ly - blocks_bbox.uy + 1);
+        // Initialize BlockX, BlockY, Width, and Height based on the bounding box
+        auto BlockX = static_cast<int>(blocks_bbox.lx);
+        auto BlockY = static_cast<int>(blocks_bbox.uy);
+        auto Width = static_cast<int>(blocks_bbox.ux - blocks_bbox.lx);
+        auto Height = static_cast<int>(blocks_bbox.ly - blocks_bbox.uy);
 
-        // If stop level is not set, do all levels
+        // If stop_level is not set, process all levels
         if (stop_level == -1)
-        {
             stop_level = overview_count;
-        }
 
-        // convert level limits to source levels
+        // Convert level limits to source levels
         start_level--;
 
-        // Use recursive mode to have the MRF driver handle overviews automatically
-        pTarg->PatchOverview(BlockXOut, BlockYOut, WidthOut, HeightOut,
-                             0, true, Resampling);
-        GDALFlushCache(hDataset);
+        // Loop through each source level
+        for (int sl = 0; sl < overview_count; sl++)
+        {
+            if (sl >= start_level && sl < stop_level)
+            {
+                pTarg->PatchOverview(BlockX, BlockY, Width, Height,
+                                     sl, false, Resampling);
+                GDALFlushCache(hDataset);
+            }
+
+            // Update BlockX and BlockY for the next level (round down)
+            int BlockXOut = BlockX / 2;
+            int BlockYOut = BlockY / 2;
+
+            // Adjust Width and Height before division
+            Width += (BlockX & 1);  // Increment width if BlockX was rounded down
+            Height += (BlockY & 1); // Increment height if BlockY was rounded down
+
+            // Compute WidthOut and HeightOut for the next level (round up)
+            int WidthOut = Width / 2 + (Width & 1);
+            int HeightOut = Height / 2 + (Height & 1);
+
+            // Prepare for the next iteration
+            BlockX = BlockXOut;
+            BlockY = BlockYOut;
+            Width = WidthOut;
+            Height = HeightOut;
+        }
     }
 
     // Now for the upper levels
