@@ -32,7 +32,7 @@ def parse_arguments():
                         default='NNb',
                         help='Overview resampling: Avg, NNb, or None')
     parser.add_argument('-w', '--workers',
-                        type=int, default=8,
+                        type=int, default=16,
                         help='Number of parallel processes')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 
@@ -91,7 +91,7 @@ def process_cell(args, mrf_info, row, col, new_vrt):
 
     # create an empty MRF for inserting new cell VRT
     output_file = args.output_dir + '/' + prefix + '-c' + f'{col:02}' + 'r' + f'{row:02}' + '.mrf'
-    print(f'Creating {output_file}')
+    print(f'Creating {output_file}\n')
     # delete any existing files
     Path(output_file).unlink(True)
     Path(output_file.replace('.mrf', '.idx')).unlink(True)
