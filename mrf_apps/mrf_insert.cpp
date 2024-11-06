@@ -396,7 +396,7 @@ bool state::patch()
                 if (verbose != 0)
                 {
                     cerr << "Overview Level: " << sl << endl;
-                    cerr << "WidthOut = " << WidthOut << " HeightOut = " << HeightOut << endl;
+                    cerr << "WidthOut = " << Width << " HeightOut = " << Height << endl;
                 }
             }
 
