@@ -385,7 +385,6 @@ bool state::patch()
         // Convert level limits to source levels
         start_level--;
 
-        // Loop through each source level
         for (int sl = 0; sl < overview_count; sl++)
         {
             if (sl >= start_level && sl < stop_level)
@@ -393,13 +392,18 @@ bool state::patch()
                 pTarg->PatchOverview(BlockX, BlockY, Width, Height,
                                      sl, false, Resampling);
                 GDALFlushCache(hDataset);
+
+                if (verbose != 0)
+                {
+                    cerr << "Overview Level: " << sl << endl;
+                    cerr << "WidthOut = " << WidthOut << " HeightOut = " << HeightOut << endl;
+                }
             }
 
             // Update BlockX and BlockY for the next level (round down)
             int BlockXOut = BlockX / 2;
             int BlockYOut = BlockY / 2;
 
-            // Adjust Width and Height before division
             Width += (BlockX & 1);  // Increment width if BlockX was rounded down
             Height += (BlockY & 1); // Increment height if BlockY was rounded down
 
