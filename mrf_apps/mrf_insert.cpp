@@ -177,6 +177,8 @@ bool state::patch()
     Bounds pix_bbox;
     int overview_count = 0;
     void *buffer = NULL;
+    // Create an extra buffer for reading data from MRF
+    void *mrf_buffer = NULL;
 
     try
     {
@@ -269,7 +271,8 @@ bool state::patch()
             dst_b.push_back(pTDS->GetRasterBand(band));
         }
 
-        buffer = CPLMalloc(buffer_size); // Enough for one block
+        buffer = CPLMalloc(buffer_size);     // Enough for one block
+        mrf_buffer = CPLMalloc(buffer_size); // Enough for one block
 
         //
         // Use the innner loop for bands, helps if output is interleaved
@@ -300,6 +303,21 @@ bool state::patch()
                         // READ
 
                         CPLErr eErr = CE_None;
+                        // Read new data into buffer
+                        memset(buffer, 0, buffer_size);
+                        eErr = ClippedRasterIO(src_b[band], GF_Read,
+                                               src_offset_x, src_offset_y,
+                                               tsz_x, tsz_y,
+                                               buffer,
+                                               eDataType,
+                                               pixel_size, line_size);
+
+                        if (CE_None != eErr)
+                        {
+                            cerr << "Clipped rasterio read error" << endl;
+                            throw static_cast<int>(eErr);
+                        }
+
                         // If input needs padding, initialize the buffer with destination content
                         if (src_offset_x < 0 || src_offset_x + tsz_x > src_b[band]->GetXSize() || src_offset_y < 0 || src_offset_y + tsz_y > src_b[band]->GetYSize())
                         {
@@ -308,47 +326,93 @@ bool state::patch()
                             {
                                 continue;
                             }
+                            memset(mrf_buffer, 0, buffer_size);
                             eErr = dst_b[band]->RasterIO(GF_Read,
-                                                         x * tsz_x, y * tsz_y,  // offset in output image
-                                                         tsz_x, tsz_y,          // Size in output image
-                                                         buffer, tsz_x, tsz_y,  // Buffer and size in buffer
-                                                         eDataType,             // Requested type
-                                                         pixel_size, line_size, // Pixel and line space
-                                                         NULL                   // ExtraIO arguments
+                                                         x * tsz_x, y * tsz_y,     // offset in output image
+                                                         tsz_x, tsz_y,             // Size in output image
+                                                         mrf_buffer, tsz_x, tsz_y, // Buffer and size in buffer
+                                                         eDataType,                // Requested type
+                                                         pixel_size, line_size,    // Pixel and line space
+                                                         NULL                      // ExtraIO arguments
                             );
                             if (CE_None != eErr)
                             {
                                 cerr << "Fill data read error" << endl;
                                 throw static_cast<int>(eErr);
                             }
-                        }
 
-                        // Works just like RasterIO, except that it only reads the
-                        // valid parts of the input band and has no scaling
-                        eErr = ClippedRasterIO(src_b[band], GF_Read,
-                                               src_offset_x, src_offset_y, // offset in input image
-                                               tsz_x, tsz_y,               // Size in input image
-                                               buffer,                     // buffer
-                                               eDataType,                  // Requested type
-                                               pixel_size, line_size);     // Pixel and line space
-                        if (CE_None != eErr)
-                        {
-                            cerr << "Clipped rasterio read error" << endl;
-                            throw static_cast<int>(eErr);
-                        }
+                            // Get the nodata value for this band
+                            double nodataValue;
+                            int hasNoData = FALSE;
+                            nodataValue = dst_b[band]->GetNoDataValue(&hasNoData);
 
-                        // WRITE
+                            // merge nonzero data values from the new raster into the MRF
+                            for (int i = 0; i < tsz_x * tsz_y; i++)
+                            {
+                                bool isNoData = false;
+                                switch (eDataType)
+                                {
+                                case GDT_Byte:
+                                    isNoData = hasNoData &&
+                                               (static_cast<uint8_t *>(mrf_buffer)[i] == static_cast<uint8_t>(nodataValue));
+                                    break;
+                                case GDT_UInt16:
+                                    isNoData = hasNoData &&
+                                               (static_cast<uint16_t *>(mrf_buffer)[i] == static_cast<uint16_t>(nodataValue));
+                                    break;
+                                case GDT_Int16:
+                                    isNoData = hasNoData &&
+                                               (static_cast<int16_t *>(mrf_buffer)[i] == static_cast<int16_t>(nodataValue));
+                                    break;
+                                case GDT_UInt32:
+                                    isNoData = hasNoData &&
+                                               (static_cast<uint32_t *>(mrf_buffer)[i] == static_cast<uint32_t>(nodataValue));
+                                    break;
+                                case GDT_Int32:
+                                    isNoData = hasNoData &&
+                                               (static_cast<int32_t *>(mrf_buffer)[i] == static_cast<int32_t>(nodataValue));
+                                    break;
+                                case GDT_UInt64:
+                                    isNoData = hasNoData &&
+                                               (static_cast<uint64_t *>(mrf_buffer)[i] == static_cast<uint64_t>(nodataValue));
+                                    break;
+                                case GDT_Int64:
+                                    isNoData = hasNoData &&
+                                               (static_cast<int64_t *>(mrf_buffer)[i] == static_cast<int64_t>(nodataValue));
+                                    break;
+                                case GDT_Float32:
+                                    isNoData = hasNoData &&
+                                               (std::fabs(static_cast<float *>(mrf_buffer)[i] - static_cast<float>(nodataValue)) < 1e-6f);
+                                    break;
+                                case GDT_Float64:
+                                    isNoData = hasNoData &&
+                                               (std::fabs(static_cast<double *>(mrf_buffer)[i] - static_cast<double>(nodataValue)) < 1e-12);
+                                    break;
+                                default:
+                                    cerr << "Unsupported data type" << endl;
+                                    throw static_cast<int>(CE_Failure);
+                                }
+
+                                if (!isNoData)
+                                {
+                                    // Only copy if the old data is not nodata
+                                    memcpy(static_cast<char *>(buffer) + i * pixel_size,
+                                           static_cast<char *>(mrf_buffer) + i * pixel_size,
+                                           pixel_size);
+                                }
+                            }
+                        }
+                        // Write merged result
                         eErr = dst_b[band]->RasterIO(GF_Write,
-                                                     x * tsz_x, y * tsz_y,  // offset in output image
-                                                     tsz_x, tsz_y,          // Size in output image
-                                                     buffer, tsz_x, tsz_y,  // Buffer and size in buffer
-                                                     eDataType,             // Requested type
-                                                     pixel_size, line_size, // Pixel and line space
-                                                     NULL                   // ExtraIO arguments
-                        );
+                                                     x * tsz_x, y * tsz_y,
+                                                     tsz_x, tsz_y,
+                                                     buffer, tsz_x, tsz_y,
+                                                     eDataType,
+                                                     pixel_size, line_size,
+                                                     NULL);
                         if (CE_None != eErr)
                         {
-                            cerr << "Read error" << endl;
+                            cerr << "Write error" << endl;
                             throw static_cast<int>(eErr);
                         }
                     }
@@ -356,12 +420,14 @@ bool state::patch()
             }
         }
         CPLFree(buffer);
+        CPLFree(mrf_buffer);
     }
     catch (int e)
     {
         if (e > 0)
             GDALClose(hDataset);
         CPLFree(buffer);
+        CPLFree(mrf_buffer);
         return false;
     }
 
