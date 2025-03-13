@@ -60,10 +60,13 @@ def process_cell(args, mrf_info, row, col, new_vrt):
         A tuple containing:
         - ouput_file (str): The output file name.
         - execution_time (float): The time taken to process the cell in seconds.
+        - error_count (int): Number of errors during execution.
     """
 
+    error_count = 0
     start_time = time.time()
     prefix = Path(args.input_file).stem
+    compression = mrf_info['metadata']['IMAGE_STRUCTURE']['COMPRESSION']
     x_size = mrf_info['size'][0]
     y_size = mrf_info['size'][1]
     x_block = mrf_info['bands'][0]['block'][0]
@@ -95,11 +98,11 @@ def process_cell(args, mrf_info, row, col, new_vrt):
     # delete any existing files
     Path(output_file).unlink(True)
     Path(output_file.replace('.mrf', '.idx')).unlink(True)
-    Path(output_file.replace('.mrf', '.ppg')).unlink(True)
+    Path(output_file.replace('.mrf', '.pjg' if compression == 'JPEG' else '.ppg')).unlink(True)
 
     create_mrf = ['gdal_translate', '-q',
                   '-of', 'MRF',
-                  '-co', 'COMPRESS=PPNG',
+                  '-co', 'COMPRESS=' + compression,
                   '-co', 'BLOCKSIZE=512',
                   '-outsize', str(x_size), str(y_size),
                   '-co', 'NOCOPY=true']
@@ -111,7 +114,22 @@ def process_cell(args, mrf_info, row, col, new_vrt):
 
     if args.verbose:
         print(' '.join(create_mrf))
-    subprocess.run(create_mrf)
+
+    # Errors in GDAL MRF don't increment the exit code so we need to do it ourselves
+    create_mrf_process = subprocess.Popen(create_mrf,
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
+    outs, errs_warns = create_mrf_process.communicate()
+    outs = str(outs, encoding='utf-8')
+    errs_warns = str(errs_warns, encoding='utf-8')
+    errs = []
+    for message in errs_warns.split('\n'):
+        if len(message) > 0:
+            print(message)
+            if message.lower().startswith("error"):
+                errs.append(message)
+    error_count += len(errs)
+
     if args.verbose:
         print(f'Cell MRF created {output_file}')
 
@@ -126,7 +144,8 @@ def process_cell(args, mrf_info, row, col, new_vrt):
                   output_vrt]
     if args.verbose:
         print(' '.join(create_vrt))
-    subprocess.run(create_vrt)
+    create_vrt_result = subprocess.run(create_vrt)
+    error_count += create_vrt_result.returncode
     if args.verbose:
         print(f'Cell VRT created {output_vrt}')
 
@@ -139,13 +158,27 @@ def process_cell(args, mrf_info, row, col, new_vrt):
     mrf_insert.append(output_file)
     if args.verbose:
         print(' '.join(mrf_insert))
-    subprocess.run(mrf_insert)
+
+    # Errors in mrf_insert don't increment the exit code so we need to do it ourselves
+    mrf_insert_process = subprocess.Popen(mrf_insert,
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
+    outs, errs_warns = mrf_insert_process.communicate()
+    outs = str(outs, encoding='utf-8')
+    errs_warns = str(errs_warns, encoding='utf-8')
+    errs = []
+    for message in errs_warns.split('\n'):
+        if len(message) > 0:
+            print(message)
+            if message.lower().startswith("error"):
+                errs.append(message)
+    error_count += len(errs)
     if args.verbose:
         print(f'Data inserted into {output_file}')
 
     end_time = time.time()
     execution_time = end_time - start_time
-    return output_file, execution_time
+    return output_file, execution_time, error_count
 
 
 def main():
@@ -156,6 +189,7 @@ def main():
     args = parse_arguments()
     print('Getting info for', args.input_file)
     prefix = Path(args.input_file).stem
+    errors = 0
 
     # Get size of MRF
     gdalinfo_command_list = ['gdalinfo', '-json', args.input_file]
@@ -179,6 +213,7 @@ def main():
                     warns.append(message)
         if len(errs) > 0:
             print('gdalinfo errors: {0}'.format('\n'.join(errs)))
+            errors += len(errs)
         if len(warns) > 0:
             print('gdalinfo warnings: {0}'.format('\n'.join(warns)))
         mrf_info = json.loads(outs)
@@ -199,6 +234,8 @@ def main():
     if args.verbose:
         print(' '.join(create_vrt))
     subprocess.run(create_vrt)
+    create_vrt_result = subprocess.run(create_vrt)
+    errors += create_vrt_result.returncode
 
     # Remove the source from the VRT to avoid referencing the original MRF
     tree = ET.parse(new_vrt)
@@ -217,12 +254,14 @@ def main():
                                                new_vrt))
 
         for future in as_completed(futures):
-            result, execution_time = future.result()
-            print(f'Processed {result} in {str(timedelta(seconds=execution_time))} \n')
+            result, execution_time, error_count = future.result()
+            print(f'Processed {result} in {str(timedelta(seconds=execution_time))} with {str(error_count)} errors.\n')
+            errors += error_count
 
     end_time = time.time()
     run_time = end_time - start_time
-    print(f'mrf_unjoin completed in {str(timedelta(seconds=run_time))}')
+    print(f'mrf_unjoin completed in {str(timedelta(seconds=run_time))} with {str(errors)} errors.')
+    exit(errors)
 
 
 if __name__ == '__main__':
