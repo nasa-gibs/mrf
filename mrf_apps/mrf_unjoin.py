@@ -66,6 +66,7 @@ def process_cell(args, mrf_info, row, col, new_vrt):
     error_count = 0
     start_time = time.time()
     prefix = Path(args.input_file).stem
+    compression = mrf_info['metadata']['IMAGE_STRUCTURE']['COMPRESSION']
     x_size = mrf_info['size'][0]
     y_size = mrf_info['size'][1]
     x_block = mrf_info['bands'][0]['block'][0]
@@ -97,11 +98,11 @@ def process_cell(args, mrf_info, row, col, new_vrt):
     # delete any existing files
     Path(output_file).unlink(True)
     Path(output_file.replace('.mrf', '.idx')).unlink(True)
-    Path(output_file.replace('.mrf', '.ppg')).unlink(True)
+    Path(output_file.replace('.mrf', '.pjg' if compression == 'JPEG' else '.ppg')).unlink(True)
 
     create_mrf = ['gdal_translate', '-q',
                   '-of', 'MRF',
-                  '-co', 'COMPRESS=PPNG',
+                  '-co', 'COMPRESS=' + compression,
                   '-co', 'BLOCKSIZE=512',
                   '-outsize', str(x_size), str(y_size),
                   '-co', 'NOCOPY=true']
@@ -121,10 +122,10 @@ def process_cell(args, mrf_info, row, col, new_vrt):
     outs, errs_warns = create_mrf_process.communicate()
     outs = str(outs, encoding='utf-8')
     errs_warns = str(errs_warns, encoding='utf-8')
-    print(errs_warns)
     errs = []
     for message in errs_warns.split('\n'):
         if len(message) > 0:
+            print(message)
             if message.lower().startswith("error"):
                 errs.append(message)
     error_count += len(errs)
@@ -157,8 +158,21 @@ def process_cell(args, mrf_info, row, col, new_vrt):
     mrf_insert.append(output_file)
     if args.verbose:
         print(' '.join(mrf_insert))
-    mrf_insert_result = subprocess.run(mrf_insert)
-    error_count += mrf_insert_result.returncode
+
+    # Errors in mrf_insert don't increment the exit code so we need to do it ourselves
+    mrf_insert_process = subprocess.Popen(mrf_insert,
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
+    outs, errs_warns = mrf_insert_process.communicate()
+    outs = str(outs, encoding='utf-8')
+    errs_warns = str(errs_warns, encoding='utf-8')
+    errs = []
+    for message in errs_warns.split('\n'):
+        if len(message) > 0:
+            print(message)
+            if message.lower().startswith("error"):
+                errs.append(message)
+    error_count += len(errs)
     if args.verbose:
         print(f'Data inserted into {output_file}')
 
