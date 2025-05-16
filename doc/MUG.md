@@ -758,6 +758,11 @@ the second one the size of each tile
 ```
 od -t u8 --endian big <input_file>
 ```
+To check that the MRF data file does not have any slack, is to verify that the sum of the tile sizes equals the size 
+of the data file. This can be done using:
+```
+od -td8 --endian=big TCI.idx |cut -c 40- | awk '{ sum += $1} END {print sum}'
+```
 
 # APPENDIX C, Create Options
 
