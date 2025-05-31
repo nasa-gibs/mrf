@@ -5,15 +5,17 @@
 # Purpose:
 # Copy the tile data and index files of an MRF, ignoring the unused parts
 #
-# Author:      lucian
+# Author:      lucian plesea
 #
 # Created:     05/10/2016
 # Updated:     07/07/2017 Creates index files with holes if possible
 # Updated:     11/09/2018 Use typed arrays instead of struct
 #                         Process index file block at a time
 # Updated:     12/09/2020 Updated to python3
+# Updated:     05/31/2025 Added trim mode to remove unused space in place
+# Updated:     05/31/2025 Added command line parser
 #
-# Copyright:   (c) lucian 2016 - 2020
+# Copyright:   (c) lucian 2016 - 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,13 +72,13 @@ def mrf_trim(args):
     offset = int(args.empty_file) if args.empty_file else 0
     # See if the file has any slack space
     full_size = sum(size for _, size, _ in idx_list) + offset
-    if full_size == os.path.getsize(args.source):
+    old_size = os.path.getsize(args.source)
+    if full_size == old_size:
         print("No unused space in the MRF, nothing to do")
         return 0
     if full_size > os.path.getsize(args.source):
         raise ValueError("The MRF file is smaller than the sum of tiles, cannot trim")
-    print("Trimming MRF file, current size: {}, new size: {}".format(
-        os.path.getsize(args.source), full_size))
+    print(f"Trimming MRF file, current size: {old_size}, new size: {full_size}")
 
     # Sort by offset
     idx_list.sort(key=lambda x: x[0])
@@ -106,7 +108,16 @@ def mrf_trim(args):
     with open(index_name(args.source), "wb") as idx_file:
         if sys.byteorder != 'big':
             full_idx.byteswap()  # To big endian
-        full_idx.tofile(idx_file)
+
+        # Write the index file in block of 512 bytes, skipping holes
+        for i in range(0, len(full_idx), 512 // full_idx.itemsize):
+            block = full_idx[i:i + 512 // full_idx.itemsize]
+            block = block.tobytes()
+            if block != b'\x00' * len(block):  # Skip empty blocks
+                idx_file.write(block)
+            else:
+                idx_file.seek(len(block), os.SEEK_CUR)  # Skip empty block
+        idx_file.truncate() # In case there is a hole at the end
 
     return 0
 
