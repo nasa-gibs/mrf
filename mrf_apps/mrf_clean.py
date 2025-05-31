@@ -13,7 +13,7 @@
 #                         Process index file block at a time
 # Updated:     12/09/2020 Updated to python3
 # Updated:     05/31/2025 Added trim mode to remove unused space in place
-# Updated:     05/31/2025 Added command line parser
+#                         Added command line parser
 #
 # Copyright:   (c) lucian 2016 - 2025
 #
@@ -140,15 +140,12 @@ def mrf_clean(source, destination, empty_file = None):
                         except EOFError:  # Could be incomplete last block or EOF
                             if len(idx) == 0:
                                 break  # Normal exit
-
                         # Don't write empty blocks
                         if idx.count(0) == len(idx):
                             didx.seek(len(idx) * idx.itemsize, os.SEEK_CUR)
                             continue
-
                         if sys.byteorder != 'big':
                             idx.byteswap()  # To native
-
                         # copy tiles in this block, adjust the offsets
                         for i in range(0, len(idx), 2):
                             if idx[i + 1] != 0:  # size of tile
@@ -156,7 +153,6 @@ def mrf_clean(source, destination, empty_file = None):
                                 idx[i] = doffset
                                 doffset += idx[i + 1]
                                 dfile.write(sfile.read(idx[i+1]))
-
                         if sys.byteorder != 'big':
                             idx.byteswap()  # Back to big before writing
                         idx.tofile(didx)
