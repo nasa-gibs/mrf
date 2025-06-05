@@ -199,10 +199,13 @@ case the bytes are written in big endian. This rule applies to most of the other
 The [QB3](https://github.com/lucianpls/QB3) compression is a raster specific lossless integer compression algorithm. It is very fast for both 
 compression and decompression and it produces great compression for natural images. In MRF it supports all integer types, signed 
 or unsigned. Multiple bands per tile are supported (INTERLEAVE=PIXEL), with a default inter-band decorrelation for RGB(A) data which can 
-improve the compression ratio. The decorrelation can be disabled by using PHOTOMETRIC=MULTI create option.  
+improve the compression ratio. The decorrelation can be disabled by using PHOTOMETRIC=MULTI create option. A custom band decorrelation
+can be used by setting the free form option QB3_BAND_MAP to a comma separated list of indices. The list is positional, if the index is equal
+with the position then the respective band is a core band, kept as such. If the index is different from the position, it indicates the core
+band that will have its values subtracted from the current band before the current band is compressed.
 QB3 has an optional extra compression step which in some cases can result in additional compression while still being lossless. Since this step
 slows down the compression and is usually ineffective for Byte data, it is not enabled by default. To enable it, use QUALITY settings above 95.  
-There is also a faster mode, triggered by setting QUALITY under 5, which also looses a bit of the compression.
+There is also a faster mode, triggered by setting QUALITY under 5, which also loses a bit of the compression.
 The QB3 is highly recommended as a format for lossless data. It achieves better compression that PNG, DEFLATE, ZSTD and LERC while being significantly
 faster. The fast compression makes it especially valuable for use in a caching MRF or when MRF is a transient (work) format.  
 
@@ -820,6 +823,7 @@ For the gdal_translate utility, the free form option syntax is:
 | L2_VER | 2 for single band, library default otherwise | LERC | Use features present in a specific Lerc library version |
 | OPTIMIZE | False | JPEG, JPNG | Optimize the Huffman tables for each tile. Always true for JPEG12 |
 | JFIF | False | JPEG, JPNG | When set, write JPEG tiles in JFIF format. By default, brunsli format is preferred |
+| QB3_BAND_MAP || QB3 | A comma separated list of band indices for QB3 band decorrelation |
 
 # APPENDIX E, Open Options
 
@@ -833,6 +837,9 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 | DATATYPE | Byte | Set the desired output datatype for single LERC1 chunk|
 
 # APPENDIX F, Change Log
+
+2025-06-05
+* Add support for QB3_BAND_MAP free-form option, band decorrelation settings
 
 2024-06-21
 * Add support for 64 bit integer data type, signed and unsigned, for NONE, DEFLATE, ZSTD, QB3 and TIF tile format
