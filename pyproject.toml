@@ -1,0 +1,6 @@
+[project]
+name = "mrf_utilities"
+version = "0.1.0"
+
+[tool.setuptools]
+packages = ["mrf_apps", "tests"]
