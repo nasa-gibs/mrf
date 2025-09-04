@@ -1,6 +1,6 @@
 # Test Suite: `mrf_join.py`
 
-This document outlines the test suite for the `mrf_join.py` utility. The purpose of this suite is to provide comprehensive testing for the script's two primary modes of operation:
+This is documentation of the test suite for the `mrf_join.py` utility. The purpose of this suite is to provide comprehensive testing for the script's two primary modes of operation:
 1.  **Join Mode:** Merging multiple 2D MRFs into a single composite 2D MRF.
 2.  **Append Mode:** Stacking multiple 2D MRFs to create a single 3D MRF with multiple Z-slices.
 
