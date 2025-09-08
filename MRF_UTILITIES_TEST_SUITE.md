@@ -32,7 +32,7 @@ Ensure you have Docker installed and running on your system.
     docker run --rm mrf-test-suite
     ```
 
-    You should see output from `pytest`, culminating in a summary showing all tests passed (e.g., `21 passed`).
+    You should see output from `pytest`, ending in summary showing all tests passed (e.g., `21 passed`).
 
 
 
