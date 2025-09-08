@@ -5,15 +5,16 @@ This document outlines the unit tests for the Meta Raster Format (MRF) utilities
 A shared test helper, `tests/helpers.py`, provides a base class that handles the setup and teardown of a temporary testing directory and includes methods for creating mock MRF files (`.mrf`, `.idx`, `.dat`). This approach minimizes code duplication and standardizes test environments.
 
 
-### \#\# Docker-Based Testing Environment
 
-Using Docker is the recommended method for running this test suite. It creates a consistent, isolated environment with all the necessary C++, GDAL, and Python dependencies pre-installed, resolving any platform-specific issues and ensuring the tests run reliably.
+### Docker-Based Testing Environment
 
-#### \#\#\# Prerequisites
+Using Docker is the recommended method for running this test suite. It creates an environment with all the necessary C++, GDAL, and Python dependencies pre-installed, resolving any platform-specific issues and ensuring the tests run in this isolated environment.
+
+#### Prerequisites
 
 Ensure you have Docker installed and running on your system.
 
-#### \#\#\# Building and Running the Tests
+#### Building and Running the Tests
 
 1.  **Build the Docker Image**
     Navigate to the project's root directory (the one containing the `Dockerfile`) and run the following command. This will build the Docker image and tag it as `mrf-test-suite`.
@@ -31,51 +32,118 @@ Ensure you have Docker installed and running on your system.
     docker run --rm mrf-test-suite
     ```
 
-You should see output from `pytest`, culminating in a summary like `5 passed`.
+    You should see output from `pytest`, culminating in a summary showing all tests passed (e.g., `21 passed`).
 
 
-### \#\# `mrf_clean.py` Tests
 
-**File**: `tests/test_clean.py`
-
-These tests validate the functionality of the `mrf_clean.py` script, which is used to optimize MRF storage by removing unused space.
-
-  * **`test_mrf_clean_copy`**: This test checks the default "copy" mode. It creates a mock MRF data file containing slack space (unused bytes) between valid data tiles. It verifies that the script creates a new, smaller data file with the slack space removed and that the corresponding new index file has correctly updated, contiguous tile offsets.
-
-  * **`test_mrf_clean_trim`**: This test validates the in-place "trim" mode. It uses a source MRF with slack space and confirms that after the script runs, the original data file is truncated to the correct, smaller size and that its index file is correctly overwritten with the updated tile offsets.
-
-
-### \#\# `mrf_join.py` Tests
-
-**File**: `tests/test_join.py`
-
-This test validates the `mrf_join.py` script, which merges multiple MRF files.
-
-  * **`test_mrf_join_simple`**: This test checks the script's ability to merge two sparse MRF files. It creates two mock MRFs, each containing data for a different tile in a two-tile raster. It verifies that the final data file is a concatenation of the input tile data and that the final index file correctly combines the index entries from both sources, applying the proper offsets. This test specifically validates the script's "last-one-wins" merge logic for sparse datasets.
-
-
-### \#\# `can` Utility Tests
+### `can` Utility Tests
 
 **File**: `tests/test_can.py`
 
 These tests validate the `can` C++ command-line utility, which is used for compressing and decompressing sparse MRF index files.
 
-  * **`test_can_uncan_cycle`**: This test verifies the round-trip integrity of the canning process. It creates a large, sparse mock index file (`.idx`), runs the `can` utility to compress it into a canned index (`.ix`), and then runs the utility again with the `-u` flag to decompress it back to an `.idx` file. The test passes if the final, decompressed index file is identical to the original, confirming a lossless process.
+  * **`test_can_uncan_cycle`**: Verifies the round-trip integrity of the canning process. It creates a large, sparse mock index file (`.idx`), runs `can` to compress it to a canned index (`.ix`), and then runs it with the `-u` flag to decompress it back to an `.idx` file. The test passes if the final index file is identical to the original.
 
 
-### \#\# `mrf_insert` Utility Tests
+
+### `jxl` Utility Tests
+
+**File**: `tests/test_jxl.py`
+
+These tests validate the `jxl` C++ utility, which converts MRF data files and single images between JPEG (JFIF) and JPEG XL (Brunsli) formats.
+
+  * **`test_jxl_mrf_round_trip`**: Verifies the primary MRF conversion. It converts a mock MRF data file (`.pjg`) and its index to JXL format and then back to JPEG, confirming the final files are identical to the originals and that the JXL file is smaller.
+  * **`test_jxl_single_file_round_trip`**: Validates the single-file mode (`-s`). It performs a round-trip conversion on a standalone JPEG file and confirms data integrity.
+  * **`test_jxl_bundle_mode` (Placeholder)**: A placeholder test for Esri bundle mode (`-b`) that is skipped, as creating a valid mock bundle file is non-trivial.
+
+
+
+### `mrf_clean.py` Tests
+
+**File**: `tests/test_clean.py`
+
+These tests validate `mrf_clean.py`, a script used to optimize MRF storage by removing unused space.
+
+  * **`test_mrf_clean_copy`**: Checks the default "copy" mode. It verifies that the script creates a new, smaller data file with slack space removed and that the new index file has correctly updated, contiguous tile offsets.
+  * **`test_mrf_clean_trim`**: Validates the in-place "trim" mode. It confirms that the original data file is truncated to the correct size and its index file is overwritten with updated offsets.
+
+-----
+
+### `mrf_insert` Utility Tests
 
 **File**: `tests/test_mrf_insert.py`
 
-These tests validate the `mrf_insert` C++ command-line utility, which is used to patch a smaller raster into a larger MRF.
+These tests validate the `mrf_insert` C++ utility, which is used to patch a smaller raster into a larger MRF.
 
-  * **`test_mrf_insert_simple_patch`**: This test validates the core functionality of the utility. It programmatically creates a large, empty target MRF and a smaller source raster filled with data. It then executes the `mrf_insert` command to patch the source into the target. Finally, it uses the GDAL library to read back the patched region and an unpatched region to verify that the data was inserted correctly and that other areas of the file were not affected.
+  * **`test_mrf_insert_simple_patch`**: Validates the core functionality. It creates an empty target MRF and a smaller source raster, executes `mrf_insert`, and uses GDAL to verify the patched region was written correctly while unpatched regions remain unaffected.
+  * **`test_mrf_insert_with_overviews`**: Tests that inserting a patch with the `-r` flag correctly regenerates the affected overview tiles.
+  * **`test_mrf_insert_partial_tile_overlap`**: Confirms that inserting a source that only partially covers a target tile correctly merges the new data while preserving the uncovered portions of the original tile.
 
 
-### \#\# Conditional Test Skipping
+### `mrf_join.py` Tests
+
+**File**: `tests/test_join.py`
+
+These tests validate `mrf_join.py`, a script that merges or appends multiple MRF files.
+
+  * **`test_mrf_join_simple_merge`**: Checks the script's ability to merge two sparse MRFs, verifying that the final data file is a concatenation of inputs and the final index correctly combines entries with updated offsets.
+  * **`test_mrf_join_overwrite`**: Confirms the "last-one-wins" logic by joining two MRFs that provide data for the same tile and verifying that the final index points to the data from the last-processed input.
+  * **`test_mrf_append_z_dimension`**: Validates the ability to stack 2D MRFs into a single 3D MRF, checking that the Z dimension is correctly set in the metadata and that the index layout is correct for multiple slices.
+  * **`test_mrf_append_with_overviews`**: Tests the complex scenario of appending MRFs that contain overviews, ensuring the final interleaved index structure is correctly assembled.
+
+
+
+### `mrf_read_data.py` Tests
+
+**File**: `tests/test_read_data.py`
+
+These tests validate `mrf_read_data.py`, which extracts a specific tile or data segment from an MRF data file.
+
+  * **`test_read_with_offset_and_size`**: Validates the direct read mode by using `--offset` and `--size` to extract a specific data segment and confirming the output is correct.
+  * **`test_read_with_index_and_tile`**: Validates the index-based read mode by using `--index` and `--tile` to retrieve a specific tile and verifying its content.
+  * **`test_read_with_little_endian_index`**: Ensures the `--little-endian` flag functions correctly by reading from an index file with a different byte order.
+
+
+
+### `mrf_read_idx.py` Tests
+
+**File**: `tests/test_read_idx.py`
+
+These tests validate `mrf_read_idx.py`, which converts a binary MRF index file into a human-readable CSV.
+
+  * **`test_read_simple_index`**: Validates the script's core functionality with a standard, big-endian index file, verifying the output CSV has the correct headers and data.
+  * **`test_read_little_endian_index`**: Confirms that the `--little-endian` flag works by parsing an index with a different byte order and checking for correctly interpreted values.
+  * **`test_read_empty_index`**: Handles the edge case of an empty input file, ensuring the script produces a CSV with only the header row.
+
+-----
+
+### `mrf_size.py` Tests
+
+**File**: `tests/test_mrf_size.py`
+
+These tests validate `mrf_size.py`, which generates a GDAL VRT to visualize the tile sizes from an MRF index.
+
+  * **`test_vrt_creation_single_band`**: Checks VRT generation for a single-band MRF, verifying the VRT's dimensions, GeoTransform, and raw band parameters.
+  * **`test_vrt_creation_multi_band`**: Validates handling of multi-band MRFs, ensuring the VRT contains the correct number of bands with correctly calculated offsets.
+  * **`test_vrt_default_pagesize`**: Ensures the script correctly applies a default 512x512 page size when it's not specified in the MRF metadata.
+
+
+
+### `tiles2mrf.py` Tests
+
+**File**: `tests/test_tiles2mrf.py`
+
+These tests validate `tiles2mrf.py`, which assembles an MRF from a directory of individual tiles.
+
+  * **`test_simple_conversion`**: Validates basic functionality by assembling a 2x2 grid of tiles and verifying the concatenated data file and sequential index offsets.
+  * **`test_with_overviews_and_padding`**: Checks the creation of a multi-level pyramid, ensuring the script correctly processes all levels and adds necessary padding records to the index.
+  * **`test_blank_tile_handling`**: Validates the `--blank-tile` feature, confirming that blank tiles are omitted from the data file and are represented by a zero-record in the index.
+
+
+
+### Conditional Test Skipping
 
 The test suite is designed to be run primarily within the provided Docker container, where all dependencies are guaranteed to be met. However, the tests include conditional skipping logic to fail gracefully if run in a local environment that is not fully configured.
 
-  * **C++ Executable Tests**: The tests for `can` and `mrf_insert` will be skipped if their respective compiled executables are not found in the system's PATH.
-
+  * **C++ Executable Tests**: The tests for **`can`**, **`jxl`**, and **`mrf_insert`** will be skipped if their respective compiled executables are not found in the system's PATH.
   * **GDAL Python Dependency**: The test for `mrf_insert` requires the GDAL Python bindings to create test files. It will be skipped if the `osgeo.gdal` library cannot be imported.
