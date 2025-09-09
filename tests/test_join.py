@@ -92,7 +92,8 @@ class TestMRFJoin(MRFTestCase):
         # 2. Final index should point to the data from input2 (the last one processed)
         final_idx = self.read_idx_file(output_base + ".idx")
         # Offset calculation: len(input1_data) + offset_from_input2 = len(b'A_v1' * 10) + 0 = 6
-        self.assertEqual(final_idx, [(6, 6)])
+        expected_offset = len(tile_v1_data[0])
+        self.assertEqual(final_idx, [(expected_offset, 6)])
 
     def test_mrf_append_z_dimension(self):
         """Test stacking two 2D MRFs into one 3D MRF using append mode."""
