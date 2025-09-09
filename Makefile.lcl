@@ -1,0 +1,12 @@
+# Makefile.lcl
+# Local configuration for the MRF test suite build.
+
+# Set the base directory where the GDAL RPM installed its files.
+PREFIX=/usr/local
+
+# Set the root for GDAL headers, as expected by the mrf_apps/Makefile.
+# This points to the same location as PREFIX/include but satisfies the variable requirement.
+GDAL_ROOT=/usr/local/include
+
+# Override the library directory to point to lib64
+LIBDIR = $(PREFIX)/lib64
