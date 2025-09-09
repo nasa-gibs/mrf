@@ -98,7 +98,7 @@ class TestMRFReadData(MRFTestCase):
             "--output", output_path,
             "--index", idx_path,
             "--tile", "1",
-            "--little-endian"
+            "-l"
         ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         self.assertTrue("Wrote" in result.stdout)
