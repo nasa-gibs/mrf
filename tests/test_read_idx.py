@@ -61,7 +61,7 @@ class TestMRFReadIdx(MRFTestCase):
             "python3", "mrf_apps/mrf_read_idx.py",
             "--index", idx_path,
             "--output", output_path,
-            "--little-endian"
+            "-l"
         ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         self.assertTrue("Wrote" in result.stdout)
