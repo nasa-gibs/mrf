@@ -5,7 +5,7 @@
 # Stage 1: compiles the C++ utilities and the Python virtual environment.
 # =========================================================================
 # Start from a base image with AlmaLinux 10.
-FROM almalinux:10
+FROM almalinux:10 AS builder
 
 # --- Build Arguments for the x86_64 GDAL RPM ---
 ARG GDAL_VERSION=3.6.4
