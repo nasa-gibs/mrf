@@ -24,7 +24,9 @@ RUN dnf install -y epel-release && \
     libtiff-devel \
     sqlite-devel \
     wget \
-    curl && \
+    curl \
+    geos \
+    proj && \
     dnf clean all
 
 # Install Pre-compiled GIBS GDAL
@@ -62,7 +64,9 @@ RUN pip install -e .
 FROM almalinux:10
 
 # Install only Runtime Dependencies
-RUN dnf install -y python3 wget && dnf clean all
+RUN dnf install -y epel-release && \
+    dnf install -y python3 wget geos proj && \
+    dnf clean all
 
 ARG GDAL_VERSION=3.6.4
 ARG GIBS_GDAL_RELEASE=3
