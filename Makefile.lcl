@@ -1,5 +1,5 @@
 # Makefile.lcl
-# Local configuration for the MRF test suite build.
+# Local configuration file that provides the system-specific paths needed to compile the C++ utilities.
 
 # Set the base directory where the GDAL RPM installed its files.
 PREFIX=/usr/local
