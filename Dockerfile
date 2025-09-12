@@ -73,7 +73,7 @@ RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GD
 
 WORKDIR /app
 
-# Copy Artifacts from the "builder" Stage
+# Copy Artifacts from Stage 1
 COPY --from=builder /app/mrf_apps/can /usr/local/bin/
 COPY --from=builder /app/mrf_apps/jxl /usr/local/bin/
 COPY --from=builder /app/mrf_apps/mrf_insert /usr/local/bin/
