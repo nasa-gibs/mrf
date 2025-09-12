@@ -5,35 +5,40 @@ This document outlines the unit tests for the Meta Raster Format (MRF) utilities
 A shared test helper, `tests/helpers.py`, provides a base class that handles the setup and teardown of a temporary testing directory and includes methods for creating mock MRF files (`.mrf`, `.idx`, `.dat`). This approach minimizes code duplication and standardizes test environments.
 
 
-
 ### Docker-Based Testing Environment
 
-Using Docker is the recommended method for running this test suite. It creates an environment with all the necessary C++, GDAL, and Python dependencies pre-installed, resolving any platform-specific issues and ensuring the tests run in this isolated environment.
+Using Docker is the recommended method for running this test suite. It creates an environment with all the necessary C++, GDAL, and Python dependencies pre-installed, resolving any platform-specific issues and ensuring the tests run in this isolated environment. This workflow uses a two stage building approach: first creating a base application image, and then building a lightweight test runner image from it.
 
 #### Prerequisites
 
-Ensure you have Docker installed and running on your system.
+Ensure Docker installed and running on your system.
 
 #### Building and Running the Tests
 
-1.  **Build the Docker Image**
-    Navigate to the project's root directory (the one containing the `Dockerfile`) and run the following command. This will build the Docker image and tag it as `mrf-test-suite`.
+**Step 1: Build the Base Application Image**
+Navigate to the project's root directory and run the following command. This builds the main application image, compiling all C++ utilities and installing dependencies. It is tagged as `mrf-app:latest`.
 
-    ```bash
-    docker build --platform linux/amd64 -t mrf-test-suite .
-    ```
+```bash
+docker build --platform linux/amd64 -t mrf-app:latest -f Dockerfile .
+```
 
-    > **Note**: The `--platform linux/amd64` flag is required if you are building on an ARM-based machine (like an Apple Silicon Mac) to ensure compatibility with the pre-compiled `x86_64` GDAL RPM used in the build.
+> **Note**: The `--platform linux/amd64` flag is required if you are building on an ARM-based machine (like an Apple Silicon Mac) to ensure compatibility with the pre-compiled `x86_64` GDAL RPM used in the build.
 
-2.  **Run the Test Suite**
-    Once the image is built, run the tests using this command. It will start a container from the image, execute `pytest`, and automatically remove the container (`--rm`) when finished.
+**Step 2: Build the Test Suite Image**
+Next, build the dedicated test runner image. This build uses the `mrf-app` image from the previous step as its base.
 
-    ```bash
-    docker run --rm mrf-test-suite
-    ```
+```bash
+docker build --platform linux/amd64 -t mrf-test-suite -f tests/Dockerfile .
+```
 
-    You should see output from `pytest`, ending in summary showing all tests passed (e.g., `21 passed`).
+**Step 3: Run the Test Suite**
+Finally, run the tests using the `mrf-test-suite` image. This command starts a container, executes `pytest`, and automatically removes the container (`--rm`) when finished.
 
+```bash
+docker run --rm mrf-test-suite
+```
+
+You should see output from `pytest`, culminating in a summary showing tests passing or failing or skipping.
 
 
 ### `can` Utility Tests
@@ -43,7 +48,6 @@ Ensure you have Docker installed and running on your system.
 These tests validate the `can` C++ command-line utility, which is used for compressing and decompressing sparse MRF index files.
 
   * **`test_can_uncan_cycle`**: Verifies the round-trip integrity of the canning process. It creates a large, sparse mock index file (`.idx`), runs `can` to compress it to a canned index (`.ix`), and then runs it with the `-u` flag to decompress it back to an `.idx` file. The test passes if the final index file is identical to the original.
-
 
 
 ### `jxl` Utility Tests
@@ -57,7 +61,6 @@ These tests validate the `jxl` C++ utility, which converts MRF data files and si
   * **`test_jxl_bundle_mode` (Placeholder)**: A placeholder test for Esri bundle mode (`-b`) that is skipped, as creating a valid mock bundle file is non-trivial.
 
 
-
 ### `mrf_clean.py` Tests
 
 **File**: `tests/test_clean.py`
@@ -67,7 +70,6 @@ These tests validate `mrf_clean.py`, a script used to optimize MRF storage by re
   * **`test_mrf_clean_copy`**: Checks the default "copy" mode. It verifies that the script creates a new, smaller data file with slack space removed and that the new index file has correctly updated, contiguous tile offsets.
   * **`test_mrf_clean_trim`**: Validates the in-place "trim" mode. It confirms that the original data file is truncated to the correct size and its index file is overwritten with updated offsets.
 
------
 
 ### `mrf_insert` Utility Tests
 
@@ -89,9 +91,7 @@ These tests validate `mrf_join.py`, a script that merges or appends multiple MRF
   * **`test_mrf_join_simple_merge`**: Checks the script's ability to merge two sparse MRFs, verifying that the final data file is a concatenation of inputs and the final index correctly combines entries with updated offsets.
   * **`test_mrf_join_overwrite`**: Confirms the "last-one-wins" logic by joining two MRFs that provide data for the same tile and verifying that the final index points to the data from the last-processed input.
   * **`test_mrf_append_z_dimension`**: Validates the ability to stack 2D MRFs into a single 3D MRF, checking that the Z dimension is correctly set in the metadata and that the index layout is correct for multiple slices.
-  * **`test_mrf_append_with_overviews`**: Tests the complex scenario of appending MRFs that contain overviews, ensuring the final interleaved index structure is correctly assembled.
-
-
+  * **`test_mrf_append_with_overviews`**: Tests the scenario of appending MRFs that contain overviews, ensuring the final interleaved index structure is correctly assembled.
 
 ### `mrf_read_data.py` Tests
 
@@ -104,18 +104,16 @@ These tests validate `mrf_read_data.py`, which extracts a specific tile or data 
   * **`test_read_with_little_endian_index`**: Ensures the `--little-endian` flag functions correctly by reading from an index file with a different byte order.
 
 
-
 ### `mrf_read_idx.py` Tests
 
 **File**: `tests/test_read_idx.py`
 
-These tests validate `mrf_read_idx.py`, which converts a binary MRF index file into a human-readable CSV.
+These tests validate `mrf_read_idx.py`, which converts a binary MRF index file into a CSV.
 
   * **`test_read_simple_index`**: Validates the script's core functionality with a standard, big-endian index file, verifying the output CSV has the correct headers and data.
   * **`test_read_little_endian_index`**: Confirms that the `--little-endian` flag works by parsing an index with a different byte order and checking for correctly interpreted values.
   * **`test_read_empty_index`**: Handles the edge case of an empty input file, ensuring the script produces a CSV with only the header row.
 
------
 
 ### `mrf_size.py` Tests
 
@@ -128,7 +126,6 @@ These tests validate `mrf_size.py`, which generates a GDAL VRT to visualize the 
   * **`test_vrt_default_pagesize`**: Ensures the script correctly applies a default 512x512 page size when it's not specified in the MRF metadata.
 
 
-
 ### `tiles2mrf.py` Tests
 
 **File**: `tests/test_tiles2mrf.py`
@@ -138,7 +135,6 @@ These tests validate `tiles2mrf.py`, which assembles an MRF from a directory of 
   * **`test_simple_conversion`**: Validates basic functionality by assembling a 2x2 grid of tiles and verifying the concatenated data file and sequential index offsets.
   * **`test_with_overviews_and_padding`**: Checks the creation of a multi-level pyramid, ensuring the script correctly processes all levels and adds necessary padding records to the index.
   * **`test_blank_tile_handling`**: Validates the `--blank-tile` feature, confirming that blank tiles are omitted from the data file and are represented by a zero-record in the index.
-
 
 
 ### Conditional Test Skipping
