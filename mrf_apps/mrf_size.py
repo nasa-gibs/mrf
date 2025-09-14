@@ -121,7 +121,7 @@ def VRT_Size(mrf):
     gt[1] *= mrf.pagesize.x
     gt[5] *= mrf.pagesize.y
     XML.SubElement(root,'GeoTransform').text = ",".join((str(x) for x in gt))
-    bands = int(mrf.size.c / mrf.pagesize.c)
+    bands = int(mrf.size.c)
     for band in range(bands):
         xband = XML.SubElement(root, 'VRTRasterBand', {
             'band':str(band+1),

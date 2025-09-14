@@ -1,3 +1,4 @@
 #requirements.txt
 pytest
 numpy
+Pillow

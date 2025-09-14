@@ -1,24 +1,23 @@
 # mrf/Dockerfile
-# This file builds the base application image containing all utilites and the Python virtual environment.
 
-# =========================================================================
-# Stage 1: compiles the C++ utilities and the Python virtual environment.
-# =========================================================================
-# Start from a base image with AlmaLinux 10.
-FROM almalinux:10 AS builder
+# =====================================================================
+# Stage 1: Install all development tools, compile the C++ utilities,
+# and create the Python virtual environment.
+# =====================================================================
+FROM almalinux:9 AS builder
 
-# --- Build Arguments for the x86_64 GDAL RPM ---
+# Build Arguments for the el9 GDAL RPM
 ARG GDAL_VERSION=3.6.4
-ARG GIBS_GDAL_RELEASE=3
-ARG ALMALINUX_VERSION=10
+ARG GIBS_GDAL_RELEASE=1 #
+ARG ALMALINUX_VERSION=9 #
 
-# --- Install Dependencies ---
-RUN dnf install -y epel-release && \
+# Install Build-time Dependencies
+RUN dnf install -y epel-release dnf-plugins-core && \
+    dnf config-manager --set-enabled crb && \
     dnf groupinstall -y "Development Tools" && \
-    dnf install -y \
+    dnf install -y --allowerasing \
     cmake \
     git \
-    python3 \
     python3-pip \
     python3-devel \
     libtiff-devel \
@@ -29,60 +28,68 @@ RUN dnf install -y epel-release && \
     proj && \
     dnf clean all
 
-# Install Pre-compiled GIBS GDAL
-ENV LD_LIBRARY_PATH=/usr/local/lib
-RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}-${GIBS_GDAL_RELEASE}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
+# Install Pre-compiled GIBS GDAL for el9
+RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     dnf install -y /tmp/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     rm -rf /tmp/*
 
 # Download the missing private marfa.h header
-# This file is required by mrf_insert but not included in the GDAL RPM.
 RUN curl -L "https://raw.githubusercontent.com/OSGeo/gdal/v${GDAL_VERSION}/frmts/mrf/marfa.h" -o /usr/local/include/marfa.h
 
-# Set the main working directory for the application.
 WORKDIR /app
+COPY requirements.txt .
+# Create the venv and install packages
+RUN python3 -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
+# Install the Python bindings for the installed GDAL version
+RUN pip install GDAL==$(gdal-config --version)
 
-# Copy project files.
+# Copy the rest of the project files
 COPY . .
 
-# Build the C++ utilities, which will link against the RPM-installed GDAL.
+# Build the C++ utilities
 RUN cd mrf_apps && make
 
-# Create and populate Python virtual environment and set the PATH.
-RUN python3 -m venv /app/venv
-ENV PATH="/app/venv/bin:/app/mrf_apps:$PATH"
-# Tell GDAL where to find its data files.
-ENV GDAL_DATA="/usr/local/share/gdal"
-
-# Install Python dependencies.
-RUN pip install --no-cache-dir -r requirements.txt
+# Install the project itself into the venv
 RUN pip install -e .
 
 # =====================================================================
-# Stage 2: creates clean distributable image
+# Stage 2:  Minimal, distributable image.
 # =====================================================================
-FROM almalinux:10
+FROM almalinux:9
 
 # Install only Runtime Dependencies
-RUN dnf install -y epel-release && \
-    dnf install -y python3 wget geos proj && \
+RUN dnf install -y epel-release dnf-plugins-core && \
+    dnf config-manager --set-enabled crb && \
+    dnf install -y --allowerasing python3 wget geos proj && \
     dnf clean all
 
+# Install the el9 GDAL RPM for its runtime libraries
 ARG GDAL_VERSION=3.6.4
-ARG GIBS_GDAL_RELEASE=3
-ARG ALMALINUX_VERSION=10
-RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}-${GIBS_GDAL_RELEASE}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
+ARG GIBS_GDAL_RELEASE=1
+ARG ALMALINUX_VERSION=9
+RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     dnf install -y /tmp/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     rm -rf /tmp/*
 
+# Tell the linker where to find the new libraries
+# Create a new configuration file for the dynamic linker
+RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/gdal-custom.conf
+
+# Update the shared library cache
+RUN ldconfig
+
 WORKDIR /app
 
-# Copy Artifacts from Stage 1
+# Copy Artifacts from the "builder" Stage
 COPY --from=builder /app/mrf_apps/can /usr/local/bin/
 COPY --from=builder /app/mrf_apps/jxl /usr/local/bin/
 COPY --from=builder /app/mrf_apps/mrf_insert /usr/local/bin/
 COPY --from=builder /app/venv /app/venv
-COPY . .
+COPY mrf_apps/ ./mrf_apps/
+COPY pyproject.toml .
+COPY README.md .
 
 # Set Final Environment Variables
 ENV PATH="/app/venv/bin:$PATH"

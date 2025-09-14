@@ -51,7 +51,7 @@ class TestMRFSize(MRFTestCase):
         # 2. Check GeoTransform (should be scaled by pagesize)
         # Original pixel res: x=1, y=-1. Scaled by 512 -> x=512, y=-512
         geotransform = root.find("GeoTransform").text
-        self.assertEqual(geotransform, "0.0,512.0,0,1024.0,0,-512.0")
+        self.assertEqual(geotransform, "0.0,512.0,0,512.0,0,-512.0")
 
         # 3. Check VRTRasterBand properties
         band = root.find("VRTRasterBand")

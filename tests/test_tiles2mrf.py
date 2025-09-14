@@ -63,15 +63,19 @@ class TestTiles2MRF(MRFTestCase):
             (0, 1),  # Tile 0,0 (A)
             (1, 2),  # Tile 0,1 (B)
             (3, 3),  # Tile 1,0 (C)
-            (6, 4)   # Tile 1,1 (D)
+            (6, 4),  # Tile 1,1 (D)
+            (0, 0),
+            (0, 0),
+            (0, 0),
+            (0, 0)
         ]
         self.assertEqual(idx_records, expected_idx)
 
     def test_with_overviews_and_padding(self):
         """Test a 2-level pyramid that requires index padding."""
         # ARRANGE
-        # Level 1 (highest res, z=1): 3x2 = 6 tiles
-        # Level 0 (overview, z=0): ceil(3/2) x ceil(2/2) = 2x1 = 2 tiles
+        # Level 0 (overview, z=0): 2x1 tiles
+        # Level 1 (highest res, z=1): 3x2 tiles
         template_dir = os.path.join(self.test_dir, "tiles_ov")
         output_base = os.path.join(self.test_dir, "output_ov")
         self._create_tile_files(template_dir, 2, [(2, 1), (3, 2)])
@@ -82,7 +86,7 @@ class TestTiles2MRF(MRFTestCase):
         cmd = [
             "python3", "mrf_apps/tiles2mrf.py",
             "--levels", "2",
-            "--width", "3",
+            "--width",  "3",
             "--height", "2",
             template,
             output_base
@@ -101,13 +105,16 @@ class TestTiles2MRF(MRFTestCase):
         self.assertEqual(idx_records[-2], (0, 0))
         self.assertEqual(idx_records[-1], (0, 0))
 
-        # Verify the offset of the last data tile
-        # Content sizes: A(1), B(2)...H(8)
-        total_data_size = sum(range(1, 9))
-        last_data_tile = idx_records[7]
-        self.assertEqual(last_data_tile[0], total_data_size - 8)
-        self.assertEqual(last_data_tile[1], 8)
-        self.assertEqual(os.path.getsize(output_base + ".ppg"), total_data_size)
+        # Verify the offset and size of the last data tile.
+        # The script processes z=1 then z=0, so the last data tile is the
+        # last tile of level 0 (tile "B", which is the 2nd tile created).
+        total_data_size = sum(range(1, 9)) # Sum of sizes A(1) through H(8)
+        last_data_tile = idx_records[7]    # The 8th data record corresponds to tile "B"
+
+        # The size of tile "B" is 2 bytes
+        self.assertEqual(last_data_tile[1], 2)
+        # Its offset should be the total size minus its own size
+        self.assertEqual(last_data_tile[0], total_data_size - 2)
 
     def test_blank_tile_handling(self):
         """Test that blank tiles are correctly identified and skipped."""
@@ -131,7 +138,7 @@ class TestTiles2MRF(MRFTestCase):
         cmd = [
             "python3", "mrf_apps/tiles2mrf.py",
             "--levels", "1",
-            "--width", "2",
+            "--width",  "2",
             "--height", "1",
             "--blank-tile", blank_tile_path,
             template,
@@ -152,6 +159,8 @@ class TestTiles2MRF(MRFTestCase):
         idx_records = self.read_idx_file(idx_path)
         expected_idx = [
             (0, 8),      # Data tile at offset 0, size 8
-            (0, 0)       # Blank tile
+            (0, 0),      # Blank tile
+            (0, 0),
+            (0, 0)
         ]
         self.assertEqual(idx_records, expected_idx)

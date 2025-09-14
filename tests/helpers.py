@@ -5,6 +5,7 @@ import os
 import shutil
 import struct
 from xml.etree import ElementTree as ET
+from PIL import Image
 
 class MRFTestCase(unittest.TestCase):
     """
@@ -62,3 +63,8 @@ class MRFTestCase(unittest.TestCase):
                     break
                 tiles.append(struct.unpack('>QQ', chunk))
         return tiles
+
+    def create_mock_jpeg(self, path, size=(16, 16), color='black'):
+        """Creates a simple, valid JPEG file using Pillow."""
+        with Image.new('RGB', size, color) as img:
+            img.save(path, 'jpeg')
