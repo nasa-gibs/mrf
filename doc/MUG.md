@@ -128,12 +128,8 @@ less overhead than the GDAL averaging and is usually faster. It is also optimize
 In contrast, the GDAL sampler stretches the input when needed by repeating rows and/or columns, which keeps the bounding box for all the 
 overviews identical but the ratio between two successive overviews may not be exactly 2. Since for the internal resampler the scale factor is 
 exactly 2, the `avg` algorithm can also be considered a bilinear interpolation. Both `avg` and `nbb` samplers do take the NoData into account.
-
-Note that GDAL up to version 1.11 used an incorrect step when generating overviews. This bug results in inefficient execution, larger than 
-necessary file sizes and sometimes visible artifacts. This problem has been addressed and should not affect future versions of GDAL. Also, 
-use `–r average` to use the GDAL average interpolation and `-r near` to select the GDAL nearest neighbor one. As described above, the results 
-will differ slightly from the MRF internal sampler, due to the different padding. For the internal sampler, the progress indicator is per 
-generated level.
+The GDAL average or near neighbor sampling can be selected by using `–r average` or `-r near`. As described above, the results 
+may differ slightly from the MRF internal sampler, due to the different padding.
 
 GDAL resampling takes into consideration both the NoData value and the alpha band when it exists, setting to zero pixels where the alpha 
 band is zero. To force gdal to preserve the data values even for pixels where the alpha value is zero, set the MRF create option 
