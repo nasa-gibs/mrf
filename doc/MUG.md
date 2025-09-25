@@ -227,31 +227,29 @@ Example of gdal_translate to MRF/PNG:
 
 ## ZSTD
 
-[ZSTD](https://github.com/facebook/zstd) is an open source generic lossless compression algorithm, similar to DEFLATE. It is considerably faster 
+[ZSTD](https://github.com/facebook/zstd) is an open source generic lossless compression algorithm. It is considerably faster 
 than DEFLATE at the same compression ratio and can achieve better compression. ZSTD in MRF can handle all the data types, both band 
 and pixel interleave. The ZSTD compression level can be controled by providing a quality figure, an integer between 1 and 22. 
 The default level in MRF is 9, where ZSTD is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
 In general the default ZSTD level should not be modified, it provides good compression and is fast. Lower figures 
 will be faster but achieve less compression while higher ones will take more CPU time while compressing better. Note that large values
-can take a massive amount of time and do not necessarily improve the compression over slighly lower levels. QUALITY values outside of the valid 
-range will be ignored, the ZSTD comression level will stay the default 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing 
-reasonable compression. It should be used in most cases where the write speed is more important than the absolute storage size, for example 
-in caching MRFs. The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
-MRF with ZSTD uses a data filter (see below), which improves the compression ratio considerably while having almost no computational cost.  
+can take a massive amount of time and runtime memory and do not necessarily improve the compression over slighly lower levels. 
+QUALITY values outside of the valid range will be silently ignored, the ZSTD compression level will stay the default 9. 
+ZSTD at QUALITY=1 (lowest) is very fast while also providing reasonable compression, it should be used in most cases where the 
+write speed is more important than the absolute storage size, for example in caching MRFs. 
+The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
+MRF with ZSTD uses a data filter (see below), which improves the compression ratio considerably.  
 
 ZSTD in MRF can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
-The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format is equivalent to `NONE` compression 
-with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the tile order may differ.
-```
-gdal_translate –of MRF –co COMPRESS=ZSTD input.tif zstd.mrf
-gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw_zstd.mrf
-```
+The later mode is chosen by adding `ZSTD:ON` to the free form list `OPTIONS`.
+
 ### MRF ZSTD Optimization
-ZSTD is a generic byte stream compression. The compression achieved can be improved if the input data type is taken into consideration by filtering
-the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final 
-compression. This filter improves the raster compression considerably in most cases, especially for multi byte data types and for pixel interleaved 
-data. The filter has a negligible computation cost, especially when compared with the ZSTD compression itself, so it is always applied. 
-This filter is not used when ZSTD is applied as a second stage compression, except when the first compression stage is `NONE`.
+ZSTD is a lossless byte stream compression. The compression achieved can be improved if the input data is taken into 
+consideration by filtering the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the 
+tile data before ZSTD compression. This filter improves the raster compression considerably in most cases, especially for multi byte 
+data types and for pixel interleaved data. The filter has a negligible computation cost, especially when compared with the ZSTD 
+compression itself, so it is always applied. This filter is not used when ZSTD is applied as a second stage compression, except when 
+the main compression is `NONE`.
 
 ## DEFLATE
 ### DEPRECATED, **ZSTD is recommended instead**
@@ -265,7 +263,7 @@ size data files, although the tile order may differ.
 gdal_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
 gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 ```
-The zlib compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which produces very good 
+The DEFLATE compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which produces very good 
 compression albeit slow. A quality setting of 60 is recommended as a tradeoff between compression speed and size. Quality of zero, 
 corresponding to quality values under 10, means no compression.  
 The DEFLATE compression can use different tile headers. The default should be used in general, since the speed and size difference 
