@@ -4,7 +4,7 @@
 # PREFIX=/home/ec2-user
 # GDAL_ROOT=$(PREFIX)/src/gdal/gdal
 #
-include Makefile.lcl
+include ../Makefile.lcl
 
 TARGETS = can mrf_insert jxl
 GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)

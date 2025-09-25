@@ -205,7 +205,8 @@ def mrf_append(inputs, output, outsize, startidx = 0):
         assert os.path.splitext(f)[1] == ext,\
             "All input files should have the same extension as the output"
     # Get the template mrf information from the first input
-    mrfinfo, tree = getmrfinfo(os.path.splitext(inputs[1])[0] + ".mrf", ofname + ".mrf")
+    # Use the first input file (inputs[0]) as template for the output MRF
+    mrfinfo, tree = getmrfinfo(os.path.splitext(inputs[0])[0] + ".mrf")
 
     # Create the output .mrf if it doesn't exist
     if not os.path.isfile(ofname + ".mrf"):
