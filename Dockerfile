@@ -4,12 +4,12 @@
 # Stage 1: Install all development tools, compile the C++ utilities,
 # and create the Python virtual environment.
 # =====================================================================
-FROM almalinux:9 AS builder
+FROM almalinux:10 AS builder
 
 # Build Arguments for the el9 GDAL RPM
 ARG GDAL_VERSION=3.6.4
-ARG GIBS_GDAL_RELEASE=1 #
-ARG ALMALINUX_VERSION=9 #
+ARG GIBS_GDAL_RELEASE=3 #
+ARG ALMALINUX_VERSION=10 #
 
 # Install Build-time Dependencies
 RUN dnf install -y epel-release dnf-plugins-core && \
@@ -57,7 +57,7 @@ RUN pip install -e .
 # =====================================================================
 # Stage 2:  Minimal, distributable image.
 # =====================================================================
-FROM almalinux:9
+FROM almalinux:10
 
 # Install only Runtime Dependencies
 RUN dnf install -y epel-release dnf-plugins-core && \
@@ -68,7 +68,7 @@ RUN dnf install -y epel-release dnf-plugins-core && \
 # Install the el9 GDAL RPM for its runtime libraries
 ARG GDAL_VERSION=3.6.4
 ARG GIBS_GDAL_RELEASE=1
-ARG ALMALINUX_VERSION=9
+ARG ALMALINUX_VERSION=10
 RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     dnf install -y /tmp/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     rm -rf /tmp/*
