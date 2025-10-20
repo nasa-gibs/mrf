@@ -65,7 +65,7 @@ RUN dnf install -y epel-release dnf-plugins-core && \
     dnf install -y --allowerasing python3 wget geos proj && \
     dnf clean all
 
-# Install the el9 GDAL RPM for its runtime libraries
+# Install the el10 GDAL RPM for its runtime libraries
 ARG GDAL_VERSION=3.6.4
 ARG GIBS_GDAL_RELEASE=3
 ARG ALMALINUX_VERSION=10
