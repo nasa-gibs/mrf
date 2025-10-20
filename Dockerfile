@@ -67,7 +67,7 @@ RUN dnf install -y epel-release dnf-plugins-core && \
 
 # Install the el9 GDAL RPM for its runtime libraries
 ARG GDAL_VERSION=3.6.4
-ARG GIBS_GDAL_RELEASE=1
+ARG GIBS_GDAL_RELEASE=3
 ARG ALMALINUX_VERSION=10
 RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     dnf install -y /tmp/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
