@@ -228,7 +228,7 @@ bool state::patch()
         GDALDataType eDataType = b0->GetRasterDataType();
         overview_count = b0->GetOverviewCount();
 
-        int pixel_size = GDALGetDataTypeSize(eDataType) / 8; // Bytes per pixel per band
+        int pixel_size = GDALGetDataTypeSizeBytes(eDataType);
         int line_size = tsz_x * pixel_size;                  // A line has this many bytes
         int buffer_size = line_size * tsz_y;                 // A block size in bytes
 
