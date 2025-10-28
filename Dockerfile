@@ -28,9 +28,14 @@ RUN dnf install -y epel-release dnf-plugins-core && \
     proj && \
     dnf clean all
 
-# Install Pre-compiled GIBS GDAL for el9
-RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
+# Install Pre-compiled GIBS GDAL for el10
+RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}-${GIBS_GDAL_RELEASE}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     dnf install -y /tmp/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
+    # Point ldconfig to /usr/lib (where libgdal.so is)
+    # AND also /usr/local/lib for Brunsli
+    echo "/usr/lib" > /etc/ld.so.conf.d/gdal-custom.conf && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/gdal-brunsli.conf && \
+    ldconfig && \
     rm -rf /tmp/*
 
 # Download the missing private marfa.h header
@@ -42,8 +47,24 @@ COPY requirements.txt .
 RUN python3 -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
-# Install the Python bindings for the installed GDAL version
-RUN pip install GDAL==$(gdal-config --version)
+# Fix outdated packaging lib before building GDAL
+RUN pip install --force-reinstall 'packaging>=25.0'
+
+# Install build dependencies needed when using --no-build-isolation
+RUN pip install setuptools wheel
+
+# Install the Python bindings with correct build flags
+RUN NP_INCLUDE=$(python -c "import numpy; print(numpy.get_include())") && \
+    VENV_SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])") && \
+    CFLAGS="$(gdal-config --cflags) -I${NP_INCLUDE}" \
+    # Override LDFLAGS to use /usr/lib
+    LDFLAGS="-L/usr/lib -lgdal" \
+    PYTHONPATH="${VENV_SITE_PACKAGES}:${PYTHONPATH:-}" \
+    pip install \
+        --no-build-isolation \
+        --no-cache-dir \
+        --no-binary :all: \
+        GDAL==$(gdal-config --version)
 
 # Copy the rest of the project files
 COPY . .
@@ -69,16 +90,15 @@ RUN dnf install -y epel-release dnf-plugins-core && \
 ARG GDAL_VERSION=3.6.4
 ARG GIBS_GDAL_RELEASE=3
 ARG ALMALINUX_VERSION=10
-RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
+RUN wget -P /tmp/ https://github.com/nasa-gibs/gibs-gdal/releases/download/v${GDAL_VERSION}-${GIBS_GDAL_RELEASE}/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
     dnf install -y /tmp/gibs-gdal-${GDAL_VERSION}-${GIBS_GDAL_RELEASE}.el${ALMALINUX_VERSION}.x86_64.rpm && \
+    # Point ldconfig to /usr/lib (where libgdal.so is)
+    # AND also /usr/local/lib for Brunsli
+    echo "/usr/lib" > /etc/ld.so.conf.d/gdal-custom.conf && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/gdal-brunsli.conf && \
+    # Update the shared library cache
+    ldconfig && \
     rm -rf /tmp/*
-
-# Tell the linker where to find the new libraries
-# Create a new configuration file for the dynamic linker
-RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/gdal-custom.conf
-
-# Update the shared library cache
-RUN ldconfig
 
 WORKDIR /app
 
