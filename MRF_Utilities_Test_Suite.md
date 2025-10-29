@@ -35,7 +35,7 @@ docker build --platform linux/amd64 -t mrf-test-suite -f tests/Dockerfile .
 Finally, run the tests using the `mrf-test-suite` image. This command starts a container, executes `pytest`, and automatically removes the container (`--rm`) when finished.
 
 ```bash
-docker run --rm mrf-test-suite
+docker run --rm mrf-test-suite pytest -rs
 ```
 
 You should see output from `pytest`, culminating in a summary showing tests passing or failing or skipping.
