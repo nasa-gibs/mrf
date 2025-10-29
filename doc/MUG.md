@@ -128,12 +128,8 @@ less overhead than the GDAL averaging and is usually faster. It is also optimize
 In contrast, the GDAL sampler stretches the input when needed by repeating rows and/or columns, which keeps the bounding box for all the 
 overviews identical but the ratio between two successive overviews may not be exactly 2. Since for the internal resampler the scale factor is 
 exactly 2, the `avg` algorithm can also be considered a bilinear interpolation. Both `avg` and `nbb` samplers do take the NoData into account.
-
-Note that GDAL up to version 1.11 used an incorrect step when generating overviews. This bug results in inefficient execution, larger than 
-necessary file sizes and sometimes visible artifacts. This problem has been addressed and should not affect future versions of GDAL. Also, 
-use `–r average` to use the GDAL average interpolation and `-r near` to select the GDAL nearest neighbor one. As described above, the results 
-will differ slightly from the MRF internal sampler, due to the different padding. For the internal sampler, the progress indicator is per 
-generated level.
+The GDAL average or near neighbor sampling can be selected by using `–r average` or `-r near`. As described above, the results 
+may differ slightly from the MRF internal sampler, due to the different padding.
 
 GDAL resampling takes into consideration both the NoData value and the alpha band when it exists, setting to zero pixels where the alpha 
 band is zero. To force gdal to preserve the data values even for pixels where the alpha value is zero, set the MRF create option 
@@ -173,17 +169,17 @@ using the GDAL create option `COMPRESS`.
 
 |Format|Data Type|Description|Usage|Lossy|Comments|
 | --- | --- | --- | --- | --- | --- |
-|[NONE](#none-compression)|All|As is, no compression|Rarely|No|Very large and very fast|
-|[QB3](#qb3-compression)|Integer|[QB3](https://github.com/lucianpls/QB3) compression|Recommended|No|Small and very fast|
-|[PNG](#png-and-ppng-compression)|Byte, UInt16, Int16|Well known PNG format|Web Tiles|No|Small but very slow to create|
-|[PPNG](#png-and-ppng-compression)|Byte|PNG with per tile palette|Web Tiles|No|Small but very slow to create|
-|[ZSTD](#zstd-compression)|All|[ZSTD](https://github.com/facebook/zstd) compression|Recommended|No|Good compression, speed depends on QUALITY=[1-22]|
-|[DEFLATE](#deflate-compression)|All|[zlib](https://www.zlib.net/) compression|DEPRECATED|No|Use ZSTD instead, it is faster and better|
-|[JPEG](#jpeg-compression)|Byte, UInt16|JPEG (JFIF) format|Images, Web Tiles|Yes|Very small and fast. Up to 12bit per channel data. Includes zero mask (Zen)|
-|[JPEG](#jpeg-compression) brunsli|Byte|[Brunsli](https://github.com/google/brunsli) packed JPEG|Smaller than JPEG| Yes|Replaces COMPRESSION=JPEG when brunsli is available|
-|[JPNG](#jpng-compression)|Byte|Mix of JPEG and PNG|Web Tiles with transparency|Yes|Uses JPEG for tiles with no transparency, PNG otherwise. Use only when JPEG-Zen is not suitable|
-|[TIFF](#tiff-compression)|All|TIFF with LZW compression|Web Tiles|No|Mostly for web clients with TIFF support|
-|[LERC](#lerc-compression)|All|[LERC](https://github.com/Esri/lerc) compression||Choice|Fast compression with fixed quantization step|
+|[NONE](#none)|All|As is, no compression|Rarely|No|Very large and very fast|
+|[QB3](#qb3)|Integer|[QB3](https://github.com/lucianpls/QB3) compression|Recommended|No|Small and very fast|
+|[PNG](#png-and-ppng)|Byte, UInt16, Int16|Well known PNG format|Web Tiles|No|Small but very slow to create|
+|[PPNG](#png-and-ppng)|Byte|PNG with per tile palette|Web Tiles|No|Small but very slow to create|
+|[ZSTD](#zstd)|All|[ZSTD](https://github.com/facebook/zstd) compression|Recommended|No|Good compression, speed depends on QUALITY=[1-22]|
+|[DEFLATE](#deflate)|All|[zlib](https://www.zlib.net/) compression|DEPRECATED|No|Use ZSTD instead, it is faster and better|
+|[JPEG](#jpeg)|Byte, UInt16|JPEG (JFIF) format|Images, Web Tiles|Yes|Very small and fast. Up to 12bit per channel data. Includes zero mask (Zen)|
+|[JPEG](#jpeg) brunsli|Byte|[Brunsli](https://github.com/google/brunsli) packed JPEG|Smaller than JPEG| Yes|Replaces COMPRESSION=JPEG when brunsli is available|
+|[JPNG](#jpng)|Byte|Mix of JPEG and PNG|Web Tiles with transparency|Yes|Uses JPEG for tiles with no transparency, PNG otherwise. Use only when JPEG-Zen is not suitable|
+|[TIFF](#tiff)|All|TIFF with LZW compression|Web Tiles|No|Mostly for web clients with TIFF support|
+|[LERC](#lerc)|All|[LERC](https://github.com/Esri/lerc) compression||Choice|Fast compression with fixed quantization step|
 
 ## NONE
 
@@ -227,31 +223,29 @@ Example of gdal_translate to MRF/PNG:
 
 ## ZSTD
 
-[ZSTD](https://github.com/facebook/zstd) is an open source generic lossless compression algorithm, similar to DEFLATE. It is considerably faster 
+[ZSTD](https://github.com/facebook/zstd) is an open source generic lossless compression algorithm. It is considerably faster 
 than DEFLATE at the same compression ratio and can achieve better compression. ZSTD in MRF can handle all the data types, both band 
 and pixel interleave. The ZSTD compression level can be controled by providing a quality figure, an integer between 1 and 22. 
 The default level in MRF is 9, where ZSTD is expected to achive a compression ratio similar to DEFLATE at level 6, while being much faster. 
 In general the default ZSTD level should not be modified, it provides good compression and is fast. Lower figures 
 will be faster but achieve less compression while higher ones will take more CPU time while compressing better. Note that large values
-can take a massive amount of time and do not necessarily improve the compression over slighly lower levels. QUALITY values outside of the valid 
-range will be ignored, the ZSTD comression level will stay the default 9. ZSTD at QUALITY=1 (lowest) is very fast while also providing 
-reasonable compression. It should be used in most cases where the write speed is more important than the absolute storage size, for example 
-in caching MRFs. The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
-MRF with ZSTD uses a data filter (see below), which improves the compression ratio considerably while having almost no computational cost.  
+can take a massive amount of time and runtime memory and do not necessarily improve the compression over slighly lower levels. 
+QUALITY values outside of the valid range will be silently ignored, the ZSTD compression level will stay the default 9. 
+ZSTD at QUALITY=1 (lowest) is very fast while also providing reasonable compression, it should be used in most cases where the 
+write speed is more important than the absolute storage size, for example in caching MRFs. 
+The fact that ZSTD compression is lossless and that it works with all supported data types makes this choice even better.
+MRF with ZSTD uses a data filter (see below), which improves the compression ratio considerably.  
 
 ZSTD in MRF can be used in two ways, as a stand-alone tile packing mechanism or as a second pass compression when used with another format. 
-The later mode is chosen by adding `ZSTD:on` to the free form list `OPTIONS`. The `ZSTD` compression format is equivalent to `NONE` compression 
-with `OPTIONS=ZSTD:on`. The following two command generate MRFs with identical data file size, although the tile order may differ.
-```
-gdal_translate –of MRF –co COMPRESS=ZSTD input.tif zstd.mrf
-gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="ZSTD:on" input.tif raw_zstd.mrf
-```
+The later mode is chosen by adding `ZSTD:ON` to the free form list `OPTIONS`.
+
 ### MRF ZSTD Optimization
-ZSTD is a generic byte stream compression. The compression achieved can be improved if the input data type is taken into consideration by filtering
-the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the tile data before using ZSTD for the final 
-compression. This filter improves the raster compression considerably in most cases, especially for multi byte data types and for pixel interleaved 
-data. The filter has a negligible computation cost, especially when compared with the ZSTD compression itself, so it is always applied. 
-This filter is not used when ZSTD is applied as a second stage compression, except when the first compression stage is `NONE`.
+ZSTD is a lossless byte stream compression. The compression achieved can be improved if the input data is taken into 
+consideration by filtering the input to increase redundancy. MRF implements a byte-rank reorder followed a byte delta filter on the 
+tile data before ZSTD compression. This filter improves the raster compression considerably in most cases, especially for multi byte 
+data types and for pixel interleaved data. The filter has a negligible computation cost, especially when compared with the ZSTD 
+compression itself, so it is always applied. This filter is not used when ZSTD is applied as a second stage compression, except when 
+the main compression is `NONE`.
 
 ## DEFLATE
 ### DEPRECATED, **ZSTD is recommended instead**
@@ -265,7 +259,7 @@ size data files, although the tile order may differ.
 gdal_translate –of MRF –co COMPRESS=DEFLATE input.tif deflate.mrf
 gdal_translate –of MRF –co COMPRESS=NONE -co OPTIONS="DEFLATE:on" input.tif raw_and_deflate.mrf
 ```
-The zlib compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which produces very good 
+The DEFLATE compression level is calculated from the QUALITY setting as level = floor(Quality/10). The default is 8, which produces very good 
 compression albeit slow. A quality setting of 60 is recommended as a tradeoff between compression speed and size. Quality of zero, 
 corresponding to quality values under 10, means no compression.  
 The DEFLATE compression can use different tile headers. The default should be used in general, since the speed and size difference 
