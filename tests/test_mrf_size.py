@@ -18,7 +18,7 @@ class TestMRFSize(MRFTestCase):
         ET.SubElement(raster, "Size", x=str(xsize), y=str(ysize), c=str(channels))
         if include_pagesize_tag:
             ET.SubElement(raster, "PageSize", x=str(pagesize), y=str(pagesize), c=str(channels))
-        
+
         geotags = ET.SubElement(root, "GeoTags")
         # Define a simple BoundingBox and Projection for testing GeoTransform
         ET.SubElement(geotags, "BoundingBox", minx="0", miny="0", maxx=str(xsize), maxy=str(ysize))
@@ -58,9 +58,9 @@ class TestMRFSize(MRFTestCase):
         self.assertIsNotNone(band)
         self.assertEqual(band.get("dataType"), "UInt32")
         self.assertEqual(band.find("SourceFilename").text, "test.idx")
-        
+
         # ImageOffset should be 12 to read the lower 4 bytes of the 8-byte size field
-        self.assertEqual(band.find("ImageOffset").text, "12") 
+        self.assertEqual(band.find("ImageOffset").text, "12")
         # PixelOffset is 16 bytes (size of one index record)
         self.assertEqual(band.find("PixelOffset").text, "16")
         # LineOffset is 16 * rasterXSize * num_bands = 16 * 2 * 1 = 32
@@ -77,26 +77,26 @@ class TestMRFSize(MRFTestCase):
         # ACT
         sys.argv = ["mrf_size.py", mrf_path]
         mrf_size.main()
-        
+
         # ASSERT
         self.assertTrue(os.path.exists(vrt_path))
         tree = ET.parse(vrt_path)
         root = tree.getroot()
-        
+
         # 1. VRT should be 1x1 pixels
         self.assertEqual(root.get("rasterXSize"), "1")
         self.assertEqual(root.get("rasterYSize"), "1")
 
         # 2. There should be 1 raster band (for the single pixel-interleaved tile)
-        bands = root.findall("VRTRasterBand")
-        self.assertEqual(len(bands), 1)
+        bands = root.findall("VRTRasterBand")
+        self.assertEqual(len(bands), 1)
 
-        # 3. Check offsets for the single band
-        # VRT is 1x1, so xsz=1. bands=1.
-        # PixelOffset and LineOffset are 16 * num_bands = 16
-        self.assertEqual(bands[0].find("ImageOffset").text, "12")
-        self.assertEqual(bands[0].find("PixelOffset").text, "16")
-        self.assertEqual(bands[0].find("LineOffset").text, "16")
+        # 3. Check offsets for the single band
+        # VRT is 1x1, so xsz=1. bands=1.
+        # PixelOffset and LineOffset are 16 * num_bands = 16
+        self.assertEqual(bands[0].find("ImageOffset").text, "12")
+        self.assertEqual(bands[0].find("PixelOffset").text, "16")
+        self.assertEqual(bands[0].find("LineOffset").text, "16")
 
     def test_vrt_default_pagesize(self):
         """Test that a default PageSize of 512 is used when the tag is absent."""
