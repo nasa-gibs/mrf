@@ -87,19 +87,16 @@ class TestMRFSize(MRFTestCase):
         self.assertEqual(root.get("rasterXSize"), "1")
         self.assertEqual(root.get("rasterYSize"), "1")
 
-        # 2. There should be 3 raster bands
-        bands = root.findall("VRTRasterBand")
-        self.assertEqual(len(bands), 3)
+        # 2. There should be 1 raster band (for the single pixel-interleaved tile)
+        bands = root.findall("VRTRasterBand")
+        self.assertEqual(len(bands), 1)
 
-        # 3. Check offsets for each band
-        # PixelOffset and LineOffset are 16 * num_bands = 48
-        # ImageOffset increments by 16 for each band
-        self.assertEqual(bands[0].find("ImageOffset").text, "12") # 12 + 16 * 0
-        self.assertEqual(bands[0].find("PixelOffset").text, "48")
-        self.assertEqual(bands[0].find("LineOffset").text, "48")
-
-        self.assertEqual(bands[1].find("ImageOffset").text, "28") # 12 + 16 * 1
-        self.assertEqual(bands[2].find("ImageOffset").text, "44") # 12 + 16 * 2
+        # 3. Check offsets for the single band
+        # VRT is 1x1, so xsz=1. bands=1.
+        # PixelOffset and LineOffset are 16 * num_bands = 16
+        self.assertEqual(bands[0].find("ImageOffset").text, "12")
+        self.assertEqual(bands[0].find("PixelOffset").text, "16")
+        self.assertEqual(bands[0].find("LineOffset").text, "16")
 
     def test_vrt_default_pagesize(self):
         """Test that a default PageSize of 512 is used when the tag is absent."""
