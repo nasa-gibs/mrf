@@ -40,8 +40,8 @@ def option_error(parser, msg):
     sys.exit(1)
 
 def half(val):
-    'Divide by two with roundup, returns at least 1'
-    return 1 + (val - 1 )/2
+    'Divide by two with roundup, returns integer value at least 1'
+    return 1 + (val - 1 ) // 2
 
 def hash_tile(tile):
     h = hashlib.sha256()
