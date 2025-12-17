@@ -11,7 +11,7 @@ GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)
 LIBDIR = $(PREFIX)/lib
 BINDIR = $(PREFIX)/bin
 CP=cp
-JXL_LIBS = -lbrunslienc-c -lbrunslidec-c
+BRUNSLI_LIBS = -lbrunslienc-c -lbrunslidec-c
 
 INCLUDES = $(GDAL_INCLUDE)
 
@@ -23,8 +23,8 @@ mrf_insert: mrf_insert.cpp
 can: can.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $<
 
-jxl: jxl.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) $(JXL_LIBS)
+brn: brn.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< -L $(LIBDIR) $(BRUNSLI_LIBS)
 	
 install: $(TARGETS)
 	$(CP) $^ $(BINDIR)
