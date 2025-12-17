@@ -6,7 +6,7 @@
 #
 include ../Makefile.lcl
 
-TARGETS = can mrf_insert jxl
+TARGETS = can mrf_insert brn
 GDAL_INCLUDE = -I $(PREFIX)/include -I $(GDAL_ROOT)
 LIBDIR = $(PREFIX)/lib
 BINDIR = $(PREFIX)/bin
