@@ -1,20 +1,8 @@
-#include <brunsli/encode.h>
-#include <brunsli/decode.h>
-#include <string>
-#include <iostream>
-#include <vector>
-#include <algorithm>
-#include <cassert>
-#include <cstdio>
-#include <sys/stat.h>
-#include <cstdlib>
-#include <fcntl.h>
-#include <sys/types.h>
-
 #if defined(_WIN32)
 #if !defined(_WIN64)
 #error "Need 64bit support"
 #endif
+#define _CRT_SECURE_NO_WARNINGS
 #include <Windows.h>
 #include <io.h>
 
@@ -35,6 +23,19 @@ static_assert(sizeof(off_t) == 8);
 #define FSEEK fseeko
 #define FTELL ftello
 #endif
+#include <brunsli/encode.h>
+#include <brunsli/decode.h>
+#include <string>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <cassert>
+#include <cstdio>
+#include <sys/stat.h>
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/types.h>
+
 
 using namespace std;
 
