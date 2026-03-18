@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mrf_insert", "mrf_insert\mr
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MUG", "MUG\MUG.vcxproj", "{C9069DD8-D633-4395-82D4-F459E1E20D8C}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "brn", "brn\brn.vcxproj", "{A3737385-456E-4092-9B2D-0BB0A35C37A9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -41,6 +43,14 @@ Global
 		{C9069DD8-D633-4395-82D4-F459E1E20D8C}.Release|x64.Build.0 = Release|x64
 		{C9069DD8-D633-4395-82D4-F459E1E20D8C}.Release|x86.ActiveCfg = Release|Win32
 		{C9069DD8-D633-4395-82D4-F459E1E20D8C}.Release|x86.Build.0 = Release|Win32
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Debug|x64.ActiveCfg = Debug|x64
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Debug|x64.Build.0 = Debug|x64
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Debug|x86.ActiveCfg = Debug|Win32
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Debug|x86.Build.0 = Debug|Win32
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Release|x64.ActiveCfg = Release|x64
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Release|x64.Build.0 = Release|x64
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Release|x86.ActiveCfg = Release|Win32
+		{A3737385-456E-4092-9B2D-0BB0A35C37A9}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
