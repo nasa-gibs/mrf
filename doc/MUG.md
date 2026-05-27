@@ -52,6 +52,11 @@ The MRF is implemented as a GDAL driver (Geospatial Data Abstraction Layer), whi
 applications, and providing access to well documented tools and workflows. As with most technologies, understanding the features and limitations 
 by MRF is important if good results are to be expected. This document contains the detailed MRF documentation.
 
+In GDAL, multi-band raster files can be either pixel interleaved, when the band values for a pixel are stored together in a single tile or band 
+interleaved, when each tile contains pixel values for a single band. MRF can handle both modes, subject to limits of the tile compression format 
+chosen. Up to sixtyfour bands are supported in pixel interleaved mode, subject to further limitations imposed by the compression format, while 
+in band interleaved mode the number of bands can be much larger.
+
 # MRF File Structure
 
 An MRF dataset has three components, metadata, index and data. While normally each component is stored in a separate file, alternative 
@@ -831,6 +836,9 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 | DATATYPE | Byte | Set the desired output datatype for single LERC1 chunk|
 
 # APPENDIX F, Change Log
+
+2026-05-27
+* Add information about the maximum number of bands in pixel interleaved mode
 
 2025-06-05
 * Add support for QB3_BAND_MAP free-form option, band decorrelation settings
