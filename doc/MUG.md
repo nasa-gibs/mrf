@@ -561,11 +561,8 @@ Turning off the new content fetch will implicitly turn off local cache writes, s
 the same file for both data and index, this will be the behavior.  Data which does not exist in the local caching MRF will be returned as NoData 
 or black.
 
-Sometimes it is useful to temporarily stop the caching MRF from storing data locally while preserving data access to the remote data source, without
-modifying the file access flags. This can be achieved by setting the environment variable **MRF_BYPASSCACHING** to **TRUE**. This variable can 
-be set as a gdal configuration option. All caching and cloning MRF files opened while this variable is set to true are affected, it is not possible 
-to selectively choose which caching MRFs are affected.
-
+When MRF_ENABLE_CACHING is disabled, reading from existing data in caching/cloning MRFs is still active. Data that exists in the source will still
+be read directly from the source but no local writes will occur.
 
 ## Cloning MRF
 
