@@ -470,12 +470,16 @@ This value will be added to the normal, calculated file offsets for all access t
 ## Caching MRF
 
 A caching MRF is used as a cache format for another raster file. The original raster is called the **source** raster, while the MRF used to cache 
-becomes the **caching MRF**. Only reading from a caching MRF is possible in GDAL, the update of the caching MRF content occurs automatically. 
+becomes the **caching MRF**. Only reading from a caching MRF is possible in GDAL, the update of the caching MRF content occurs automatically.  
+**WARNING**: Since a caching MRF will create and modify files it can present a security risk. This can happen when malicious user input is used to create and 
+possibly modify files, using a crafted caching MRF. Since such user input can be injected into many gdal supported datasets, caching and cloning
+MRF updates are disabled by default. To enable, set the environment variable *MRF_ENABLE_CACHING* to *true* or *on*. This variable is checked every 
+time a caching MRF is opened, so this functionality can be turned on only for the files known to be safe.  
 Opening a caching MRF for update is not supported. It is also not possible to write to the parent dataset through a caching MRF. Some of the GDAL 
 functionality of the parent raster might not be available when accessing the data through an MRF. Only static rasters, including static/split 
 MRFs should be cached. Chaining caching MRFs is possible but cache coherency may become an issue.
 When the location of the caching MRF data file is on a local disk, the caching MRF can be used in parallel by multiple processes on the same machine.
-For example, multiple gdal based GIS applications can be active at the same time, reading and sharing the same caching MRF data.
+For example, multiple gdal based GIS applications can be active at the same time, reading and sharing the same caching MRF data.  
 
 ### Creating a MRF cache
 
@@ -557,11 +561,8 @@ Turning off the new content fetch will implicitly turn off local cache writes, s
 the same file for both data and index, this will be the behavior.  Data which does not exist in the local caching MRF will be returned as NoData 
 or black.
 
-Sometimes it is useful to temporarily stop the caching MRF from storing data locally while preserving data access to the remote data source, without
-modifying the file access flags. This can be achieved by setting the environment variable **MRF_BYPASSCACHING** to **TRUE**. This variable can 
-be set as a gdal configuration option. All caching and cloning MRF files opened while this variable is set to true are affected, it is not possible 
-to selectively choose which caching MRFs are affected.
-
+When MRF_ENABLE_CACHING is disabled, reading from existing data in caching/cloning MRFs is still active. Data that exists in the source will still
+be read directly from the source but no local writes will occur.
 
 ## Cloning MRF
 
@@ -711,8 +712,11 @@ be erased by hand, outside of the GDAL infrastructure.
 
 # APPENDIX A, MRF specific environment variables
 
-## MRF_BYPASSCACHING=FALSE|TRUE
-Boolean, defaults to false. When set to TRUE and caching or cloning MRFs are in use, writes to the local MRF cache will not occur.
+## MRF_ENABLE_CACHING=FALSE|TRUE
+Boolean, defaults to false. When set to TRUE caching or cloning MRF can write to the local caching MRF files. By default, 
+existing data in caching MRFs are read but no writes are performed and reading from the caching MRFs are done by reading
+from the source rasters.
+
 ## CPL_DEBUG
 This variable controls the [GDAL Logging](https://gdal.org/en/latest/user/configoptions.html#logging). In can hold
 multiple concatenated control token strings, case insensitive. The presence of each recognized control token will turn
@@ -836,6 +840,11 @@ gdal_translate utility, these options are passed using the –oo Key=Value synta
 | DATATYPE | Byte | Set the desired output datatype for single LERC1 chunk|
 
 # APPENDIX F, Change Log
+
+2026-06-09
+* Caching and cloning MRFs are disabled by default, they can be enabled by setting the environment varible
+MRF_ENABLE_CACHING. This is because create and modify local files present a security risk. The new environment
+variable replaces MRF_BYPASSCACHING, which used to have the opposite behavior (disabling caching when set).
 
 2026-05-27
 * Add information about the maximum number of bands in pixel interleaved mode
