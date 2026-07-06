@@ -40,10 +40,171 @@ import os
 import sys
 import struct
 import math
+import shutil
+import subprocess
+import tempfile
 
-versionNumber = '1.0'
-    
-#-------------------------------------------------------------------------------   
+versionNumber = '1.1'
+
+# Signature of a brunsli (ZenJPEG) packed tile, see https://github.com/google/brunsli
+brunsliSignature = b'\x0a\x04\x42\xd2\xd5\x4e'
+
+def brunsli_to_jfif(data, verbose=False):
+    """Convert a brunsli (ZenJPEG) tile to JFIF-JPEG using the brn tool from
+    mrf_apps, or the dbrunsli tool from the brunsli library.
+    Returns the converted bytes, or None if no converter is available or the
+    conversion failed."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        brnfile = os.path.join(tmpdir, 'tile.brn')
+        with open(brnfile, 'wb') as f:
+            f.write(data)
+        if shutil.which('brn'):
+            # brn -s -r writes the output next to the input, with .jfif appended
+            jfiffile = brnfile + '.jfif'
+            cmd = ['brn', '-s', '-r', brnfile]
+        elif shutil.which('jxl'):
+            # jxl is the older name of the brn tool, same interface
+            jfiffile = brnfile + '.jfif'
+            cmd = ['jxl', '-s', '-r', brnfile]
+        elif shutil.which('dbrunsli'):
+            jfiffile = os.path.join(tmpdir, 'tile.jfif')
+            cmd = ['dbrunsli', brnfile, jfiffile]
+        else:
+            print("Warning: no brunsli converter (brn, jxl or dbrunsli) was found in PATH, can't convert brunsli tile")
+            return None
+        if verbose:
+            print("Converting brunsli tile using: " + " ".join(cmd))
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0 or not os.path.isfile(jfiffile):
+            print("Warning: brunsli conversion failed")
+            return None
+        with open(jfiffile, 'rb') as f:
+            return f.read()
+    finally:
+        shutil.rmtree(tmpdir)
+
+def find_zen_chunk(jpeg):
+    """Returns the content of the Zen (zero enhanced) APP3 chunk of a JFIF-JPEG,
+    without the Zen signature. Returns None if there is no Zen chunk."""
+    if jpeg[0:2] != b'\xff\xd8':
+        return None
+    pos = 2
+    while pos + 4 <= len(jpeg):
+        if jpeg[pos] != 0xff:
+            return None
+        marker = jpeg[pos + 1]
+        if marker == 0xff:  # fill byte
+            pos += 1
+            continue
+        if marker in (0xd9, 0xda):  # EOI or SOS, no Zen chunk found
+            return None
+        seglen = (jpeg[pos + 2] << 8) + jpeg[pos + 3]
+        if marker == 0xe3 and jpeg[pos + 4:pos + 8] == b'Zen\x00':
+            return jpeg[pos + 8:pos + 2 + seglen]
+        pos += 2 + seglen
+    return None
+
+def rle_decode(data, expected_size):
+    """Decode the RLE (yarn) stream used for the Zen mask, matching the GDAL
+    MRF RLEC3Packer. The first byte is the marker code. Returns None if the
+    output does not come out to the expected size."""
+    code = data[0]
+    out = bytearray()
+    pos = 1
+    while pos < len(data) and len(out) < expected_size:
+        b = data[pos]
+        pos += 1
+        if b != code:  # literal byte
+            out.append(b)
+            continue
+        if pos >= len(data):
+            break
+        b = data[pos]
+        pos += 1
+        if b == 0:  # escaped marker code
+            out.append(code)
+            continue
+        if b >= 4:  # one byte run length, 4 to 255
+            run = b
+        else:  # two or three byte run length
+            run = 256 * b
+            if b == 3:
+                if pos >= len(data):
+                    break
+                run += 256 * data[pos]
+                pos += 1
+            if pos >= len(data):
+                break
+            run += data[pos]
+            pos += 1
+        if pos >= len(data):
+            break
+        out.extend(data[pos:pos + 1] * run)
+        pos += 1
+    if len(out) != expected_size:
+        return None
+    return bytes(out)
+
+def apply_zen_mask(jfif, verbose=False):
+    """Apply the Zen (zero enhanced) mask of a JFIF-JPEG to its own pixels,
+    the same way the GDAL MRF driver does: pixels masked as zero are set to
+    zero on all bands, pixels masked as non-zero that decoded to zero are set
+    to one. Returns a PIL Image, or None if there is no Zen chunk or the mask
+    can't be applied."""
+    zen = find_zen_chunk(jfif)
+    if zen is None:
+        print("Warning: no Zen mask chunk in tile, mask not applied")
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        print("Warning: Pillow is required to apply the Zen mask, mask not applied")
+        return None
+    import io
+    try:
+        img = Image.open(io.BytesIO(jfif))
+        img.load()
+    except Exception as e:
+        print("Warning: can't decode JPEG tile (" + str(e) + "), mask not applied")
+        return None
+    w, h = img.size
+    nc = len(img.getbands())
+    pixels = bytearray(img.tobytes())
+    if len(zen) == 0:
+        # An empty mask means all pixels are known to be non-zero
+        if verbose:
+            print("Zen mask is empty, forcing all pixels to non-zero")
+        for pos, val in enumerate(pixels):
+            if val == 0:
+                pixels[pos] = 1
+    else:
+        # The mask is a bitmap stored in 8x8 pixel blocks, one 64bit little
+        # endian unit per block, bit 8 * (y % 8) + x % 8 within the unit,
+        # blocks in row major order. A set bit marks a non-zero pixel.
+        lw = (w + 7) // 8
+        expected_size = lw * ((h + 7) // 8) * 8
+        mask = rle_decode(zen, expected_size)
+        if mask is None:
+            print("Warning: corrupt Zen mask, mask not applied")
+            return None
+        units = struct.unpack('<' + str(expected_size // 8) + 'Q', mask)
+        if verbose:
+            print("Applying Zen mask")
+        pos = 0
+        for y in range(h):
+            for x in range(w):
+                if (units[lw * (y // 8) + x // 8] >> (8 * (y % 8) + x % 8)) & 1:
+                    for c in range(nc):
+                        if pixels[pos + c] == 0:
+                            pixels[pos + c] = 1
+                else:
+                    for c in range(nc):
+                        pixels[pos + c] = 0
+                pos += nc
+    return Image.frombytes(img.mode, img.size, bytes(pixels))
+
+#-------------------------------------------------------------------------------
 
 print('mrf_read.py v' + versionNumber)
 
@@ -62,6 +223,11 @@ parser.add_option("-l", "--little_endian", action="store_true", dest="endian",
 parser.add_option('-o', '--output',
                   action='store', type='string', dest='output',
                   help='Full path of output image file')
+parser.add_option("-m", "--mask", action="store_true", dest="mask",
+                  default=False, help="Apply the Zen (zero enhanced) mask to the output image. "
+                  "The output format is set by the output file extension, PNG is recommended. Requires Pillow")
+parser.add_option("-r", "--raw", action="store_true", dest="raw",
+                  default=False, help="Write brunsli (ZenJPEG) tiles as-is, without converting to JFIF-JPEG")
 parser.add_option('-s', '--size',
                   action='store', type='int', dest='size',
                   help='data size')
@@ -95,6 +261,8 @@ if not options.output:
     parser.error('output filename not provided. --output must be specified.')
 else:
     output = options.output
+if options.raw and options.mask:
+    parser.error('--raw and --mask cannot be used together.')
     
 mrfDoc = minidom.parse(input)
 mrf_x  = None
@@ -285,15 +453,36 @@ if size != None and offset !=None:
     if options.verbose:
         print("Read from data file at offset " + str(offset) + " for " + str(size) + " bytes")
         
-    out = open(output, 'wb')
     mrf_data = open(datafile, 'rb')
     mrf_data.seek(offset)
     image = mrf_data.read(size)
-    out.write(image)
-    
-    print("Wrote " + output)
     mrf_data.close()
-    out.close()  
+
+    if image.startswith(brunsliSignature) and not options.raw:
+        if options.verbose:
+            print("Tile is brunsli (ZenJPEG) packed, converting to JFIF-JPEG")
+        converted = brunsli_to_jfif(image, options.verbose)
+        if converted:
+            image = converted
+        else:
+            print("Writing raw brunsli tile, use brn -s -r to convert it to JFIF-JPEG")
+
+    masked = None
+    if options.mask:
+        masked = apply_zen_mask(image, options.verbose)
+        if masked is not None:
+            try:
+                masked.save(output)
+            except (ValueError, OSError) as e:
+                print("Warning: can't save the masked image (" + str(e) + "), writing the plain tile")
+                masked = None
+
+    if masked is None:
+        out = open(output, 'wb')
+        out.write(image)
+        out.close()
+
+    print("Wrote " + output)
 else:
     print("Error: Tile could not be located")
     exit(1)

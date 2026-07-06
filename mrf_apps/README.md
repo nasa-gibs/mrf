@@ -65,7 +65,9 @@ Options:
 
 ## mrf_read.py
 
-The mrf_read.py tool reads MRF files and outputs the contents as an image.
+The mrf_read.py tool reads MRF files and outputs the contents as an image. If the extracted tile is brunsli (ZenJPEG) packed, it is converted to JFIF-JPEG on output, using the brn tool (or dbrunsli), which has to be available in PATH. Use --raw to skip the conversion and write the tile as stored.
+
+With --mask, the Zen (zero enhanced) mask embedded in a JPEG tile is applied to the output image, the same way the GDAL MRF driver does: pixels masked as zero are set to zero on all bands, while pixels masked as non-zero that decoded to zero are set to one. The output is re-encoded by Pillow in the format matching the output file extension; PNG is recommended, since writing to JPEG would recompress. Without --mask the Zen chunk is preserved in the output tile but not applied.
 
 ```Shell
 Usage: mrf_read.py --input [mrf_file] --output [output_file] (--tilematrix INT --tilecol INT --tilerow INT) OR (--offset INT --size INT) OR (--tile INT)
@@ -80,6 +82,11 @@ Options:
   -l, --little_endian   Use little endian instead of big endian (default)
   -o OUTPUT, --output=OUTPUT
                         Full path of output image file
+  -m, --mask            Apply the Zen (zero enhanced) mask to the output
+                        image. The output format is set by the output file
+                        extension, PNG is recommended. Requires Pillow
+  -r, --raw             Write brunsli (ZenJPEG) tiles as-is, without
+                        converting to JFIF-JPEG
   -s SIZE, --size=SIZE  data size
   -t TILE, --tile=TILE  tile within index file
   -v, --verbose         Verbose mode
