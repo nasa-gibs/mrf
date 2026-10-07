@@ -129,6 +129,11 @@ int mrf_to_brn(const string &inname, const string &outname, bool reverse = false
     while (fread(&tile, sizeof(tile), 1, finidx)) {
         if (0 == tile.size) continue;
         tile.toh();
+        // Check for out of bounds, the index is not trusted
+        if (tile.size > uint64_t(insize) || tile.offset > uint64_t(insize) - tile.size) {
+            std::cerr << "Location " << hex << tile.offset << " size " << tile.size << dec << endl;
+            return Usage("Corrupt index, tile points past the end of the data file");
+        }
         FSEEK(fin, tile.offset, SEEK_SET);
         input.resize(tile.size);
         if (!fread(input.data(), tile.size, 1, fin)) {
